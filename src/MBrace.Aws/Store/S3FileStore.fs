@@ -60,18 +60,7 @@ type S3FileStore private
         member __.Name = "MBrace.Aws.Store.S3FileStore"
         member __.Id = sprintf "arn:aws:s3::%s" bucketName
         member __.IsCaseSensitiveFileSystem = false
-
-        member __.BeginRead(path) = async {
-            return! 
-                account.S3Client.GetObjectStreamAsync(
-                    bucketName, 
-                    path, 
-                    Dictionary<string, obj>()) 
-                |> Async.AwaitTaskCorrect
-        }
-
-        member __.BeginWrite(path) = failwith "Not implemented yet"
-
+        
         //#region Directory Operations
         
         member __.RootDirectory = "/"
@@ -108,11 +97,17 @@ type S3FileStore private
 //            do! account.S3Client.DeleteObjectsAsync(req) 
 //                |> Async.AwaitTaskCorrect
 //                |> Async.Ignore
+            return ()
         }
+
+        member __.EnumerateDirectories(directory) = failwith "Not implemented yet"
+        member __.EnumerateFiles(directory) = failwith "Not implemented yet"
 
         //#endregion
 
-        member __.Combine(paths) = Path.Combine paths
+        //#region File Operations
+
+        member __.GetFileName(path) = Path.GetFileName(path)
 
         member __.DeleteFile(path) = async {
             let req = DeleteObjectRequest(BucketName = bucketName, Key = path)
@@ -121,23 +116,85 @@ type S3FileStore private
                 |> Async.Ignore
         }
         
-        member __.DownloadToLocalFile(cloudSourcePath, localTargetPath) = failwith "Not implemented yet"
-        member __.DownloadToStream(path, stream) = failwith "Not implemented yet"
-        member __.EnumerateDirectories(directory) = failwith "Not implemented yet"
-        member __.EnumerateFiles(directory) = failwith "Not implemented yet"
-        member __.FileExists(path) = failwith "Not implemented yet"        
-        member __.GetFileName(path) = Path.GetFileName(path)
-        member __.GetFileSize(path) = failwith "Not implemented yet"
+        member __.DownloadToLocalFile(cloudSourcePath, localTargetPath) = async {
+            do! account.S3Client.DownloadToFilePathAsync(
+                    bucketName, 
+                    cloudSourcePath, 
+                    localTargetPath, 
+                    Dictionary<string, obj>())
+                |> Async.AwaitTaskCorrect
+        }
+
+        member __.DownloadToStream(path, stream) = async {
+            let! objStream = 
+                account.S3Client.GetObjectStreamAsync(
+                    bucketName, path, Dictionary<string, obj>())
+                |> Async.AwaitTaskCorrect
+
+            do! objStream.CopyToAsync(stream)
+                |> Async.AwaitTaskCorrect
+        }
+
+        member this.FileExists(path) = async {
+            let! etag = (this :> ICloudFileStore).TryGetETag(path)
+            return etag.IsSome
+        }
+        
+        member __.GetFileSize(path) = async {
+            let req = GetObjectMetadataRequest(BucketName = bucketName, Key = path)
+            let! res = account.S3Client.GetObjectMetadataAsync(req)
+                       |> Async.AwaitTaskCorrect
+            return res.ContentLength
+        }
         member __.GetLastModifiedTime(path, isDirectory) = failwith "Not implemented yet"
                 
-        member x.IsPathRooted(path) = path.Contains "/" |> not
+        member __.IsPathRooted(path) = path.Contains "/" |> not
         
-        member x.ReadETag(path, etag) = failwith "Not implemented yet"
+        member __.ReadETag(path, etag) = async {
+            let props = Dictionary<string, obj>()
+            props.["IfMatch"] <- etag
+
+            let! res = 
+                account.S3Client.GetObjectStreamAsync(
+                    bucketName, 
+                    path, 
+                    props) 
+                |> Async.AwaitTaskCorrect
+                |> Async.Catch
+
+            match res with
+            | Choice1Of2 res -> return Some res
+            | _ -> return None
+        }
         
-        member x.TryGetETag(path) = failwith "Not implemented yet"
+        member __.TryGetETag(path) = async {
+            let req = GetObjectMetadataRequest(BucketName = bucketName, Key = path)
+            let! res = account.S3Client.GetObjectMetadataAsync(req)
+                       |> Async.AwaitTaskCorrect
+                       |> Async.Catch
+            
+            match res with
+            | Choice1Of2 res -> return Some res.ETag
+            | _ -> return None
+        }
+
         member x.UploadFromLocalFile(localSourcePath, cloudTargetPath) = failwith "Not implemented yet"
-        member x.UploadFromStream(path, stream) = failwith "Not implemented yet"        
+        member x.UploadFromStream(path, stream) = failwith "Not implemented yet"
         member x.WriteETag(path, writer) = failwith "Not implemented yet"
+        
+        //#endregion
+
+        member __.Combine(paths) = Path.Combine paths
+
+        member __.BeginRead(path) = async {
+            return! account.S3Client.GetObjectStreamAsync(
+                        bucketName, 
+                        path, 
+                        Dictionary<string, obj>()) 
+                    |> Async.AwaitTaskCorrect
+        }
+
+        member __.BeginWrite(path) = failwith "Not implemented yet"
 
         member __.WithDefaultDirectory(directory) = 
             new S3FileStore(account, bucketName, directory) :> _
