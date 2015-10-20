@@ -1,4 +1,7 @@
 MBrace.Core
+MBrace.Runtime
 AWSSDK.S3
 AWSSDK.DynamoDBv2
 AWSSDK.SQS
+FsPickler
+FsPickler.Json

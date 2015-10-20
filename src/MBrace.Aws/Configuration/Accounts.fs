@@ -26,4 +26,4 @@ type AwsS3Account private (?accountData : AwsS3AccountData) =
                 data.RegionEndpoint)
         | _ -> new AmazonS3Client()
 
-    member __.S3Client  = s3Client
+    member __.S3Client  = s3Client :> IAmazonS3

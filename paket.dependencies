@@ -6,7 +6,10 @@ nuget NUnit.Runners
 nuget FAKE
 nuget SourceLink.Fake
 nuget MBrace.Core
+nuget MBrace.Runtime
 nuget MBrace.Tests
+nuget FsPickler
+nuget FsPickler.Json
 
 nuget AWSSDK.S3
 nuget AWSSDK.DynamoDBv2
