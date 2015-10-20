@@ -51,6 +51,37 @@ type S3FileStore private
 
     [<DataMember(Name = "DefaultDir")>]
     let defaultDir = defaultDir
+    
+    let getObjMetadata path = async {
+        let req = GetObjectMetadataRequest(BucketName = bucketName, Key = path)
+        return! account.S3Client.GetObjectMetadataAsync(req)
+                |> Async.AwaitTaskCorrect
+    }
+
+    let listObjects prefix nextMarker = async {
+        let req = ListObjectsRequest(
+                    BucketName = bucketName,
+                    Prefix     = prefix,
+                    Delimiter  = "/",
+                    Marker     = nextMarker)
+        return! account.S3Client.ListObjectsAsync(req) 
+                |> Async.AwaitTaskCorrect
+    }
+
+    let enumerateDir directory map = async {
+            let prefix  = normalizeDirPath directory
+            let results = ResizeArray<string>()            
+
+            let rec aux nextMarker = async {
+                let! res = listObjects prefix nextMarker
+                map res |> results.AddRange
+                if res.NextMarker = null then return ()
+                else return! aux res.NextMarker
+            }
+
+            do! aux null
+            return Seq.toArray results
+        }
 
 //    let enumerateFiles directory = async {
 //        let 
@@ -88,7 +119,8 @@ type S3FileStore private
         }
 
         member __.DefaultDirectory = defaultDir
-        member this.DeleteDirectory(directory, recursiveDelete) = async {
+
+        member __.DeleteDirectory(directory, recursiveDelete) = async {
             
 //            let req = DeleteObjectsRequest(BucketName = bucketName)
 //            req.Objects.Add(new KeyVersion())
@@ -100,8 +132,15 @@ type S3FileStore private
             return ()
         }
 
-        member __.EnumerateDirectories(directory) = failwith "Not implemented yet"
-        member __.EnumerateFiles(directory) = failwith "Not implemented yet"
+        member __.EnumerateDirectories(directory) = 
+            enumerateDir directory (fun res -> res.CommonPrefixes)
+
+        member __.EnumerateFiles(directory) =
+            let map = fun (res : ListObjectsResponse) -> 
+                res.S3Objects 
+                |> Seq.filter (fun obj -> not <| obj.Key.EndsWith "/")
+                |> Seq.map (fun obj -> obj.Key)
+            enumerateDir directory map         
 
         //#endregion
 
@@ -141,9 +180,7 @@ type S3FileStore private
         }
         
         member __.GetFileSize(path) = async {
-            let req = GetObjectMetadataRequest(BucketName = bucketName, Key = path)
-            let! res = account.S3Client.GetObjectMetadataAsync(req)
-                       |> Async.AwaitTaskCorrect
+            let! res = getObjMetadata path
             return res.ContentLength
         }
         member __.GetLastModifiedTime(path, isDirectory) = failwith "Not implemented yet"
@@ -168,19 +205,41 @@ type S3FileStore private
         }
         
         member __.TryGetETag(path) = async {
-            let req = GetObjectMetadataRequest(BucketName = bucketName, Key = path)
-            let! res = account.S3Client.GetObjectMetadataAsync(req)
-                       |> Async.AwaitTaskCorrect
-                       |> Async.Catch
-            
+            let! res = getObjMetadata path |> Async.Catch
             match res with
             | Choice1Of2 res -> return Some res.ETag
             | _ -> return None
         }
 
-        member x.UploadFromLocalFile(localSourcePath, cloudTargetPath) = failwith "Not implemented yet"
-        member x.UploadFromStream(path, stream) = failwith "Not implemented yet"
-        member x.WriteETag(path, writer) = failwith "Not implemented yet"
+        member __.UploadFromLocalFile(localSourcePath, cloudTargetPath) = async {
+            do! account.S3Client.UploadObjectFromFilePathAsync(
+                    bucketName, 
+                    cloudTargetPath, 
+                    localSourcePath, 
+                    Dictionary<string, obj>())
+                |> Async.AwaitTaskCorrect
+        }
+
+        member __.UploadFromStream(path, stream) = async {
+            do! account.S3Client.UploadObjectFromStreamAsync(
+                    bucketName,
+                    path,
+                    stream,
+                    Dictionary<string, obj>())
+                |> Async.AwaitTaskCorrect
+        }
+
+        member this.WriteETag(path, writer) = async {
+            let! metaRes = getObjMetadata path
+            let! result = async {
+                use stream = new MemoryStream()
+                let! result = writer(stream)
+                do! (this :> ICloudFileStore).UploadFromStream(path, stream)
+                return result
+            }
+
+            return metaRes.ETag, result
+        }
         
         //#endregion
 
