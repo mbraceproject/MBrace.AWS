@@ -83,10 +83,6 @@ type S3FileStore private
             return Seq.toArray results
         }
 
-//    let enumerateFiles directory = async {
-//        let 
-//    }
-
     interface ICloudFileStore with
         member __.Name = "MBrace.Aws.Store.S3FileStore"
         member __.Id = sprintf "arn:aws:s3::%s" bucketName
@@ -119,17 +115,14 @@ type S3FileStore private
         }
 
         member __.DefaultDirectory = defaultDir
+        
+        member this.DeleteDirectory(directory, _recursiveDelete) = async {
+            let! paths = (this :> ICloudFileStore).EnumerateFiles(directory)
 
-        member __.DeleteDirectory(directory, recursiveDelete) = async {
-            
-//            let req = DeleteObjectsRequest(BucketName = bucketName)
-//            req.Objects.Add(new KeyVersion())
-//
-//            // TODO : handle partial failures
-//            do! account.S3Client.DeleteObjectsAsync(req) 
-//                |> Async.AwaitTaskCorrect
-//                |> Async.Ignore
-            return ()
+            do! paths 
+                |> Seq.map (this :> ICloudFileStore).DeleteFile
+                |> Async.Parallel
+                |> Async.Ignore
         }
 
         member __.EnumerateDirectories(directory) = 
@@ -183,7 +176,9 @@ type S3FileStore private
             let! res = getObjMetadata path
             return res.ContentLength
         }
-        member __.GetLastModifiedTime(path, isDirectory) = failwith "Not implemented yet"
+
+        member __.GetLastModifiedTime(path, isDirectory) = 
+            failwith "Not implemented yet"
                 
         member __.IsPathRooted(path) = path.Contains "/" |> not
         
