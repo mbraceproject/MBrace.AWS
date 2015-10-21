@@ -48,6 +48,7 @@
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Configuration\ProcessConfiguration.fs" />
     <Compile Include="Configuration\Accounts.fs" />
+    <Compile Include="Configuration\Validation.fs" />
     <Compile Include="Utilities\DynamoDBEntity.fs" />
     <Compile Include="Runtime\ClusterId.fs" />
     <Compile Include="Runtime\Metadata.fs" />

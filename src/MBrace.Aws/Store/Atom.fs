@@ -12,16 +12,16 @@ open MBrace.Core.Internals
 open MBrace.Aws.Runtime
 
 [<AutoOpen>]
-module private DynamoDBUtils =
+module private DynamoDBAtomUtils =
     let random = new Random(int DateTime.UtcNow.Ticks)
     let randOf (x : char []) = x.[random.Next(0, x.Length)]
     let alpha = [|'a'..'z'|]
     let alphaNumeric = Array.append alpha [|'0'..'9'|]
     
-    let randomTableName length =
+    let randomTableName () =
         let name = 
             [| yield randOf alpha
-               for _i = 1 to length do 
+               for _i = 1 to 64 do 
                    yield randOf alphaNumeric |]
 
         new String(name)
@@ -29,6 +29,24 @@ module private DynamoDBUtils =
     // max item size is 400KB including attribute length, etc.
     // allow 1KB for all that leaves 399KB for actula payload
     let maxPayload = 399L * 1024L
+
+    let timestamp () = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.zzzz")
+
+    let attrValueString (x : string) = new AttributeValue(x)
+    let attrValueBytes (bytes : byte[]) = 
+        let attrValue = new AttributeValue()
+        attrValue.B <- new MemoryStream(bytes)
+        attrValue
+
+    let expectedAttrValueString (x : string) =
+        new ExpectedAttributeValue(attrValueString x)
+    let expectedNotExists () =
+        new ExpectedAttributeValue(false)
+
+    let updateAttrValueString (x : string) =
+        new AttributeValueUpdate(attrValueString x, AttributeAction.PUT)
+    let updateAttrValueBytes (bytes : byte[]) =
+        new AttributeValueUpdate(attrValueBytes bytes, AttributeAction.PUT)
 
 /// CloudAtom implementation on top of Amazon DynamoDB
 [<AutoSerializable(true) ; Sealed; DataContract>]
@@ -47,7 +65,7 @@ type DynamoDBAtom<'T> internal
 
     let getItemAsync () = async {
         let req = GetItemRequest(TableName = tableName)
-        req.Key.Add("HashKey", new AttributeValue(hashKey))
+        req.Key.Add("HashKey", attrValueString hashKey)
 
         return! account.DynamoDBClient.GetItemAsync(req)
                 |> Async.AwaitTaskCorrect
@@ -77,12 +95,8 @@ type DynamoDBAtom<'T> internal
 
     let updateReq (newBlob : byte[]) = 
         let req = UpdateItemRequest(TableName = tableName)
-        req.Key.Add("HashKey", new AttributeValue(hashKey))
-
-        let newBlobAttr = new AttributeValue()
-        newBlobAttr.B   <- new MemoryStream(newBlob)
-        let attrUpdate  = new AttributeValueUpdate(newBlobAttr, AttributeAction.PUT)
-        req.AttributeUpdates.Add("Blob", attrUpdate)
+        req.Key.Add("HashKey", attrValueString hashKey)
+        req.AttributeUpdates.Add("Blob", updateAttrValueBytes newBlob)
 
         req
 
@@ -96,7 +110,7 @@ type DynamoDBAtom<'T> internal
 
         member __.Dispose (): Async<unit> = async {
             let req = DeleteItemRequest(TableName = tableName)
-            req.Key.Add("HashKey", new AttributeValue(hashKey))
+            req.Key.Add("HashKey", attrValueString hashKey)
             do! account.DynamoDBClient.DeleteItemAsync(req)
                 |> Async.AwaitTaskCorrect
                 |> Async.Ignore
@@ -124,15 +138,19 @@ type DynamoDBAtom<'T> internal
                     return raise <| exn("Maximum number of retries exceeded.")
                 else
                     let! oldItem = getItemAsync()
+                    let oldTimestamp = oldItem.Item.["LastModified"].S
                     let oldBlob  = oldItem.Item.["Blob"].B.ToArray()
                     let oldValue = serializer.UnPickle<'T>(oldBlob)
                     let returnValue, newValue = transaction oldValue
                     let newBinary = serializer.Pickle newValue
                     
                     let req = updateReq newBinary
-                    let lastModValue = new AttributeValue(oldItem.Item.["LastModified"].S)
-                    let expectedAttr = new ExpectedAttributeValue(lastModValue)
-                    req.Expected.Add("LastModified", expectedAttr)
+                    req.Expected.Add(
+                        "LastModified", 
+                        expectedAttrValueString oldTimestamp)
+                    req.AttributeUpdates.Add(
+                        "LastModified", 
+                        updateAttrValueString <| timestamp())
 
                     let! res = 
                         account.DynamoDBClient.UpdateItemAsync(req)
@@ -170,7 +188,7 @@ type DynamoDBAtomProvider private
         let defaultTable = 
             match defaultTable with
             | Some x -> x
-            | _ -> randomTableName 24
+            | _ -> randomTableName()
         new DynamoDBAtomProvider(account, defaultTable)
         
     interface ICloudAtomProvider with
@@ -178,23 +196,44 @@ type DynamoDBAtomProvider private
         member __.Name = "AWS DynamoDB CloudAtom Provider"
         member __.DefaultContainer = defaultTable
 
-        member __.WithDefaultContainer (table : string) = 
-            new DynamoDBAtomProvider(account, table) :> _
+        member __.WithDefaultContainer (tableName : string) = 
+            new DynamoDBAtomProvider(account, tableName) :> _
 
         member __.IsSupportedValue(value) = 
             let size = ProcessConfiguration.BinarySerializer.ComputeSize value
             size <= maxPayload
 
-        member x.CreateAtom(container, atomId, initValue) = 
-            failwith "Not implemented yet"
+        member __.CreateAtom<'T>(tableName, atomId, initValue) = async {
+            Validate.tableName tableName
+            let binary = ProcessConfiguration.BinarySerializer.Pickle initValue
+
+            let req = PutItemRequest(TableName = tableName)
+            req.Item.Add("HashKey",      attrValueString atomId)
+            req.Item.Add("Blob",         attrValueBytes binary)
+            req.Item.Add("LastModified", attrValueString <| timestamp())
+
+            // atomically add a new Atom only if one doesn't exist with the same ID
+            req.Expected.Add("LastModified", expectedNotExists())
+            
+            do! account.DynamoDBClient.PutItemAsync(req)
+                |> Async.AwaitTaskCorrect
+                |> Async.Ignore
+
+            return new DynamoDBAtom<'T>(tableName, account, atomId) :> CloudAtom<'T>
+        }
         
-        member x.GetAtomById(container, atomId) = 
-            failwith "Not implemented yet"
+        member __.GetAtomById(tableName, atomId) = async {
+            return new DynamoDBAtom<'T>(tableName, atomId, account) :> CloudAtom<'T>
+        }
 
         member __.GetRandomAtomIdentifier() = 
             sprintf "cloudAtom-%s" <| mkUUID()
         member __.GetRandomContainerName() = 
-            "cloudAtom" + randomTableName 24
+            "cloudAtom" + randomTableName()
 
-        member x.DisposeContainer(container) = 
-            failwith "Not implemented yet"
+        member __.DisposeContainer(tableName) = async {
+            let req = DeleteTableRequest(TableName = tableName)
+            do! account.DynamoDBClient.DeleteTableAsync(req)
+                |> Async.AwaitTaskCorrect
+                |> Async.Ignore
+        }
