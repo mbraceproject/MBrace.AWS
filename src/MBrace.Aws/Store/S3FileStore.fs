@@ -5,16 +5,10 @@ open System.Collections.Generic
 open System.IO
 open System.Runtime.Serialization
 
-open Amazon.S3
 open Amazon.S3.Model
 
 open MBrace.Core.Internals
 open MBrace.Aws.Runtime
-
-[<AutoOpen>]
-module private S3Utils =
-    let normalizeDirPath (dir : string) =
-        if dir.EndsWith "/" then dir else dir + "/"
 
 //[<Sealed>]
 //type internal S3WriteStream () =
@@ -38,6 +32,7 @@ module private S3Utils =
 //    override __.Write (buffer, offset, count) = inner.Write(buffer, offset, count)
 //    override __.Flush() = inner.Flush()
 
+///  MBrace File Store implementation that uses Amazon S3 as backend.
 [<Sealed; DataContract>]
 type S3FileStore private 
         (account    : AwsS3Account, 
@@ -51,6 +46,9 @@ type S3FileStore private
 
     [<DataMember(Name = "DefaultDir")>]
     let defaultDir = defaultDir
+
+    let normalizeDirPath (dir : string) =
+        if dir.EndsWith "/" then dir else dir + "/"
     
     let getObjMetadata path = async {
         let req = GetObjectMetadataRequest(BucketName = bucketName, Key = path)
@@ -70,7 +68,7 @@ type S3FileStore private
 
     let enumerateDir directory map = async {
             let prefix  = normalizeDirPath directory
-            let results = ResizeArray<string>()            
+            let results = ResizeArray<string>()
 
             let rec aux nextMarker = async {
                 let! res = listObjects prefix nextMarker
@@ -133,7 +131,7 @@ type S3FileStore private
                 res.S3Objects 
                 |> Seq.filter (fun obj -> not <| obj.Key.EndsWith "/")
                 |> Seq.map (fun obj -> obj.Key)
-            enumerateDir directory map         
+            enumerateDir directory map
 
         //#endregion
 
