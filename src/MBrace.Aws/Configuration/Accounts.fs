@@ -42,5 +42,4 @@ type AwsDynamoDBAccount private (?accountData : AwsAccountData) =
         | _ -> new AmazonDynamoDBClient()
 
     member __.DynamoDBClient  = dynamoDBClient :> IAmazonDynamoDB
-
     member __.DynamoDBContext = new DynamoDBContext(dynamoDBClient)
