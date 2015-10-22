@@ -19,6 +19,13 @@ module private SQSQueueUtils =
     let maxBatchCount   = 10
     let maxBatchPayload = 255 * 1024
 
+    // SQS limits you to 10 messages per receive call
+    // http://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_ReceiveMessage.html
+    let maxRecvCount    = 10
+
+    // SQS limits you to up to 20 seconds of long polling wait time
+    let maxWaitTime = 20 * 1000 // in milliseconds
+
 /// CloudQueue implementation on top of Amazon SQS
 [<AutoSerializable(true) ; Sealed; DataContract>]
 type SQSQueue<'T> internal (queueUri, account : AwsSQSAccount) =
@@ -27,6 +34,12 @@ type SQSQueue<'T> internal (queueUri, account : AwsSQSAccount) =
 
     [<DataMember(Name = "QueueUri")>]
     let queueUri = queueUri
+
+    let fromBase64 (base64 : string) =
+        let binary = Convert.FromBase64String base64
+        ProcessConfiguration.BinarySerializer.UnPickle<'T>(binary)
+
+    let readBody (msg : Message) = fromBase64 msg.Body
 
     let toBase64 (message : 'T) = 
         message
@@ -55,7 +68,7 @@ type SQSQueue<'T> internal (queueUri, account : AwsSQSAccount) =
             let groups = 
                 entries 
                 |> Seq.mapi (fun i e -> i, e)
-                |> Seq.groupBy (fun (i, _) -> i / 10)
+                |> Seq.groupBy (fun (i, _) -> i / maxBatchCount)
                 |> Seq.map (fun (_, gr) -> gr |> Seq.map snd)
         
             // TODO: partial failures are not really handled right now
@@ -68,11 +81,51 @@ type SQSQueue<'T> internal (queueUri, account : AwsSQSAccount) =
                     |> Async.Ignore
         }
         
-        member x.DequeueAsync(timeout) = failwith "Not implemented yet"
+        member __.DequeueAsync(timeout) = async {
+            let req = ReceiveMessageRequest(QueueUrl = queueUri)
+            req.MaxNumberOfMessages <- 1
+            
+            // always make use of long polling for efficiency
+            // but never wait for more than max allowed (20 seconds)
+            req.WaitTimeSeconds <- min maxWaitTime <| defaultArg timeout maxWaitTime
 
-        member x.DequeueBatchAsync(maxItems) = failwith "Not implemented yet"
+            match timeout with
+            | Some _ ->
+                let! res = account.SQSClient.ReceiveMessageAsync(req)
+                           |> Async.AwaitTaskCorrect
+                if res.Messages.Count = 1
+                then return readBody res.Messages.[0]
+                else return! Async.Raise(TimeoutException())
+            | _ -> 
+                let rec aux _ = async {
+                    let! res = account.SQSClient.ReceiveMessageAsync(req)
+                               |> Async.AwaitTaskCorrect
+                    if res.Messages.Count = 1
+                    then return readBody res.Messages.[0]
+                    else return! aux ()
+                }
+                return! aux ()
+        }
+
+        member __.DequeueBatchAsync(maxItems) = async {
+            let req = ReceiveMessageRequest(QueueUrl = queueUri)
+            req.MaxNumberOfMessages <- min maxItems maxRecvCount
+
+            let! res = account.SQSClient.ReceiveMessageAsync(req)
+                       |> Async.AwaitTaskCorrect
+            return res.Messages |> Seq.map readBody |> Seq.toArray
+        }
         
-        member x.TryDequeueAsync() = failwith "Not implemented yet"
+        member __.TryDequeueAsync() = async {
+            let req = ReceiveMessageRequest(QueueUrl = queueUri)
+            req.MaxNumberOfMessages <- 1
+
+            let! res = account.SQSClient.ReceiveMessageAsync(req)
+                       |> Async.AwaitTaskCorrect
+            if res.Messages.Count = 1 
+            then return Some <| readBody res.Messages.[0]
+            else return None
+        }
 
         member x.GetCountAsync() = failwith "Not implemented yet"
 
