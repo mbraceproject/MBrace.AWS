@@ -54,6 +54,7 @@
     <Compile Include="Runtime\Metadata.fs" />
     <Compile Include="Store\S3FileStore.fs" />
     <Compile Include="Store\Atom.fs" />
+    <Compile Include="Store\Queue.fs" />
     <None Include="paket.references" />
     <None Include="paket.template" />
   </ItemGroup>

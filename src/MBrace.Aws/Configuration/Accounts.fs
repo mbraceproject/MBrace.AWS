@@ -43,3 +43,18 @@ type AwsDynamoDBAccount private (?accountData : AwsAccountData) =
 
     member __.DynamoDBClient  = dynamoDBClient :> IAmazonDynamoDB
     member __.DynamoDBContext = new DynamoDBContext(dynamoDBClient)
+
+open Amazon.SQS
+
+[<Sealed; DataContract>]
+type AwsSQSAccount private (?accountData : AwsAccountData) =
+    let sqsClient = 
+        match accountData with
+        | Some data 
+            -> new AmazonSQSClient(
+                data.AccessKey, 
+                data.AccessSecret, 
+                data.RegionEndpoint)
+        | _ -> new AmazonSQSClient()
+
+    member __.SQSClient  = sqsClient :> IAmazonSQS
