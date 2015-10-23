@@ -223,7 +223,7 @@ type DynamoDBAtomProvider private
         }
         
         member __.GetAtomById(tableName, atomId) = async {
-            return new DynamoDBAtom<'T>(tableName, atomId, account) :> CloudAtom<'T>
+            return new DynamoDBAtom<'T>(tableName, account, atomId) :> CloudAtom<'T>
         }
 
         member __.GetRandomAtomIdentifier() = 

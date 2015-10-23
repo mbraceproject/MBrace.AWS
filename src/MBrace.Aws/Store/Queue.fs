@@ -3,6 +3,7 @@
 open System
 open System.Runtime.Serialization
 
+open Amazon.SQS
 open Amazon.SQS.Model
 
 open MBrace.Core
@@ -71,8 +72,8 @@ type SQSQueue<'T> internal (queueUri, account : AwsSQSAccount) =
                 |> Seq.groupBy (fun (i, _) -> i / maxBatchCount)
                 |> Seq.map (fun (_, gr) -> gr |> Seq.map snd)
         
-            // TODO: partial failures are not really handled right now
-            // TODO: total batch size is not respected here
+            // TODO: partial failures are not handled right now
+            // TODO: total batch payload size is not respected here
             for group in groups do
                 let req = SendMessageBatchRequest(QueueUrl = queueUri)
                 req.Entries.AddRange group
@@ -127,6 +128,14 @@ type SQSQueue<'T> internal (queueUri, account : AwsSQSAccount) =
             else return None
         }
 
-        member x.GetCountAsync() = failwith "Not implemented yet"
+        member x.GetCountAsync() = async {
+            let req = GetQueueAttributesRequest(QueueUrl = queueUri)
+            let attrName = QueueAttributeName.ApproximateNumberOfMessages.Value
+            req.AttributeNames.Add(attrName)
+
+            let! res = account.SQSClient.GetQueueAttributesAsync(req)
+                       |> Async.AwaitTaskCorrect
+            return int64 res.ApproximateNumberOfMessages
+        }
 
         member x.Dispose() = failwith "Not implemented yet"
