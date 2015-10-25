@@ -9,6 +9,12 @@ type ClusterId =
     {
         /// Runtime version string
         Version : string
+
+        S3Account : AwsS3Account
+
+        DynamoDBAccount : AwsDynamoDBAccount
+
+        SQSAccount : AwsSQSAccount
     }
 with
     member __.Id = 

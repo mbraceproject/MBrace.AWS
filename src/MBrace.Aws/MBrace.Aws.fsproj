@@ -55,6 +55,8 @@
     <None Include="paket.references" />
     <None Include="paket.template" />
     <Compile Include="Runtime\WorkQueue\WorkItemQueue.fs" />
+    <Compile Include="Runtime\WorkQueue\WorkItemLeaseToken.fs" />
+    <Compile Include="Runtime\WorkQueue\Messaging.fs" />
   </ItemGroup>
   <PropertyGroup>
     <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>
