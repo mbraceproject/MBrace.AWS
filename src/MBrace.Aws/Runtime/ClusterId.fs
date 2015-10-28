@@ -28,6 +28,10 @@ type ClusterId =
         RuntimeLogsTable : string
         /// User data DynamoDB table name
         RuntimeUserDataTable : string
+
+        /// Specifies whether closure serialization
+        /// should be optimized using closure sifting.
+        OptimizeClosureSerialization : bool
     }
 with
     member __.Id = 
@@ -38,3 +42,20 @@ with
 
     interface IRuntimeId with 
         member this.Id = this.Id
+
+open System
+open System.Collections.Concurrent
+
+/// Dependency injection facility for Specific cluster instances
+[<Sealed; AbstractClass>]
+type ConfigurationRegistry private () =
+    static let registry = new ConcurrentDictionary<ClusterId * Type, obj>()
+
+    static member Register<'T>(clusterId : ClusterId, item : 'T) : unit =
+        ignore <| registry.TryAdd((clusterId, typeof<'T>), item :> obj)
+
+    static member Resolve<'T>(clusterId : ClusterId) : 'T =
+        let mutable result = null
+        if registry.TryGetValue((clusterId, typeof<'T>), &result) then result :?> 'T
+        else
+            invalidOp <| sprintf "Could not resolve Resource of type %A for ConfigurationId %A" clusterId typeof<'T>

@@ -156,21 +156,41 @@ with
         member this.DeclareCompleted() : Async<unit> = async {
             this.CompleteAction.Invoke Complete
             this.CompleteAction.Dispose() // disconnect marshaled object
+
             let record = new WorkItemRecord(this.LeaseInfo.ProcessId, fromGuid this.LeaseInfo.WorkItemId)
             record.Status         <- nullable(int WorkItemStatus.Completed)
             record.CompletionTime <- nullable(DateTime.UtcNow)
             record.Completed      <- nullable true
             record.ETag           <- "*" 
+
             do! putWorkItemRecord this.ClusterId.DynamoDBAccount this.ClusterId.RuntimeTable record
         }
         
-        member this.DeclareFaulted(edi : ExceptionDispatchInfo) : Async<unit> = 
-            failwith "not implemented yet"
+        member this.DeclareFaulted(edi : ExceptionDispatchInfo) : Async<unit> = async {
+            this.CompleteAction.Invoke Abandon
+            this.CompleteAction.Dispose() // disconnect marshaled object
+
+            let record = new WorkItemRecord(this.LeaseInfo.ProcessId, fromGuid this.LeaseInfo.WorkItemId)
+            record.Status         <- nullable(int WorkItemStatus.Faulted)
+            record.Completed      <- nullable false
+            record.CompletionTime <- nullableDefault
+            // there exists a remote possibility that fault exceptions might be of arbitrary size
+            // should probably persist payload to blob as done with results
+            record.LastException  <- ProcessConfiguration.JsonSerializer.PickleToString edi
+            record.FaultInfo      <- nullable(int FaultInfo.FaultDeclaredByWorker)
+            record.ETag           <- "*"
+
+            do! putWorkItemRecord this.ClusterId.DynamoDBAccount this.ClusterId.RuntimeTable record
+        }
         
         member this.FaultInfo : CloudWorkItemFaultInfo = this.FaultInfo
         
-        member this.GetWorkItem() : Async<CloudWorkItem> = 
-            failwith "not implemented yet"
+        member this.GetWorkItem() : Async<CloudWorkItem> = async { 
+            let! payload = S3Persist.ReadPersistedClosure<MessagePayload>(this.ClusterId, this.LeaseInfo.BlobUri)
+            match payload with
+            | Single item -> return item
+            | Batch items -> return items.[Option.get this.LeaseInfo.BatchIndex]
+        }
         
         member this.Id : CloudWorkItemId = this.LeaseInfo.WorkItemId
         
