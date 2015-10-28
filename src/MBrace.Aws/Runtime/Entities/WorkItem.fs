@@ -66,11 +66,11 @@ type WorkItemRecord(processId : string, workItemId : string) =
     member val Status         = Nullable<int>() with get, set
 
     member val Size           = Nullable<int64>() with get, set
-    member val EnqueueTime    = Nullable<DateTime>() with get, set
-    member val DequeueTime    = Nullable<DateTime>() with get, set
-    member val StartTime      = Nullable<DateTime>() with get, set
-    member val CompletionTime = Nullable<DateTime>() with get, set
-    member val RenewLockTime  = Nullable<DateTime>() with get, set
+    member val EnqueueTime    = Nullable<DateTimeOffset>() with get, set
+    member val DequeueTime    = Nullable<DateTimeOffset>() with get, set
+    member val StartTime      = Nullable<DateTimeOffset>() with get, set
+    member val CompletionTime = Nullable<DateTimeOffset>() with get, set
+    member val RenewLockTime  = Nullable<DateTimeOffset>() with get, set
 
     member val DeliveryCount  = Nullable<int>() with get, set   
     member val Completed      = Nullable<bool>() with get, set
@@ -141,11 +141,11 @@ type WorkItemRecord(processId : string, workItemId : string) =
         record.FaultInfo <- Table.ReadIntOrDefault doc "FaultInfo"
         record.DeliveryCount <- Table.ReadIntOrDefault doc "DeliveryCount"
 
-        record.EnqueueTime    <- Table.ReadDateTimeOrDefault doc "EnqueueTime"
-        record.DequeueTime    <- Table.ReadDateTimeOrDefault doc "DequeueTime"
-        record.StartTime      <- Table.ReadDateTimeOrDefault doc "StartTime"
-        record.CompletionTime <- Table.ReadDateTimeOrDefault doc "CompletionTime"
-        record.RenewLockTime  <- Table.ReadDateTimeOrDefault doc "RenewLockTime"
+        record.EnqueueTime    <- Table.ReadDateTimeOffsetOrDefault doc "EnqueueTime"
+        record.DequeueTime    <- Table.ReadDateTimeOffsetOrDefault doc "DequeueTime"
+        record.StartTime      <- Table.ReadDateTimeOffsetOrDefault doc "StartTime"
+        record.CompletionTime <- Table.ReadDateTimeOffsetOrDefault doc "CompletionTime"
+        record.RenewLockTime  <- Table.ReadDateTimeOffsetOrDefault doc "RenewLockTime"
 
         record
 

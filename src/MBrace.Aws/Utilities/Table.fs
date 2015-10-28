@@ -3,6 +3,8 @@
 open System
 open System.Collections.Generic
 
+open Nessos.FsPickler
+
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.DocumentModel
 open Amazon.DynamoDBv2.Model
@@ -13,6 +15,18 @@ open MBrace.Aws.Runtime
 [<AllowNullLiteral>]
 type IDynamoDBDocument =
     abstract member ToDynamoDBDocument : unit -> Document
+
+[<AutoOpen>]
+module DynamoDBEntryExtensions =
+    type DynamoDBEntry with
+        static member op_Implicit (dtOffset : DateTimeOffset) : DynamoDBEntry =
+            let bytes = ProcessConfiguration.BinarySerializer.Pickle(dtOffset)
+            let entry = new Primitive(bytes)
+            entry :> DynamoDBEntry
+
+        member this.AsDateTimeOffset() =
+            let bytes = this.AsPrimitive().AsByteArray()
+            ProcessConfiguration.BinarySerializer.UnPickle<DateTimeOffset>(bytes)
 
 [<RequireQualifiedAccess>]
 module internal Table =
@@ -71,5 +85,7 @@ module internal Table =
     let inline ReadBoolOrDefault (doc : Document) fieldName =
         if doc.ContainsKey fieldName then nullable <| doc.[fieldName].AsBoolean() else nullableDefault<bool>
 
-    let inline ReadDateTimeOrDefault (doc : Document) fieldName =
-        if doc.ContainsKey fieldName then nullable <| doc.[fieldName].AsDateTime() else nullableDefault<DateTime>
+    let inline ReadDateTimeOffsetOrDefault (doc : Document) fieldName =
+        if doc.ContainsKey fieldName 
+        then nullable <| doc.[fieldName].AsDateTimeOffset() 
+        else nullableDefault<DateTimeOffset>

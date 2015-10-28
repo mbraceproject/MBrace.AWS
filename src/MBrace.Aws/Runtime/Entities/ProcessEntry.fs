@@ -18,10 +18,10 @@ type CloudProcessRecord(taskId) =
     member val Name : string = null with get, set
 
     member val Status         = Nullable<int>() with get, set
-    member val EnqueuedTime   = Nullable<DateTime>() with get, set
-    member val DequeuedTime   = Nullable<DateTime>() with get, set
-    member val StartTime      = Nullable<DateTime>() with get, set
-    member val CompletionTime = Nullable<DateTime>() with get, set
+    member val EnqueuedTime   = Nullable<DateTimeOffset>() with get, set
+    member val DequeuedTime   = Nullable<DateTimeOffset>() with get, set
+    member val StartTime      = Nullable<DateTimeOffset>() with get, set
+    member val CompletionTime = Nullable<DateTimeOffset>() with get, set
     member val Completed      = Nullable<bool>() with get, set
 
     member val CancellationTokenSource : byte [] = null with get, set
@@ -49,7 +49,7 @@ type CloudProcessRecord(taskId) =
         record.StartTime      <- nullableDefault
         record.CompletionTime <- nullableDefault
         record.Dependencies   <- serializer.Pickle info.Dependencies
-        record.EnqueuedTime   <- nullable DateTime.UtcNow
+        record.EnqueuedTime   <- nullable DateTimeOffset.Now
         record.Name     <- match info.Name with Some n -> n | None -> null
         record.Status   <- nullable(int CloudProcessStatus.Created)
         record.Type     <- info.ReturnType.Bytes
@@ -147,7 +147,7 @@ type internal CloudProcessEntry
             let record = new CloudProcessRecord(processId)
             record.Status <- nullable(int status)
             record.ETag   <- "*"
-            let now = nullable DateTime.UtcNow
+            let now = nullable DateTimeOffset.Now
             match status with
             | CloudProcessStatus.Created -> 
                 record.Completed    <- nullable false
@@ -163,7 +163,7 @@ type internal CloudProcessEntry
             | CloudProcessStatus.UserException
             | CloudProcessStatus.Canceled -> 
                 record.Completed      <- nullable true
-                record.CompletionTime <- nullable DateTime.UtcNow
+                record.CompletionTime <- nullable DateTimeOffset.Now
 
             | _ -> invalidArg "status" "invalid Cloud process status."
 
