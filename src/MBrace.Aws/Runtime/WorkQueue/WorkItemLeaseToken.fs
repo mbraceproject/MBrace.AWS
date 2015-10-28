@@ -107,8 +107,17 @@ type internal WorkItemLeaseToken =
     }
 with
     interface ICloudWorkItemLeaseToken with
-        member this.DeclareCompleted() : Async<unit> = 
-            failwith "not implemented yet"
+        member this.DeclareCompleted() : Async<unit> = async {
+            this.CompleteAction.Invoke Complete
+            this.CompleteAction.Dispose() // disconnect marshaled object
+            let record = new WorkItemRecord(this.LeaseInfo.ProcessId, fromGuid this.LeaseInfo.WorkItemId)
+            record.Status <- nullable(int WorkItemStatus.Completed)
+            record.CompletionTime <- nullable(DateTimeOffset.Now)
+            record.Completed <- nullable true
+            record.ETag <- "*" 
+            let! _record = Table.merge this.ClusterId.StorageAccount this.ClusterId.RuntimeTable record
+            return ()
+        }
         
         member this.DeclareFaulted(edi : ExceptionDispatchInfo) : Async<unit> = 
             failwith "not implemented yet"
@@ -137,7 +146,7 @@ with
     /// Creates a new WorkItemLeaseToken with supplied configuration parameters
     static member Create
             (clusterId : ClusterId, 
-             info : WorkItemLeaseTokenInfo, 
-             monitor : WorkItemLeaseMonitor, 
+             info      : WorkItemLeaseTokenInfo, 
+             monitor   : WorkItemLeaseMonitor, 
              faultInfo : CloudWorkItemFaultInfo) = 
         failwith "not implemented yet"
