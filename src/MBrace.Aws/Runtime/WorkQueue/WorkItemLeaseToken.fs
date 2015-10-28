@@ -23,6 +23,9 @@ type internal WorkItemLeaseTokenInfo =
         ReceiptHandle : string
         ProcessId     : string
         WorkItemId    : Guid
+        BatchIndex    : int option
+        TargetWorker  : string option
+        BlobKey       : string
     }
     with
         override this.ToString() = sprintf "leaseinfo:%A" this.MessageId
@@ -186,7 +189,7 @@ with
         member this.FaultInfo : CloudWorkItemFaultInfo = this.FaultInfo
         
         member this.GetWorkItem() : Async<CloudWorkItem> = async { 
-            let! payload = S3Persist.ReadPersistedClosure<MessagePayload>(this.ClusterId, this.LeaseInfo.BlobUri)
+            let! payload = S3Persist.ReadPersistedClosure<MessagePayload>(this.ClusterId, this.LeaseInfo.BlobKey)
             match payload with
             | Single item -> return item
             | Batch items -> return items.[Option.get this.LeaseInfo.BatchIndex]

@@ -6,6 +6,11 @@ open MBrace.Runtime
 open MBrace.Runtime.Utils
 open MBrace.Aws.Runtime.Utilities
 
+/// Blob payload of serialized work items 
+type MessagePayload =
+    | Single of CloudWorkItem
+    | Batch  of CloudWorkItem []
+
 type internal WorkItemKind =
     | ProcessRoot = 1
     | Parallel    = 2
