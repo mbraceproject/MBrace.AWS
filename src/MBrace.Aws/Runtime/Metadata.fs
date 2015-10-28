@@ -9,7 +9,7 @@ type Metadata =
         Version   : Version
         ClusterId : ClusterId
     }
-with
+
     static member Create(id : ClusterId, ?version : Version) = 
         { 
             Version   = defaultArg version ProcessConfiguration.Version

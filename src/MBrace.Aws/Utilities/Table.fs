@@ -17,8 +17,9 @@ module internal Table =
         async { 
             let table = Table.LoadTable(account.DynamoDBClient, tableName)
             let doc   = entity.ToDynamoDBDocument()
+            let! ct   = Async.CancellationToken
 
-            do! table.UpdateItemAsync(doc)
+            do! table.UpdateItemAsync(doc, ct)
                 |> Async.AwaitTaskCorrect
                 |> Async.Ignore
         }

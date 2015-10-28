@@ -34,6 +34,7 @@ type CloudProcessRecord(taskId) =
 
     new () = new CloudProcessRecord(null)
 
+    // TODO: is this needed?
     //member this.CloneDefault() = new CloudProcessRecord(ETag = this.ETag)
 
     override this.ToString() = sprintf "task:%A" taskId

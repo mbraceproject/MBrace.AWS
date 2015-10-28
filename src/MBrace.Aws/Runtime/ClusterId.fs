@@ -33,7 +33,7 @@ type ClusterId =
         /// should be optimized using closure sifting.
         OptimizeClosureSerialization : bool
     }
-with
+
     member __.Id = 
         sprintf "{ S3 = \"%s\"; SQS = \"%s\"; DynamoDB = \"%s\" }" 
                 "foo"   // TODO

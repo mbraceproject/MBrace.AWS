@@ -25,7 +25,7 @@ type BlobValue<'T> internal (account : AwsS3Account, bucketName : string, key : 
     let key = key
 
     /// Bucket to blob
-    member __.Bucket = bucket
+    member __.Bucket = bucketName
 
     /// Key to blob persisting the value
     member __.Key = key
@@ -33,7 +33,7 @@ type BlobValue<'T> internal (account : AwsS3Account, bucketName : string, key : 
     /// Asynchronously gets the blob size in bytes
     member __.GetSize() : Async<int64> = async {
         let req  = GetObjectMetadataRequest(BucketName = bucketName, Key = key)
-        let! ct = Async.CancellationToken
+        let! ct  = Async.CancellationToken
         let! res = account.S3Client.GetObjectMetadataAsync(req, ct)
                    |> Async.AwaitTaskCorrect
 
@@ -43,7 +43,7 @@ type BlobValue<'T> internal (account : AwsS3Account, bucketName : string, key : 
     /// Asynchronously gets the persisted value
     member __.GetValue() : Async<'T> = async {
         let req  = GetObjectRequest(BucketName = bucketName, Key = key)
-        let! ct = Async.CancellationToken
+        let! ct  = Async.CancellationToken
         let! res = account.S3Client.GetObjectAsync(req, ct)
                    |> Async.AwaitTaskCorrect
 
@@ -72,7 +72,7 @@ type BlobValue<'T> internal (account : AwsS3Account, bucketName : string, key : 
 
     /// Asynchronously deletes the blob
     member __.Delete() = async {
-        let req  = DeleteObjectRequest(BucketName = bucketName, Key = key)
+        let req = DeleteObjectRequest(BucketName = bucketName, Key = key)
         let! ct = Async.CancellationToken
         do! account.S3Client.DeleteObjectAsync(req, ct)
             |> Async.AwaitTaskCorrect

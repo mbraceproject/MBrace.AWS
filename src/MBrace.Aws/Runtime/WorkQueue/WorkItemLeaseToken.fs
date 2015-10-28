@@ -27,8 +27,8 @@ type internal WorkItemLeaseTokenInfo =
         TargetWorker  : string option
         BlobKey       : string
     }
-    with
-        override this.ToString() = sprintf "leaseinfo:%A" this.MessageId
+
+    override this.ToString() = sprintf "leaseinfo:%A" this.MessageId
 
 
 type internal LeaseAction =
