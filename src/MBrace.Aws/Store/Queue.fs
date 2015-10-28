@@ -59,7 +59,8 @@ type SQSQueue<'T> internal (queueUri, account : AwsSQSAccount) =
             let req = SendMessageRequest(
                         QueueUrl = queueUri, 
                         MessageBody = toBase64 message)
-            do! account.SQSClient.SendMessageAsync(req) 
+            let! ct = Async.CancellationToken
+            do! account.SQSClient.SendMessageAsync(req, ct) 
                 |> Async.AwaitTaskCorrect
                 |> Async.Ignore
         }
@@ -77,7 +78,8 @@ type SQSQueue<'T> internal (queueUri, account : AwsSQSAccount) =
             for group in groups do
                 let req = SendMessageBatchRequest(QueueUrl = queueUri)
                 req.Entries.AddRange group
-                do! account.SQSClient.SendMessageBatchAsync(req)
+                let! ct = Async.CancellationToken
+                do! account.SQSClient.SendMessageBatchAsync(req, ct)
                     |> Async.AwaitTaskCorrect
                     |> Async.Ignore
         }
@@ -92,14 +94,16 @@ type SQSQueue<'T> internal (queueUri, account : AwsSQSAccount) =
 
             match timeout with
             | Some _ ->
-                let! res = account.SQSClient.ReceiveMessageAsync(req)
+                let! ct = Async.CancellationToken
+                let! res = account.SQSClient.ReceiveMessageAsync(req, ct)
                            |> Async.AwaitTaskCorrect
                 if res.Messages.Count = 1
                 then return readBody res.Messages.[0]
                 else return! Async.Raise(TimeoutException())
             | _ -> 
                 let rec aux _ = async {
-                    let! res = account.SQSClient.ReceiveMessageAsync(req)
+                    let! ct = Async.CancellationToken
+                    let! res = account.SQSClient.ReceiveMessageAsync(req, ct)
                                |> Async.AwaitTaskCorrect
                     if res.Messages.Count = 1
                     then return readBody res.Messages.[0]
@@ -112,7 +116,8 @@ type SQSQueue<'T> internal (queueUri, account : AwsSQSAccount) =
             let req = ReceiveMessageRequest(QueueUrl = queueUri)
             req.MaxNumberOfMessages <- min maxItems maxRecvCount
 
-            let! res = account.SQSClient.ReceiveMessageAsync(req)
+            let! ct = Async.CancellationToken
+            let! res = account.SQSClient.ReceiveMessageAsync(req, ct)
                        |> Async.AwaitTaskCorrect
             return res.Messages |> Seq.map readBody |> Seq.toArray
         }
@@ -121,7 +126,8 @@ type SQSQueue<'T> internal (queueUri, account : AwsSQSAccount) =
             let req = ReceiveMessageRequest(QueueUrl = queueUri)
             req.MaxNumberOfMessages <- 1
 
-            let! res = account.SQSClient.ReceiveMessageAsync(req)
+            let! ct = Async.CancellationToken
+            let! res = account.SQSClient.ReceiveMessageAsync(req, ct)
                        |> Async.AwaitTaskCorrect
             if res.Messages.Count = 1 
             then return Some <| readBody res.Messages.[0]
@@ -133,7 +139,8 @@ type SQSQueue<'T> internal (queueUri, account : AwsSQSAccount) =
             let attrName = QueueAttributeName.ApproximateNumberOfMessages.Value
             req.AttributeNames.Add(attrName)
 
-            let! res = account.SQSClient.GetQueueAttributesAsync(req)
+            let! ct = Async.CancellationToken
+            let! res = account.SQSClient.GetQueueAttributesAsync(req, ct)
                        |> Async.AwaitTaskCorrect
             return int64 res.ApproximateNumberOfMessages
         }

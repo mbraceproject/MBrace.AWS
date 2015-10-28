@@ -33,7 +33,8 @@ type BlobValue<'T> internal (account : AwsS3Account, bucketName : string, key : 
     /// Asynchronously gets the blob size in bytes
     member __.GetSize() : Async<int64> = async {
         let req  = GetObjectMetadataRequest(BucketName = bucketName, Key = key)
-        let! res = account.S3Client.GetObjectMetadataAsync(req)
+        let! ct = Async.CancellationToken
+        let! res = account.S3Client.GetObjectMetadataAsync(req, ct)
                    |> Async.AwaitTaskCorrect
 
         return res.ContentLength
@@ -42,7 +43,8 @@ type BlobValue<'T> internal (account : AwsS3Account, bucketName : string, key : 
     /// Asynchronously gets the persisted value
     member __.GetValue() : Async<'T> = async {
         let req  = GetObjectRequest(BucketName = bucketName, Key = key)
-        let! res = account.S3Client.GetObjectAsync(req)
+        let! ct = Async.CancellationToken
+        let! res = account.S3Client.GetObjectAsync(req, ct)
                    |> Async.AwaitTaskCorrect
 
         return ProcessConfiguration.BinarySerializer.Deserialize<'T>(res.ResponseStream)
@@ -71,7 +73,8 @@ type BlobValue<'T> internal (account : AwsS3Account, bucketName : string, key : 
     /// Asynchronously deletes the blob
     member __.Delete() = async {
         let req  = DeleteObjectRequest(BucketName = bucketName, Key = key)
-        do! account.S3Client.DeleteObjectAsync(req)
+        let! ct = Async.CancellationToken
+        do! account.S3Client.DeleteObjectAsync(req, ct)
             |> Async.AwaitTaskCorrect
             |> Async.Ignore
     }        
@@ -86,7 +89,8 @@ type BlobValue<'T> internal (account : AwsS3Account, bucketName : string, key : 
         do! stream.FlushAsync()
 
         req.InputStream <- stream
-        do! account.S3Client.PutObjectAsync(req)
+        let! ct = Async.CancellationToken
+        do! account.S3Client.PutObjectAsync(req, ct)
             |> Async.AwaitTaskCorrect
             |> Async.Ignore
     }
