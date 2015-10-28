@@ -72,7 +72,7 @@ type CloudProcessRecord(taskId) =
             ReturnType = new Pickle<_>(record.Type)
         }
 
-    static member GetProcessRecord(clusterId : ClusterId, taskId : string) = async {
+    static member GetProcessRecord(clusterId : ClusterId, processId : string) = async {
         return new CloudProcessRecord()
         //return! Table.read<CloudProcessRecord> clusterId.StorageAccount clusterId.RuntimeTable CloudProcessRecord.DefaultPartitionKey taskId
     }
@@ -118,6 +118,7 @@ type internal CloudProcessEntry
 
     interface ICloudProcessEntry with
         member this.Id: string = processId
+        member this.Info: CloudProcessInfo = processInfo
 
         member this.AwaitResult(): Async<CloudProcessResult> = async {
             let entry   = this :> ICloudProcessEntry
@@ -166,14 +167,14 @@ type internal CloudProcessEntry
 
             | _ -> invalidArg "status" "invalid Cloud process status."
 
-            let! _ = Table.update clusterId.DynamoDBAccount clusterId.RuntimeTable record
-            return ()
+            do! Table.update clusterId.DynamoDBAccount clusterId.RuntimeTable record
         }
         
         member this.GetState(): Async<CloudProcessState> = async {
-            let! jobsHandle = Async.StartChild(Table.queryPK<WorkItemRecord> clusterId.StorageAccount clusterId.RuntimeTable taskId)
-            let! record = CloudProcessRecord.GetProcessRecord(clusterId, taskId)
-            let! jobs = jobsHandle
+            let! jobs = 
+                Table.query<WorkItemRecord> clusterId.DynamoDBAccount clusterId.RuntimeTable processId
+                |> Async.StartChild
+            let! record = CloudProcessRecord.GetProcessRecord(clusterId, processId)
 
             let execTime =
                 match record.Completed, record.StartTime, record.CompletionTime with
@@ -213,18 +214,20 @@ type internal CloudProcessEntry
                 }
         }
 
-        member this.Info: CloudProcessInfo = processInfo
-        
-        member this.TryGetResult(): Async<CloudProcessResult option> = async {
-            let! record = CloudProcessRecord.GetProcessRecord(clusterId, taskId)
+        member this.TryGetResult(): Async<CloudProcessResult option> = failwith "not implemented yet"
+             
+        (*async {
+            let! record = CloudProcessRecord.GetProcessRecord(clusterId, processId)
             match record.ResultUri with
             | null -> return None
             | uri ->
                 let! result = BlobPersist.ReadPersistedClosure<CloudProcessResult>(clusterId, uri)
                 return Some result
-        }
+        }*)
 
-        member this.TrySetResult(result: CloudProcessResult, _workerId : IWorkerId): Async<bool> = async {
+        member this.TrySetResult(result: CloudProcessResult, _workerId : IWorkerId): Async<bool> = 
+            failwith "not implemented yet"
+        (*async {
             let record = new CloudProcessRecord(taskId)
             let blobUri = guid()
             do! BlobPersist.PersistClosure(clusterId, result, blobUri, allowNewSifts = false)
@@ -232,4 +235,4 @@ type internal CloudProcessEntry
             record.ETag <- "*"
             let! _record = Table.merge clusterId.StorageAccount clusterId.RuntimeTable record
             return true
-        }
+        }*)

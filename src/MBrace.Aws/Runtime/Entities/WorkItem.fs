@@ -120,6 +120,35 @@ type WorkItemRecord(processId : string, workItemId : string) =
 
     member r.GetSize() = r.Size.GetValueOrDefault(-1L)
 
+    static member FromDynamoDBDocument (doc : Document) =
+        let processId  = doc.["ProcessId"].AsString()
+        let workItemId = doc.["Id"].AsString()       
+
+        let record = new WorkItemRecord(processId, workItemId)
+
+        record.Affinity      <- Table.ReadStringOrDefault doc "Affinity"
+        record.Type          <- Table.ReadStringOrDefault doc "Type"
+        record.ETag          <- Table.ReadStringOrDefault doc "ETag"
+        record.CurrentWorker <- Table.ReadStringOrDefault doc "CurrentWorker"
+        record.LastException <- Table.ReadStringOrDefault doc "LastException"
+
+        record.Kind  <- Table.ReadIntOrDefault doc "Kind"
+        record.Index <- Table.ReadIntOrDefault doc "Index"
+        record.Size  <- Table.ReadInt64OrDefault doc "Size"
+        record.MaxIndex  <- Table.ReadIntOrDefault doc "MaxIndex"
+        record.Status    <- Table.ReadIntOrDefault doc "Status"
+        record.Completed <- Table.ReadBoolOrDefault doc "Completed"
+        record.FaultInfo <- Table.ReadIntOrDefault doc "FaultInfo"
+        record.DeliveryCount <- Table.ReadIntOrDefault doc "DeliveryCount"
+
+        record.EnqueueTime    <- Table.ReadDateTimeOrDefault doc "EnqueueTime"
+        record.DequeueTime    <- Table.ReadDateTimeOrDefault doc "DequeueTime"
+        record.StartTime      <- Table.ReadDateTimeOrDefault doc "StartTime"
+        record.CompletionTime <- Table.ReadDateTimeOrDefault doc "CompletionTime"
+        record.RenewLockTime  <- Table.ReadDateTimeOrDefault doc "RenewLockTime"
+
+        record
+
     interface IDynamoDBDocument with 
         member this.ToDynamoDBDocument () =
             let doc = new Document()
