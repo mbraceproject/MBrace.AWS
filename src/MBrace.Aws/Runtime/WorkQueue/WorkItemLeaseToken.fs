@@ -21,6 +21,8 @@ type internal WorkItemLeaseTokenInfo =
         MessageId     : string
         QueueUri      : string
         ReceiptHandle : string
+        ProcessId     : string
+        WorkItemId    : Guid
     }
     with
         override this.ToString() = sprintf "leaseinfo:%A" this.MessageId
@@ -92,6 +94,50 @@ type internal WorkItemLeaseMonitor private
     static member Start(id : ClusterId, info : WorkItemLeaseTokenInfo, logger : ISystemLogger) =
         new WorkItemLeaseMonitor(id, info, logger)
 
+[<AutoOpen>]
+module private DynamoDBHelper =
+    open Amazon.DynamoDBv2
+    open Amazon.DynamoDBv2.DocumentModel
+
+    let inline private doIfNotNull f = function
+        | Nullable(x) -> f x
+        | _ -> ()
+
+    // NOTE: implement a specific put rather than reinvent the object persistence layer as that's a lot
+    // of work and at this point not enough payoff
+    let putWorkItemRecord (account : AwsDynamoDBAccount) tableName (record : WorkItemRecord) =
+        async {
+            let table = Table.LoadTable(account.DynamoDBClient, tableName)
+            let doc   = new Document()
+
+            doc.["Id"] <- DynamoDBEntry.op_Implicit(record.Id)
+            doc.["ProcessId"] <- DynamoDBEntry.op_Implicit(record.ProcessId)
+            doc.["Affinity"]  <- DynamoDBEntry.op_Implicit(record.Affinity)
+            doc.["Type"]      <- DynamoDBEntry.op_Implicit(record.Type)
+            doc.["ETag"]      <- DynamoDBEntry.op_Implicit(record.ETag)
+            doc.["CurrentWorker"]  <- DynamoDBEntry.op_Implicit(record.CurrentWorker)
+            doc.["LastException"]  <- DynamoDBEntry.op_Implicit(record.LastException)
+
+            record.Kind  |> doIfNotNull (fun x -> doc.["Kind"] <- DynamoDBEntry.op_Implicit x)
+            record.Index |> doIfNotNull (fun x -> doc.["Index"] <- DynamoDBEntry.op_Implicit x)
+            record.Size  |> doIfNotNull (fun x -> doc.["Size"] <- DynamoDBEntry.op_Implicit x)
+            record.MaxIndex  |> doIfNotNull (fun x -> doc.["MaxIndex"] <- DynamoDBEntry.op_Implicit x)
+            record.Status    |> doIfNotNull (fun x -> doc.["Status"] <- DynamoDBEntry.op_Implicit x)
+            record.Completed |> doIfNotNull (fun x -> doc.["Completed"] <- DynamoDBEntry.op_Implicit x)
+            record.FaultInfo |> doIfNotNull (fun x -> doc.["FaultInfo"] <- DynamoDBEntry.op_Implicit x)
+
+            record.EnqueueTime |> doIfNotNull (fun x -> doc.["EnqueueTime"] <- DynamoDBEntry.op_Implicit x)
+            record.DequeueTime |> doIfNotNull (fun x -> doc.["DequeueTime"] <- DynamoDBEntry.op_Implicit x)
+            record.StartTime   |> doIfNotNull (fun x -> doc.["StartTime"] <- DynamoDBEntry.op_Implicit x)
+            record.CompletionTime |> doIfNotNull (fun x -> doc.["CompletionTime"] <- DynamoDBEntry.op_Implicit x)
+            record.RenewLockTime  |> doIfNotNull (fun x -> doc.["RenewLockTime"] <- DynamoDBEntry.op_Implicit x)
+            record.DeliveryCount  |> doIfNotNull (fun x -> doc.["DeliveryCount"] <- DynamoDBEntry.op_Implicit x)
+
+            do! table.UpdateItemAsync(doc)
+                |> Async.AwaitTaskCorrect
+                |> Async.Ignore
+        }
+
 /// Implements ICloudWorkItemLeaseToken
 type internal WorkItemLeaseToken =
     {
@@ -111,12 +157,11 @@ with
             this.CompleteAction.Invoke Complete
             this.CompleteAction.Dispose() // disconnect marshaled object
             let record = new WorkItemRecord(this.LeaseInfo.ProcessId, fromGuid this.LeaseInfo.WorkItemId)
-            record.Status <- nullable(int WorkItemStatus.Completed)
-            record.CompletionTime <- nullable(DateTimeOffset.Now)
-            record.Completed <- nullable true
-            record.ETag <- "*" 
-            let! _record = Table.merge this.ClusterId.StorageAccount this.ClusterId.RuntimeTable record
-            return ()
+            record.Status         <- nullable(int WorkItemStatus.Completed)
+            record.CompletionTime <- nullable(DateTime.UtcNow)
+            record.Completed      <- nullable true
+            record.ETag           <- "*" 
+            do! putWorkItemRecord this.ClusterId.DynamoDBAccount this.ClusterId.RuntimeTable record
         }
         
         member this.DeclareFaulted(edi : ExceptionDispatchInfo) : Async<unit> = 

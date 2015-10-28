@@ -46,8 +46,10 @@
     <Compile Include="Configuration\ProcessConfiguration.fs" />
     <Compile Include="Configuration\Accounts.fs" />
     <Compile Include="Configuration\Validation.fs" />
+    <Compile Include="Utilities\Utils.fs" />
     <Compile Include="Runtime\ClusterId.fs" />
     <Compile Include="Runtime\Metadata.fs" />
+    <Compile Include="Runtime\Entities\WorkItem.fs" />
     <Compile Include="Store\S3FileStore.fs" />
     <Compile Include="Store\Atom.fs" />
     <Compile Include="Store\Queue.fs" />
@@ -56,8 +58,6 @@
     <Compile Include="Runtime\WorkQueue\WorkItemQueue.fs" />
     <Compile Include="Runtime\WorkQueue\WorkItemLeaseToken.fs" />
     <Compile Include="Runtime\WorkQueue\Messaging.fs" />
-    <Compile Include="Runtime\Entities\WorkItem.fs" />
-    <Compile Include="Utilities\Utils.fs" />
   </ItemGroup>
   <PropertyGroup>
     <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>
@@ -822,6 +822,5 @@
   </Choose>
   <ItemGroup>
     <Folder Include="Runtime\WorkQueue\" />
-    <Folder Include="Runtime\Entities\" />
   </ItemGroup>
 </Project>

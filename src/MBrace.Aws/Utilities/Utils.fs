@@ -7,7 +7,6 @@ open System.Threading.Tasks
 
 [<AutoOpen>]
 module Utils =
-
     let guid() = Guid.NewGuid().ToString()
 
     let toGuid guid = Guid.Parse(guid)

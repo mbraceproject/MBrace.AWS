@@ -10,11 +10,24 @@ type ClusterId =
         /// Runtime version string
         Version : string
 
-        S3Account : AwsS3Account
-
+        S3Account       : AwsS3Account
         DynamoDBAccount : AwsDynamoDBAccount
+        SQSAccount      : AwsSQSAccount
 
-        SQSAccount : AwsSQSAccount
+        /// SQS Name
+        WorkItemQueue : string
+        /// SNS Topic
+        WorkItemTopic : string
+
+        /// Runtime S3 bucket name
+        RuntimeS3Bucket : string
+
+        /// Runtime DynamoDB table name
+        RuntimeTable : string
+        /// Runtime logs DynamoDB table name
+        RuntimeLogsTable : string
+        /// User data DynamoDB table name
+        RuntimeUserDataTable : string
     }
 with
     member __.Id = 

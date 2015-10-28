@@ -25,30 +25,53 @@ type internal FaultInfo =
     | WorkerDeathWhileProcessingWorkItem = 2
     | IsTargetedWorkItemOfDeadWorker     = 3
 
+[<AutoSerializable(true)>]
+type WorkerId internal (workerId : string) = 
+    member this.Id = workerId
+
+    interface IWorkerId with
+        member this.CompareTo(obj: obj): int =
+            match obj with
+            | :? WorkerId as w -> compare workerId w.Id
+            | _ -> invalidArg "obj" "invalid comparand."
+        
+        member this.Id: string = this.Id
+
+    override this.ToString() = this.Id
+    override this.Equals(other:obj) =
+        match other with
+        | :? WorkerId as w -> workerId = w.Id
+        | _ -> false
+
+    override this.GetHashCode() = hash workerId
+
 [<AllowNullLiteral>]
 type WorkItemRecord(processId : string, workItemId : string) = 
-    member val Id                 = workItemId with get
-    member val ProcessId          = processId with get
+    member val Id             = workItemId with get
+    member val ProcessId      = processId with get
 
-    member val Affinity           = null : string with get, set
-    member val Kind               = Nullable<int>() with get, set
-    member val Index              = Nullable<int>() with get, set
-    member val MaxIndex           = Nullable<int>() with get, set
+    member val Affinity       = null : string with get, set
+    member val Kind           = Nullable<int>() with get, set
+    member val Index          = Nullable<int>() with get, set
+    member val MaxIndex       = Nullable<int>() with get, set
 
-    member val CurrentWorker      = null : string with get, set
-    member val Status             = Nullable<int>() with get, set
+    member val CurrentWorker  = null : string with get, set
+    member val Status         = Nullable<int>() with get, set
 
-    member val Size               = Nullable<int64>() with get, set
-    member val EnqueueTime        = Nullable<DateTimeOffset>() with get, set
-    member val DequeueTime        = Nullable<DateTimeOffset>() with get, set
-    member val StartTime          = Nullable<DateTimeOffset>() with get, set
-    member val CompletionTime     = Nullable<DateTimeOffset>() with get, set
-    member val DeliveryCount      = Nullable<int>() with get, set
-    member val RenewLockTime      = Nullable<DateTimeOffset>() with get, set
-    member val Completed          = Nullable<bool>() with get, set
-    member val Type               = null : string with get, set
-    member val LastException      = null : string with get, set
-    member val FaultInfo          = Nullable<int>() with get, set
+    member val Size           = Nullable<int64>() with get, set
+    member val EnqueueTime    = Nullable<DateTime>() with get, set
+    member val DequeueTime    = Nullable<DateTime>() with get, set
+    member val StartTime      = Nullable<DateTime>() with get, set
+    member val CompletionTime = Nullable<DateTime>() with get, set
+    member val RenewLockTime  = Nullable<DateTime>() with get, set
+
+    member val DeliveryCount  = Nullable<int>() with get, set   
+    member val Completed      = Nullable<bool>() with get, set
+    member val Type           = null : string with get, set
+    member val LastException  = null : string with get, set
+    member val FaultInfo      = Nullable<int>() with get, set
+
+    member val ETag           = null : string with get, set
 
     new () = new WorkItemRecord(null, null)
 

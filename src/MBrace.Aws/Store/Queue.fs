@@ -138,4 +138,5 @@ type SQSQueue<'T> internal (queueUri, account : AwsSQSAccount) =
             return int64 res.ApproximateNumberOfMessages
         }
 
+        // TODO - delete the queue here
         member x.Dispose() = failwith "Not implemented yet"
