@@ -41,13 +41,13 @@ type internal WorkItemLeaseMonitor private
         (clusterId : ClusterId,
          info      : WorkItemLeaseTokenInfo,
          logger    : ISystemLogger) =
-    let sqsClient = clusterId.SQSAccount.SQSClient
 
     let deleteMsg () = async {
         let req = DeleteMessageRequest(
                     QueueUrl      = info.QueueUri,
                     ReceiptHandle = info.ReceiptHandle)
-        do! sqsClient.DeleteMessageAsync(req)
+        let! ct = Async.CancellationToken
+        do! clusterId.SQSAccount.SQSClient.DeleteMessageAsync(req, ct)
             |> Async.AwaitTaskCorrect
             |> Async.Ignore
     }
@@ -61,7 +61,8 @@ type internal WorkItemLeaseMonitor private
                          ReceiptHandle = info.ReceiptHandle)
             req.VisibilityTimeout <- 60 // hide message from other workers for another 1 min
 
-            let! res = sqsClient.ChangeMessageVisibilityAsync(req)
+            let! ct = Async.CancellationToken
+            let! res = clusterId.SQSAccount.SQSClient.ChangeMessageVisibilityAsync(req, ct)
                        |> Async.AwaitTaskCorrect
                        |> Async.Catch
 
@@ -136,7 +137,8 @@ module private DynamoDBHelper =
             record.RenewLockTime  |> doIfNotNull (fun x -> doc.["RenewLockTime"] <- DynamoDBEntry.op_Implicit x)
             record.DeliveryCount  |> doIfNotNull (fun x -> doc.["DeliveryCount"] <- DynamoDBEntry.op_Implicit x)
 
-            do! table.UpdateItemAsync(doc)
+            let! ct = Async.CancellationToken
+            do! table.UpdateItemAsync(doc, ct)
                 |> Async.AwaitTaskCorrect
                 |> Async.Ignore
         }
@@ -154,7 +156,6 @@ type internal WorkItemLeaseToken =
         ProcessInfo     : CloudProcessInfo
         TargetWorker    : string option
     }
-with
     interface ICloudWorkItemLeaseToken with
         member this.DeclareCompleted() : Async<unit> = async {
             this.CompleteAction.Invoke Complete

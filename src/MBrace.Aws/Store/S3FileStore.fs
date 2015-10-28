@@ -52,7 +52,8 @@ type S3FileStore private
     
     let getObjMetadata path = async {
         let req = GetObjectMetadataRequest(BucketName = bucketName, Key = path)
-        return! account.S3Client.GetObjectMetadataAsync(req)
+        let! ct = Async.CancellationToken
+        return! account.S3Client.GetObjectMetadataAsync(req, ct)
                 |> Async.AwaitTaskCorrect
     }
 
@@ -62,7 +63,8 @@ type S3FileStore private
                     Prefix     = prefix,
                     Delimiter  = "/",
                     Marker     = nextMarker)
-        return! account.S3Client.ListObjectsAsync(req) 
+        let! ct = Async.CancellationToken
+        return! account.S3Client.ListObjectsAsync(req, ct) 
                 |> Async.AwaitTaskCorrect
     }
 
@@ -99,7 +101,8 @@ type S3FileStore private
             let req = ListObjectsRequest(
                         BucketName = bucketName, 
                         Prefix = prefix)
-            let! res = account.S3Client.ListObjectsAsync req
+            let! ct = Async.CancellationToken
+            let! res = account.S3Client.ListObjectsAsync (req,ct)
                        |> Async.AwaitTaskCorrect
             return res.S3Objects.Count > 0
         }
@@ -107,7 +110,8 @@ type S3FileStore private
         member __.CreateDirectory(directory) = async {
             let key = normalizeDirPath directory
             let req = PutObjectRequest(BucketName = bucketName, Key = key)
-            do! account.S3Client.PutObjectAsync req
+            let! ct = Async.CancellationToken
+            do! account.S3Client.PutObjectAsync (req, ct)
                 |> Async.AwaitTaskCorrect
                 |> Async.Ignore
         }
@@ -141,24 +145,28 @@ type S3FileStore private
 
         member __.DeleteFile(path) = async {
             let req = DeleteObjectRequest(BucketName = bucketName, Key = path)
-            do! account.S3Client.DeleteObjectAsync(req) 
+            let! ct = Async.CancellationToken
+            do! account.S3Client.DeleteObjectAsync(req, ct) 
                 |> Async.AwaitTaskCorrect
                 |> Async.Ignore
         }
         
         member __.DownloadToLocalFile(cloudSourcePath, localTargetPath) = async {
+            let! ct = Async.CancellationToken
             do! account.S3Client.DownloadToFilePathAsync(
                     bucketName, 
                     cloudSourcePath, 
                     localTargetPath, 
-                    Dictionary<string, obj>())
+                    Dictionary<string, obj>(),
+                    ct)
                 |> Async.AwaitTaskCorrect
         }
 
         member __.DownloadToStream(path, stream) = async {
+            let! ct = Async.CancellationToken
             let! objStream = 
                 account.S3Client.GetObjectStreamAsync(
-                    bucketName, path, Dictionary<string, obj>())
+                    bucketName, path, Dictionary<string, obj>(), ct)
                 |> Async.AwaitTaskCorrect
 
             do! objStream.CopyToAsync(stream)
@@ -184,11 +192,13 @@ type S3FileStore private
             let props = Dictionary<string, obj>()
             props.["IfMatch"] <- etag
 
+            let! ct = Async.CancellationToken
             let! res = 
                 account.S3Client.GetObjectStreamAsync(
                     bucketName, 
                     path, 
-                    props) 
+                    props,
+                    ct) 
                 |> Async.AwaitTaskCorrect
                 |> Async.Catch
 
@@ -205,20 +215,24 @@ type S3FileStore private
         }
 
         member __.UploadFromLocalFile(localSourcePath, cloudTargetPath) = async {
+            let! ct = Async.CancellationToken
             do! account.S3Client.UploadObjectFromFilePathAsync(
                     bucketName, 
                     cloudTargetPath, 
                     localSourcePath, 
-                    Dictionary<string, obj>())
+                    Dictionary<string, obj>(),
+                    ct)
                 |> Async.AwaitTaskCorrect
         }
 
         member __.UploadFromStream(path, stream) = async {
+            let! ct = Async.CancellationToken
             do! account.S3Client.UploadObjectFromStreamAsync(
                     bucketName,
                     path,
                     stream,
-                    Dictionary<string, obj>())
+                    Dictionary<string, obj>(),
+                    ct)
                 |> Async.AwaitTaskCorrect
         }
 
