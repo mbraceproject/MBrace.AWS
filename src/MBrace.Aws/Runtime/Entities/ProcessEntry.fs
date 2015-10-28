@@ -3,12 +3,101 @@
 open System
 open System.Runtime.Serialization
 
+open Amazon.DynamoDBv2.DocumentModel
+
 open Nessos.FsPickler
 
 open MBrace.Core
 open MBrace.Runtime
 open MBrace.Aws
 open MBrace.Aws.Runtime.Utilities
+
+[<AllowNullLiteral>]
+type CloudProcessRecord(taskId) = 
+    member val Id   : string = taskId with get, set
+    member val Name : string = null with get, set
+
+    member val Status         = Nullable<int>() with get, set
+    member val EnqueuedTime   = Nullable<DateTime>() with get, set
+    member val DequeuedTime   = Nullable<DateTime>() with get, set
+    member val StartTime      = Nullable<DateTime>() with get, set
+    member val CompletionTime = Nullable<DateTime>() with get, set
+    member val Completed      = Nullable<bool>() with get, set
+
+    member val CancellationTokenSource : byte [] = null with get, set
+    member val ResultUri : string = null with get, set
+    member val TypeName  : string = null with get, set
+    member val Type  : byte [] = null with get, set
+    member val Dependencies : byte [] = null with get, set
+    member val AdditionalResources : byte [] = null with get, set
+    member val ETag : string = null with get, set
+
+    new () = new CloudProcessRecord(null)
+
+    //member this.CloneDefault() = new CloudProcessRecord(ETag = this.ETag)
+
+    override this.ToString() = sprintf "task:%A" taskId
+
+    static member DefaultPartitionKey = "task"
+
+    static member CreateNew(taskId : string, info : CloudProcessInfo) =
+        let serializer = ProcessConfiguration.BinarySerializer
+
+        let record = new CloudProcessRecord(taskId)
+        record.Completed      <- nullable false
+        record.StartTime      <- nullableDefault
+        record.CompletionTime <- nullableDefault
+        record.Dependencies   <- serializer.Pickle info.Dependencies
+        record.EnqueuedTime   <- nullable DateTime.UtcNow
+        record.Name     <- match info.Name with Some n -> n | None -> null
+        record.Status   <- nullable(int CloudProcessStatus.Created)
+        record.Type     <- info.ReturnType.Bytes
+        record.TypeName <- info.ReturnTypeName
+        record.CancellationTokenSource <- serializer.Pickle info.CancellationTokenSource
+        info.AdditionalResources |> Option.iter (fun r -> record.AdditionalResources <- serializer.Pickle r)
+        record
+
+    member record.ToCloudProcessInfo() =
+        let serializer = ProcessConfiguration.BinarySerializer
+        {
+            Name = match record.Name with null -> None | name -> Some name
+            CancellationTokenSource = serializer.UnPickle record.CancellationTokenSource
+            Dependencies = serializer.UnPickle record.Dependencies
+            AdditionalResources = 
+                match record.AdditionalResources with 
+                | null  -> None 
+                | bytes -> Some <| serializer.UnPickle bytes
+            ReturnTypeName = record.TypeName
+            ReturnType = new Pickle<_>(record.Type)
+        }
+
+    static member GetProcessRecord(clusterId : ClusterId, taskId : string) = async {
+        return new CloudProcessRecord()
+        //return! Table.read<CloudProcessRecord> clusterId.StorageAccount clusterId.RuntimeTable CloudProcessRecord.DefaultPartitionKey taskId
+    }
+
+    interface IDynamoDBDocument with
+        member this.ToDynamoDBDocument () =
+            let doc = new Document()
+
+            doc.["Id"]   <- Document.op_Implicit this.Id
+            doc.["Name"] <- Document.op_Implicit this.Name
+            doc.["ETag"] <- Document.op_Implicit this.ETag
+            doc.["ResultUri"] <- Document.op_Implicit this.ResultUri
+            doc.["TypeName"]  <- Document.op_Implicit this.TypeName
+            doc.["Type"]      <- Document.op_Implicit this.Type
+            doc.["Dependencies"] <- Document.op_Implicit this.Dependencies
+            doc.["AdditionalResources"]     <- Document.op_Implicit this.AdditionalResources
+            doc.["CancellationTokenSource"] <- Document.op_Implicit this.CancellationTokenSource
+
+            this.Status    |> doIfNotNull (fun x -> doc.["Status"] <- DynamoDBEntry.op_Implicit x)
+            this.Completed |> doIfNotNull (fun x -> doc.["Completed"] <- DynamoDBEntry.op_Implicit x)
+            this.EnqueuedTime   |> doIfNotNull (fun x -> doc.["EnqueuedTime"] <- DynamoDBEntry.op_Implicit x)
+            this.DequeuedTime   |> doIfNotNull (fun x -> doc.["DequeuedTime"] <- DynamoDBEntry.op_Implicit x)
+            this.StartTime      |> doIfNotNull (fun x -> doc.["StartTime"] <- DynamoDBEntry.op_Implicit x)
+            this.CompletionTime |> doIfNotNull (fun x -> doc.["CompletionTime"] <- DynamoDBEntry.op_Implicit x)
+
+            doc
 
 [<DataContract; Sealed>]
 type internal CloudProcessEntry 
@@ -30,17 +119,17 @@ type internal CloudProcessEntry
         member this.Id: string = processId
 
         member this.AwaitResult(): Async<CloudProcessResult> = async {
-            let tcs = this :> ICloudProcessEntry
-            let! result = tcs.TryGetResult()
+            let entry   = this :> ICloudProcessEntry
+            let! result = entry.TryGetResult()
             match result with
             | Some r -> return r
             | None ->
                 do! Async.Sleep 200
-                return! tcs.AwaitResult()
+                return! entry.AwaitResult()
         }
 
         member this.WaitAsync(): Async<unit> = async {
-            let! record = CloudProcessRecord.GetProcessRecord(clusterId, taskId)
+            let! record = CloudProcessRecord.GetProcessRecord(clusterId, processId)
             // result uri has been populated, hence computation has completed
             if record.ResultUri <> null then return ()
             else
@@ -53,30 +142,30 @@ type internal CloudProcessEntry
         member this.IncrementWorkItemCount(): Async<unit> = async { return () }
         
         member this.DeclareStatus(status: CloudProcessStatus): Async<unit> = async {
-            let record = new CloudProcessRecord(taskId)
+            let record = new CloudProcessRecord(processId)
             record.Status <- nullable(int status)
-            record.ETag <- "*"
-            let now = nullable DateTimeOffset.Now
+            record.ETag   <- "*"
+            let now = nullable DateTime.UtcNow
             match status with
             | CloudProcessStatus.Created -> 
-                record.Completed <- nullable false
+                record.Completed    <- nullable false
                 record.EnqueuedTime <- now
             | CloudProcessStatus.WaitingToRun -> 
-                record.Completed <- nullable false
+                record.Completed    <- nullable false
                 record.DequeuedTime <- now
             | CloudProcessStatus.Running -> 
-                record.Completed <- nullable false
-                record.StartTime <- now
+                record.Completed    <- nullable false
+                record.StartTime    <- now
             | CloudProcessStatus.Faulted
             | CloudProcessStatus.Completed
             | CloudProcessStatus.UserException
             | CloudProcessStatus.Canceled -> 
-                record.Completed <- nullable true
-                record.CompletionTime <- nullable DateTimeOffset.Now
+                record.Completed      <- nullable true
+                record.CompletionTime <- nullable DateTime.UtcNow
 
             | _ -> invalidArg "status" "invalid Cloud process status."
 
-            let! _ = Table.merge clusterId.StorageAccount clusterId.RuntimeTable record
+            let! _ = Table.update clusterId.DynamoDBAccount clusterId.RuntimeTable record
             return ()
         }
         

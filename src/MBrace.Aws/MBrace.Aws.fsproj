@@ -48,6 +48,7 @@
     <Compile Include="Configuration\Validation.fs" />
     <Compile Include="Utilities\Utils.fs" />
     <Compile Include="Utilities\BlobValue.fs" />
+    <Compile Include="Utilities\Table.fs" />
     <Compile Include="Runtime\ClusterId.fs" />
     <Compile Include="Runtime\Metadata.fs" />
     <Compile Include="Runtime\Persist.fs" />
@@ -60,7 +61,7 @@
     <Compile Include="Store\Atom.fs" />
     <Compile Include="Store\Queue.fs" />
     <None Include="paket.references" />
-    <None Include="paket.template" />      
+    <None Include="paket.template" />    
   </ItemGroup>
   <PropertyGroup>
     <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>

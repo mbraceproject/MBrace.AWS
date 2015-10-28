@@ -2,6 +2,8 @@
 
 open System
 
+open Amazon.DynamoDBv2.DocumentModel
+
 open MBrace.Runtime
 open MBrace.Runtime.Utils
 open MBrace.Aws.Runtime.Utilities
@@ -117,3 +119,32 @@ type WorkItemRecord(processId : string, workItemId : string) =
         | _ -> failwithf "Invalid WorkItemKind %d" <| int wk
 
     member r.GetSize() = r.Size.GetValueOrDefault(-1L)
+
+    interface IDynamoDBDocument with 
+        member this.ToDynamoDBDocument () =
+            let doc = new Document()
+
+            doc.["Id"] <- DynamoDBEntry.op_Implicit(this.Id)
+            doc.["ProcessId"] <- DynamoDBEntry.op_Implicit(this.ProcessId)
+            doc.["Affinity"]  <- DynamoDBEntry.op_Implicit(this.Affinity)
+            doc.["Type"]      <- DynamoDBEntry.op_Implicit(this.Type)
+            doc.["ETag"]      <- DynamoDBEntry.op_Implicit(this.ETag)
+            doc.["CurrentWorker"]  <- DynamoDBEntry.op_Implicit(this.CurrentWorker)
+            doc.["LastException"]  <- DynamoDBEntry.op_Implicit(this.LastException)
+
+            this.Kind  |> doIfNotNull (fun x -> doc.["Kind"] <- DynamoDBEntry.op_Implicit x)
+            this.Index |> doIfNotNull (fun x -> doc.["Index"] <- DynamoDBEntry.op_Implicit x)
+            this.Size  |> doIfNotNull (fun x -> doc.["Size"] <- DynamoDBEntry.op_Implicit x)
+            this.MaxIndex  |> doIfNotNull (fun x -> doc.["MaxIndex"] <- DynamoDBEntry.op_Implicit x)
+            this.Status    |> doIfNotNull (fun x -> doc.["Status"] <- DynamoDBEntry.op_Implicit x)
+            this.Completed |> doIfNotNull (fun x -> doc.["Completed"] <- DynamoDBEntry.op_Implicit x)
+            this.FaultInfo |> doIfNotNull (fun x -> doc.["FaultInfo"] <- DynamoDBEntry.op_Implicit x)
+
+            this.EnqueueTime |> doIfNotNull (fun x -> doc.["EnqueueTime"] <- DynamoDBEntry.op_Implicit x)
+            this.DequeueTime |> doIfNotNull (fun x -> doc.["DequeueTime"] <- DynamoDBEntry.op_Implicit x)
+            this.StartTime   |> doIfNotNull (fun x -> doc.["StartTime"] <- DynamoDBEntry.op_Implicit x)
+            this.CompletionTime |> doIfNotNull (fun x -> doc.["CompletionTime"] <- DynamoDBEntry.op_Implicit x)
+            this.RenewLockTime  |> doIfNotNull (fun x -> doc.["RenewLockTime"] <- DynamoDBEntry.op_Implicit x)
+            this.DeliveryCount  |> doIfNotNull (fun x -> doc.["DeliveryCount"] <- DynamoDBEntry.op_Implicit x)
+
+            doc

@@ -23,6 +23,10 @@ module Utils =
     let (|Null|Nullable|) (value : Nullable<'T>) =
         if value.HasValue then Nullable(value.Value) else Null
 
+    let doIfNotNull f = function
+        | Nullable(x) -> f x
+        | _ -> ()
+
     type Async with
         static member Cast<'U>(task : Async<obj>) = async { let! t = task in return box t :?> 'U }
 
