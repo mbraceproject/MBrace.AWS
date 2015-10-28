@@ -14,6 +14,8 @@ open MBrace.Aws.Runtime.Utilities
 
 [<AllowNullLiteral>]
 type CloudProcessRecord(taskId) = 
+    inherit DynamoDBTableEntity(CloudProcessRecord.DefaultPartitionKey, taskId)
+
     member val Id   : string = taskId with get, set
     member val Name : string = null with get, set
 
@@ -56,7 +58,7 @@ type CloudProcessRecord(taskId) =
         record.TypeName <- info.ReturnTypeName
         record.CancellationTokenSource <- serializer.Pickle info.CancellationTokenSource
         info.AdditionalResources |> Option.iter (fun r -> record.AdditionalResources <- serializer.Pickle r)
-        record
+        record       
 
     member record.ToCloudProcessInfo() =
         let serializer = ProcessConfiguration.BinarySerializer
@@ -73,13 +75,42 @@ type CloudProcessRecord(taskId) =
         }
 
     static member GetProcessRecord(clusterId : ClusterId, processId : string) = async {
-        return new CloudProcessRecord()
-        //return! Table.read<CloudProcessRecord> clusterId.StorageAccount clusterId.RuntimeTable CloudProcessRecord.DefaultPartitionKey taskId
+        return! Table.read<CloudProcessRecord> 
+                    clusterId.DynamoDBAccount 
+                    clusterId.RuntimeTable 
+                    CloudProcessRecord.DefaultPartitionKey 
+                    processId
     }
+
+    static member FromDynamoDBDocument (doc : Document) =
+        let taskId = doc.["Id"].AsString()
+
+        let record = new CloudProcessRecord(taskId)
+
+        record.Name      <- Table.readStringOrDefault doc "Name"
+        record.ETag      <- Table.readStringOrDefault doc "ETag"
+        record.ResultUri <- Table.readStringOrDefault doc "ResultUri"
+        record.TypeName  <- Table.readStringOrDefault doc "TypeName"
+        record.Type      <- Table.readByteArrayOrDefault doc "Type"
+        record.Dependencies            <- Table.readByteArrayOrDefault doc "Dependencies"
+        record.AdditionalResources     <- Table.readByteArrayOrDefault doc "AdditionalResources"
+        record.CancellationTokenSource <- Table.readByteArrayOrDefault doc "CancellationTokenSource"
+
+        record.Status         <- Table.readIntOrDefault doc "Status"
+        record.Completed      <- Table.readBoolOrDefault doc "Completed"
+        record.EnqueuedTime   <- Table.readDateTimeOffsetOrDefault doc "EnqueuedTime"
+        record.DequeuedTime   <- Table.readDateTimeOffsetOrDefault doc "DequeuedTime"
+        record.StartTime      <- Table.readDateTimeOffsetOrDefault doc "StartTime"
+        record.CompletionTime <- Table.readDateTimeOffsetOrDefault doc "CompletionTime"
+
+        record
 
     interface IDynamoDBDocument with
         member this.ToDynamoDBDocument () =
             let doc = new Document()
+
+            doc.["HashKey"]   <- DynamoDBEntry.op_Implicit(this.HashKey)
+            doc.["RangeKey"]  <- DynamoDBEntry.op_Implicit(this.RangeKey)
 
             doc.["Id"]   <- Document.op_Implicit this.Id
             doc.["Name"] <- Document.op_Implicit this.Name
@@ -171,10 +202,11 @@ type internal CloudProcessEntry
         }
         
         member this.GetState(): Async<CloudProcessState> = async {
-            let! jobs = 
+            let! jobsHandle = 
                 Table.query<WorkItemRecord> clusterId.DynamoDBAccount clusterId.RuntimeTable processId
                 |> Async.StartChild
             let! record = CloudProcessRecord.GetProcessRecord(clusterId, processId)
+            let! jobs = jobsHandle
 
             let execTime =
                 match record.Completed, record.StartTime, record.CompletionTime with
@@ -205,34 +237,30 @@ type internal CloudProcessEntry
             return 
                 { 
                     Status = enum (record.Status.GetValueOrDefault(-1))
-                    Info = (this :> ICloudProcessEntry).Info
+                    Info   = (this :> ICloudProcessEntry).Info
                     ExecutionTime = execTime // TODO : dequeued vs running time?
-                    ActiveWorkItemCount = active
+                    ActiveWorkItemCount    = active
                     CompletedWorkItemCount = completed
-                    FaultedWorkItemCount = faulted
-                    TotalWorkItemCount = total 
+                    FaultedWorkItemCount   = faulted
+                    TotalWorkItemCount     = total 
                 }
         }
 
-        member this.TryGetResult(): Async<CloudProcessResult option> = failwith "not implemented yet"
-             
-        (*async {
+        member this.TryGetResult(): Async<CloudProcessResult option> = async {
             let! record = CloudProcessRecord.GetProcessRecord(clusterId, processId)
             match record.ResultUri with
             | null -> return None
             | uri ->
-                let! result = BlobPersist.ReadPersistedClosure<CloudProcessResult>(clusterId, uri)
+                let! result = S3Persist.ReadPersistedClosure<CloudProcessResult>(clusterId, uri)
                 return Some result
-        }*)
+        }
 
-        member this.TrySetResult(result: CloudProcessResult, _workerId : IWorkerId): Async<bool> = 
-            failwith "not implemented yet"
-        (*async {
-            let record = new CloudProcessRecord(taskId)
+        member this.TrySetResult(result: CloudProcessResult, _workerId : IWorkerId): Async<bool> = async {
+            let record  = new CloudProcessRecord(processId)
             let blobUri = guid()
-            do! BlobPersist.PersistClosure(clusterId, result, blobUri, allowNewSifts = false)
+            do! S3Persist.PersistClosure(clusterId, result, blobUri, allowNewSifts = false)
             record.ResultUri <- blobUri
-            record.ETag <- "*"
-            let! _record = Table.merge clusterId.StorageAccount clusterId.RuntimeTable record
+            record.ETag      <- "*"
+            do! Table.update clusterId.DynamoDBAccount clusterId.RuntimeTable record
             return true
-        }*)
+        }

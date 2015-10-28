@@ -54,6 +54,8 @@ type WorkerId internal (workerId : string) =
 
 [<AllowNullLiteral>]
 type WorkItemRecord(processId : string, workItemId : string) = 
+    inherit DynamoDBTableEntity(processId, workItemId)
+
     member val Id             = workItemId with get
     member val ProcessId      = processId with get
 
@@ -122,36 +124,39 @@ type WorkItemRecord(processId : string, workItemId : string) =
 
     static member FromDynamoDBDocument (doc : Document) =
         let processId  = doc.["ProcessId"].AsString()
-        let workItemId = doc.["Id"].AsString()       
+        let workItemId = doc.["Id"].AsString()
 
         let record = new WorkItemRecord(processId, workItemId)
 
-        record.Affinity      <- Table.ReadStringOrDefault doc "Affinity"
-        record.Type          <- Table.ReadStringOrDefault doc "Type"
-        record.ETag          <- Table.ReadStringOrDefault doc "ETag"
-        record.CurrentWorker <- Table.ReadStringOrDefault doc "CurrentWorker"
-        record.LastException <- Table.ReadStringOrDefault doc "LastException"
+        record.Affinity      <- Table.readStringOrDefault doc "Affinity"
+        record.Type          <- Table.readStringOrDefault doc "Type"
+        record.ETag          <- Table.readStringOrDefault doc "ETag"
+        record.CurrentWorker <- Table.readStringOrDefault doc "CurrentWorker"
+        record.LastException <- Table.readStringOrDefault doc "LastException"
 
-        record.Kind  <- Table.ReadIntOrDefault doc "Kind"
-        record.Index <- Table.ReadIntOrDefault doc "Index"
-        record.Size  <- Table.ReadInt64OrDefault doc "Size"
-        record.MaxIndex  <- Table.ReadIntOrDefault doc "MaxIndex"
-        record.Status    <- Table.ReadIntOrDefault doc "Status"
-        record.Completed <- Table.ReadBoolOrDefault doc "Completed"
-        record.FaultInfo <- Table.ReadIntOrDefault doc "FaultInfo"
-        record.DeliveryCount <- Table.ReadIntOrDefault doc "DeliveryCount"
+        record.Kind  <- Table.readIntOrDefault doc "Kind"
+        record.Index <- Table.readIntOrDefault doc "Index"
+        record.Size  <- Table.readInt64OrDefault doc "Size"
+        record.MaxIndex  <- Table.readIntOrDefault doc "MaxIndex"
+        record.Status    <- Table.readIntOrDefault doc "Status"
+        record.Completed <- Table.readBoolOrDefault doc "Completed"
+        record.FaultInfo <- Table.readIntOrDefault doc "FaultInfo"
+        record.DeliveryCount <- Table.readIntOrDefault doc "DeliveryCount"
 
-        record.EnqueueTime    <- Table.ReadDateTimeOffsetOrDefault doc "EnqueueTime"
-        record.DequeueTime    <- Table.ReadDateTimeOffsetOrDefault doc "DequeueTime"
-        record.StartTime      <- Table.ReadDateTimeOffsetOrDefault doc "StartTime"
-        record.CompletionTime <- Table.ReadDateTimeOffsetOrDefault doc "CompletionTime"
-        record.RenewLockTime  <- Table.ReadDateTimeOffsetOrDefault doc "RenewLockTime"
+        record.EnqueueTime    <- Table.readDateTimeOffsetOrDefault doc "EnqueueTime"
+        record.DequeueTime    <- Table.readDateTimeOffsetOrDefault doc "DequeueTime"
+        record.StartTime      <- Table.readDateTimeOffsetOrDefault doc "StartTime"
+        record.CompletionTime <- Table.readDateTimeOffsetOrDefault doc "CompletionTime"
+        record.RenewLockTime  <- Table.readDateTimeOffsetOrDefault doc "RenewLockTime"
 
         record
 
     interface IDynamoDBDocument with 
         member this.ToDynamoDBDocument () =
             let doc = new Document()
+
+            doc.["HashKey"]   <- DynamoDBEntry.op_Implicit(this.HashKey)
+            doc.["RangeKey"]  <- DynamoDBEntry.op_Implicit(this.RangeKey)
 
             doc.["Id"] <- DynamoDBEntry.op_Implicit(this.Id)
             doc.["ProcessId"] <- DynamoDBEntry.op_Implicit(this.ProcessId)

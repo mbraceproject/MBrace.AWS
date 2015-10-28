@@ -13,20 +13,32 @@ open MBrace.Core.Internals
 open MBrace.Aws.Runtime
 
 [<AllowNullLiteral>]
+type IDynamoDBTableEntity =
+    abstract member HashKey  : string
+    abstract member RangeKey : string
+
+[<AllowNullLiteral; AbstractClass>]
+type DynamoDBTableEntity (hashKey, rangeKey) =
+    member val HashKey  : string = hashKey with get
+    member val RangeKey : string = rangeKey with get
+
+    interface IDynamoDBTableEntity with
+        member __.HashKey  = hashKey
+        member __.RangeKey = rangeKey
+
+[<AllowNullLiteral>]
 type IDynamoDBDocument =
     abstract member ToDynamoDBDocument : unit -> Document
 
 [<AutoOpen>]
 module DynamoDBEntryExtensions =
     type DynamoDBEntry with
-        static member op_Implicit (dtOffset : DateTimeOffset) : DynamoDBEntry =
-            let bytes = ProcessConfiguration.BinarySerializer.Pickle(dtOffset)
-            let entry = new Primitive(bytes)
+        static member op_Implicit (dtOffset : DateTimeOffset) : DynamoDBEntry =           
+            let entry = new Primitive(dtOffset.ToString())
             entry :> DynamoDBEntry
 
         member this.AsDateTimeOffset() =
-            let bytes = this.AsPrimitive().AsByteArray()
-            ProcessConfiguration.BinarySerializer.UnPickle<DateTimeOffset>(bytes)
+            DateTimeOffset.Parse <| this.AsPrimitive().AsString()
 
 [<RequireQualifiedAccess>]
 module internal Table =
@@ -44,7 +56,7 @@ module internal Table =
         }
 
     let inline query< ^a when ^a : (static member FromDynamoDBDocument : Document -> ^a) > 
-            (account : AwsDynamoDBAccount) tableName (id : string) = async {
+            (account : AwsDynamoDBAccount) tableName (hashKey : string) = async {
         let results = ResizeArray<_>()
 
         let rec loop lastKey =
@@ -52,8 +64,8 @@ module internal Table =
                 let req = QueryRequest(TableName = tableName)
                 let eqCond = new Condition()
                 eqCond.ComparisonOperator <- ComparisonOperator.EQ
-                eqCond.AttributeValueList.Add(new AttributeValue(id))
-                req.KeyConditions.Add("Id", eqCond)
+                eqCond.AttributeValueList.Add(new AttributeValue(hashKey))
+                req.KeyConditions.Add("HashKey", eqCond)
                 req.ExclusiveStartKey <- lastKey
 
                 let! ct  = Async.CancellationToken
@@ -73,19 +85,39 @@ module internal Table =
         return results :> ICollection<_>
     }
 
-    let inline ReadStringOrDefault (doc : Document) fieldName =
+    let inline read< ^a when ^a : (static member FromDynamoDBDocument : Document -> ^a) > 
+            (account : AwsDynamoDBAccount) 
+            tableName 
+            (hashKey : string) 
+            (rangeKey : string) = async {
+        let req = GetItemRequest(TableName = tableName)
+        req.Key.Add("HashKey",  new AttributeValue(hashKey))
+        req.Key.Add("RangeKey", new AttributeValue(rangeKey))
+
+        let! ct  = Async.CancellationToken
+        let! res = account.DynamoDBClient.GetItemAsync(req, ct)
+                   |> Async.AwaitTaskCorrect
+
+        return Document.FromAttributeMap res.Item 
+               |> (fun d -> (^a : (static member FromDynamoDBDocument : Document -> ^a) d))
+    }
+
+    let inline readStringOrDefault (doc : Document) fieldName =
         if doc.ContainsKey fieldName then doc.[fieldName].AsString() else null
 
-    let inline ReadIntOrDefault (doc : Document) fieldName =
+    let inline readIntOrDefault (doc : Document) fieldName =
         if doc.ContainsKey fieldName then nullable <| doc.[fieldName].AsInt() else nullableDefault<int>
     
-    let inline ReadInt64OrDefault (doc : Document) fieldName =
+    let inline readInt64OrDefault (doc : Document) fieldName =
         if doc.ContainsKey fieldName then nullable <| doc.[fieldName].AsLong() else nullableDefault<int64>
     
-    let inline ReadBoolOrDefault (doc : Document) fieldName =
+    let inline readBoolOrDefault (doc : Document) fieldName =
         if doc.ContainsKey fieldName then nullable <| doc.[fieldName].AsBoolean() else nullableDefault<bool>
 
-    let inline ReadDateTimeOffsetOrDefault (doc : Document) fieldName =
+    let inline readDateTimeOffsetOrDefault (doc : Document) fieldName =
         if doc.ContainsKey fieldName 
         then nullable <| doc.[fieldName].AsDateTimeOffset() 
         else nullableDefault<DateTimeOffset>
+
+    let inline readByteArrayOrDefault (doc : Document) fieldName =
+        if doc.ContainsKey fieldName then doc.[fieldName].AsByteArray() else null
