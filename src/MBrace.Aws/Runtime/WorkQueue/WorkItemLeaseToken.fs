@@ -30,7 +30,6 @@ type internal WorkItemLeaseTokenInfo =
 
     override this.ToString() = sprintf "leaseinfo:%A" this.MessageId
 
-
 type internal LeaseAction =
     | Complete
     | Abandon
@@ -70,8 +69,6 @@ type internal WorkItemLeaseMonitor private
             | Choice1Of2 _ -> 
                 logger.Logf LogLevel.Debug "%A : lock renewed" info
                 return! renewLoop inbox
-            // TODO: handle case of receipt handle no longer valid (someone else had received the msg)
-            // as 'lock lost' case 
             | Choice2Of2 (:? ReceiptHandleIsInvalidException) ->
                 logger.Logf LogLevel.Warning "%A : lock lost" info
             | Choice2Of2 exn -> 
@@ -109,7 +106,6 @@ type internal WorkItemLeaseToken =
         FaultInfo       : CloudWorkItemFaultInfo
         LeaseInfo       : WorkItemLeaseTokenInfo
         ProcessInfo     : CloudProcessInfo
-        TargetWorker    : string option
     }
     
     interface ICloudWorkItemLeaseToken with
@@ -119,7 +115,7 @@ type internal WorkItemLeaseToken =
 
             let record = new WorkItemRecord(this.LeaseInfo.ProcessId, fromGuid this.LeaseInfo.WorkItemId)
             record.Status         <- nullable(int WorkItemStatus.Completed)
-            record.CompletionTime <- nullable(DateTime.UtcNow)
+            record.CompletionTime <- nullable(DateTimeOffset.Now)
             record.Completed      <- nullable true
             record.ETag           <- "*" 
 
@@ -159,8 +155,8 @@ type internal WorkItemLeaseToken =
         member this.Size : int64 = this.WorkItemSize
         
         member this.TargetWorker : IWorkerId option = 
-            match this.TargetWorker with
-            | None -> None
+            match this.LeaseInfo.TargetWorker with
+            | None   -> None
             | Some w -> Some(WorkerId(w) :> _)
         
         member this.Process : ICloudProcessEntry = 
@@ -173,5 +169,28 @@ type internal WorkItemLeaseToken =
             (clusterId : ClusterId, 
              info      : WorkItemLeaseTokenInfo, 
              monitor   : WorkItemLeaseMonitor, 
-             faultInfo : CloudWorkItemFaultInfo) = 
-        failwith "not implemented yet"
+             faultInfo : CloudWorkItemFaultInfo) = async {
+        let! processRecordT = 
+            CloudProcessRecord.GetProcessRecord(clusterId, info.ProcessId) 
+            |> Async.StartChild
+
+        let! workRecord = 
+            Table.read<WorkItemRecord> 
+                clusterId.DynamoDBAccount 
+                clusterId.RuntimeTable 
+                info.ProcessId 
+                (fromGuid info.WorkItemId)
+
+        let! processRecord = processRecordT
+
+        return {
+                    ClusterId      = clusterId
+                    CompleteAction = MarshaledAction.Create monitor.CompleteWith
+                    WorkItemSize   = workRecord.GetSize()
+                    WorkItemType   = workRecord.GetWorkItemType()
+                    TypeName       = workRecord.Type
+                    FaultInfo      = faultInfo
+                    LeaseInfo      = info
+                    ProcessInfo    = processRecord.ToCloudProcessInfo()
+               }
+    }

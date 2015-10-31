@@ -145,5 +145,9 @@ type SQSQueue<'T> internal (queueUri, account : AwsSQSAccount) =
             return int64 res.ApproximateNumberOfMessages
         }
 
-        // TODO - delete the queue here
-        member x.Dispose() = failwith "Not implemented yet"
+        member x.Dispose() = async {
+            let req = DeleteQueueRequest(QueueUrl = queueUri)
+            do! account.SQSClient.DeleteQueueAsync(req)
+                |> Async.AwaitTaskCorrect
+                |> Async.Ignore
+        }
