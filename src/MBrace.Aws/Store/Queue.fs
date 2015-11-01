@@ -11,21 +11,7 @@ open MBrace.Core.Internals
 open MBrace.Runtime.Utils.PrettyPrinters
 
 open MBrace.Aws.Runtime
-
-[<AutoOpen>]
-module private SQSQueueUtils =
-    // SQS limits you to 10 messages per batch & total payload size of
-    // 256KB (leave 1KB for other attributes, etc.)
-    // see http://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_SendMessageBatch.html
-    let maxBatchCount   = 10
-    let maxBatchPayload = 255 * 1024
-
-    // SQS limits you to 10 messages per receive call
-    // http://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_ReceiveMessage.html
-    let maxRecvCount    = 10
-
-    // SQS limits you to up to 20 seconds of long polling wait time
-    let maxWaitTime = 20 * 1000 // in milliseconds
+open MBrace.Aws.Runtime.Utilities
 
 /// CloudQueue implementation on top of Amazon SQS
 [<AutoSerializable(true) ; Sealed; DataContract>]
@@ -40,8 +26,6 @@ type SQSQueue<'T> internal (queueUri, account : AwsSQSAccount) =
         let binary = Convert.FromBase64String base64
         ProcessConfiguration.BinarySerializer.UnPickle<'T>(binary)
 
-    let readBody (msg : Message) = fromBase64 msg.Body
-
     let toBase64 (message : 'T) = 
         message
         |> ProcessConfiguration.BinarySerializer.Pickle 
@@ -55,22 +39,14 @@ type SQSQueue<'T> internal (queueUri, account : AwsSQSAccount) =
     interface CloudQueue<'T> with
         member __.Id = queueUri
 
-        member __.EnqueueAsync(message) = async {
-            let req = SendMessageRequest(
-                        QueueUrl = queueUri, 
-                        MessageBody = toBase64 message)
-            let! ct = Async.CancellationToken
-            do! account.SQSClient.SendMessageAsync(req, ct) 
-                |> Async.AwaitTaskCorrect
-                |> Async.Ignore
-        }
+        member __.EnqueueAsync(message) = Sqs.enqueue account queueUri (toBase64 message)
         
         member __.EnqueueBatchAsync(messages) = async {
             let entries = messages |> Seq.map toBatchEntry
             let groups = 
                 entries 
                 |> Seq.mapi (fun i e -> i, e)
-                |> Seq.groupBy (fun (i, _) -> i / maxBatchCount)
+                |> Seq.groupBy (fun (i, _) -> i / SqsConstants.maxBatchCount)
                 |> Seq.map (fun (_, gr) -> gr |> Seq.map snd)
         
             // TODO: partial failures are not handled right now
@@ -90,7 +66,7 @@ type SQSQueue<'T> internal (queueUri, account : AwsSQSAccount) =
             
             // always make use of long polling for efficiency
             // but never wait for more than max allowed (20 seconds)
-            req.WaitTimeSeconds <- min maxWaitTime <| defaultArg timeout maxWaitTime
+            req.WaitTimeSeconds <- min SqsConstants.maxWaitTime <| defaultArg timeout SqsConstants.maxWaitTime
 
             match timeout with
             | Some _ ->
@@ -114,7 +90,7 @@ type SQSQueue<'T> internal (queueUri, account : AwsSQSAccount) =
 
         member __.DequeueBatchAsync(maxItems) = async {
             let req = ReceiveMessageRequest(QueueUrl = queueUri)
-            req.MaxNumberOfMessages <- min maxItems maxRecvCount
+            req.MaxNumberOfMessages <- min maxItems SqsConstants.maxRecvCount
 
             let! ct = Async.CancellationToken
             let! res = account.SQSClient.ReceiveMessageAsync(req, ct)
@@ -123,31 +99,12 @@ type SQSQueue<'T> internal (queueUri, account : AwsSQSAccount) =
         }
         
         member __.TryDequeueAsync() = async {
-            let req = ReceiveMessageRequest(QueueUrl = queueUri)
-            req.MaxNumberOfMessages <- 1
-
-            let! ct = Async.CancellationToken
-            let! res = account.SQSClient.ReceiveMessageAsync(req, ct)
-                       |> Async.AwaitTaskCorrect
-            if res.Messages.Count = 1 
-            then return Some <| readBody res.Messages.[0]
-            else return None
+            let! body = Sqs.dequeue account queueUri None
+            match body with
+            | Some x -> return Some <| fromBase64 x
+            | _ -> return None
         }
 
-        member x.GetCountAsync() = async {
-            let req = GetQueueAttributesRequest(QueueUrl = queueUri)
-            let attrName = QueueAttributeName.ApproximateNumberOfMessages.Value
-            req.AttributeNames.Add(attrName)
+        member x.GetCountAsync() = Sqs.getCount account queueUri
 
-            let! ct = Async.CancellationToken
-            let! res = account.SQSClient.GetQueueAttributesAsync(req, ct)
-                       |> Async.AwaitTaskCorrect
-            return int64 res.ApproximateNumberOfMessages
-        }
-
-        member x.Dispose() = async {
-            let req = DeleteQueueRequest(QueueUrl = queueUri)
-            do! account.SQSClient.DeleteQueueAsync(req)
-                |> Async.AwaitTaskCorrect
-                |> Async.Ignore
-        }
+        member x.Dispose() = Sqs.deleteQueue account queueUri

@@ -13,6 +13,7 @@ nuget FsPickler.Json
 
 nuget AWSSDK.S3
 nuget AWSSDK.DynamoDBv2
+nuget AWSSDK.SimpleNotificationService
 nuget AWSSDK.SQS
 
 github fsharp/FAKE modules/Octokit/Octokit.fsx

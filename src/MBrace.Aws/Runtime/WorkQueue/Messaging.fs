@@ -36,6 +36,7 @@ type internal Topic (clusterId : ClusterId, logger : ISystemLogger) =
 [<Sealed; AutoSerializable(false)>]
 type internal Queue (clusterId : ClusterId, logger : ISystemLogger) = 
     let sqsClient = clusterId.SQSAccount.SQSClient
+    let queueUri  = clusterId.WorkItemQueue
 
     member this.GetMessageCountAsync() = 
         failwith "not implemented yet"
