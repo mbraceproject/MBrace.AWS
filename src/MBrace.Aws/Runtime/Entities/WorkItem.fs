@@ -84,6 +84,11 @@ type WorkItemRecord(processId : string, workItemId : string) =
 
     new () = new WorkItemRecord(null, null)
 
+    member this.CloneDefault() =
+        let p = new WorkItemRecord(this.HashKey, this.RangeKey)
+        p.ETag <- this.ETag
+        p
+
     override this.ToString() = sprintf "workItem:%A" workItemId
 
     static member FromCloudWorkItem(workItem : CloudWorkItem) =
