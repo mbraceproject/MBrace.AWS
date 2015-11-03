@@ -139,7 +139,7 @@ type internal Queue (clusterId : ClusterId, logger : ISystemLogger) =
     member this.GetMessageCountAsync() = Sqs.getCount account queueUri
 
     member this.EnqueueBatch(jobs : CloudWorkItem []) = 
-        failwith "not implemented yet"
+        MessagingClient.EnqueueBatch(clusterId, logger, jobs, queue.SendBatchAsync)
             
     member this.Enqueue(workItem : CloudWorkItem, allowNewSifts : bool) = 
         MessagingClient.Enqueue(clusterId, logger, workItem, allowNewSifts, queue.SendAsync)

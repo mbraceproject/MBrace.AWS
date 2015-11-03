@@ -5,6 +5,8 @@ open System.IO
 open System.Text.RegularExpressions
 open System.Threading.Tasks
 
+open MBrace.Aws.Runtime
+
 [<AutoOpen>]
 module Utils =
     let guid() = Guid.NewGuid().ToString()
@@ -26,6 +28,15 @@ module Utils =
     let doIfNotNull f = function
         | Nullable(x) -> f x
         | _ -> ()
+
+    let fromBase64<'T> (base64 : string) =
+        let binary = Convert.FromBase64String base64
+        ProcessConfiguration.BinarySerializer.UnPickle<'T>(binary)
+
+    let toBase64 (message : 'T) = 
+        message
+        |> ProcessConfiguration.BinarySerializer.Pickle 
+        |> Convert.ToBase64String
 
     type Async with
         static member Cast<'U>(task : Async<obj>) = async { let! t = task in return box t :?> 'U }
