@@ -169,12 +169,24 @@ type internal MessagingClient =
         logger.Logf LogLevel.Info "Enqueued batched jobs of %d items for task %s, total size %s." jobs.Length headJob.Process.Id (getHumanReadableByteSize size)
     }
 
+/// Topic subscription client
+[<Sealed; AutoSerializable(false)>]
+type internal Subscription (clusterId : ClusterId, targetWorkerId : IWorkerId, logger : ISystemLogger) = 
+    member this.TargetWorkerId = targetWorkerId
+
+    member this.GetMessageCountAsync() = 
+        failwith "not implemented yet"
+
+    member this.TryDequeue(currentWorker : IWorkerId) : Async<ICloudWorkItemLeaseToken option> = 
+        failwith "not implemented yet"
+
+    member this.DequeueAllMessagesBatch() = 
+        failwith "not implemented yet"
+
 /// Topic client implementation
 /// TODO : implement on top of SNS
 [<Sealed; AutoSerializable(false)>]
 type internal Topic (clusterId : ClusterId, logger : ISystemLogger) = 
-    let topic = clusterId.ServiceBusAccount.CreateTopicClient(clusterId.WorkItemTopic)
-
     member this.GetMessageCountAsync() = 
         failwith "not implemented yet"
 
