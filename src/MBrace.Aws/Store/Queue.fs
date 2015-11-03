@@ -1,4 +1,4 @@
-﻿namespace MBrace.Azure.Store
+﻿namespace MBrace.Aws.Store
 
 open System
 open System.Runtime.Serialization

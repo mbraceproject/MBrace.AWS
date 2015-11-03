@@ -1,4 +1,4 @@
-﻿namespace MBrace.Azure.Runtime
+﻿namespace MBrace.Aws.Runtime
 
 open System
 open System.IO
@@ -16,19 +16,49 @@ open Amazon.SQS.Model
 open MBrace.Aws.Runtime
 open MBrace.Aws.Runtime.Utilities
 
+type WorkItemMessage = 
+    {
+        ProcessId    : string
+        WorkItemId   : CloudWorkItemId
+        BatchIndex   : int option
+        TargetWorker : string option
+        BlobUri      : string
+    }
+
+type WorkItemMessageAttributes =
+    {
+        QueueUri      : string
+        ReceiptHandle : string
+        ReceiveCount  : int
+    }
+
 type internal WorkItemLeaseTokenInfo =
     {
-        MessageId     : string
         QueueUri      : string
         ReceiptHandle : string
         ProcessId     : string
         WorkItemId    : Guid
         BatchIndex    : int option
         TargetWorker  : string option
-        BlobKey       : string
+        BlobUri       : string
+        DequeueTime   : DateTimeOffset
+        DeliveryCount : int
     }
 
-    override this.ToString() = sprintf "leaseinfo:%A" this.MessageId
+    override this.ToString() = sprintf "leaseinfo:%A" this.WorkItemId
+
+    static member FromReceivedMessage(message : WorkItemMessage, attributes : WorkItemMessageAttributes) =
+        {
+            QueueUri      = attributes.QueueUri
+            ReceiptHandle = attributes.ReceiptHandle
+            WorkItemId    = message.WorkItemId
+            BlobUri       = message.BlobUri
+            ProcessId     = message.ProcessId
+            BatchIndex    = message.BatchIndex
+            TargetWorker  = message.TargetWorker
+            DequeueTime   = DateTimeOffset.Now
+            DeliveryCount = attributes.ReceiveCount
+        }
 
 type internal LeaseAction =
     | Complete
@@ -142,7 +172,7 @@ type internal WorkItemLeaseToken =
         member this.FaultInfo : CloudWorkItemFaultInfo = this.FaultInfo
         
         member this.GetWorkItem() : Async<CloudWorkItem> = async { 
-            let! payload = S3Persist.ReadPersistedClosure<MessagePayload>(this.ClusterId, this.LeaseInfo.BlobKey)
+            let! payload = S3Persist.ReadPersistedClosure<MessagePayload>(this.ClusterId, this.LeaseInfo.BlobUri)
             match payload with
             | Single item -> return item
             | Batch items -> return items.[Option.get this.LeaseInfo.BatchIndex]

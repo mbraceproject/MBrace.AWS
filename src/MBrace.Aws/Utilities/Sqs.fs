@@ -36,7 +36,7 @@ module Sqs =
             |> Async.Ignore
     }
 
-    let dequeue (account : AwsSQSAccount) queueUri (timeout : int option) = async {
+    let private dequeueInternal (account : AwsSQSAccount) queueUri (timeout : int option) = async {
         let timeout = defaultArg timeout SqsConstants.maxWaitTime
         let req = ReceiveMessageRequest(QueueUrl = queueUri)
         req.MaxNumberOfMessages <- 1
@@ -49,8 +49,24 @@ module Sqs =
         let! res = account.SQSClient.ReceiveMessageAsync(req, ct)
                    |> Async.AwaitTaskCorrect
         if res.Messages.Count = 1
-        then return Some <| res.Messages.[0].Body
+        then return Some <| res.Messages.[0]
         else return None
+    }
+
+    let dequeue (account : AwsSQSAccount) queueUri (timeout : int option) = async {
+        let! msg = dequeueInternal account queueUri timeout
+
+        match msg with
+        | Some msg -> return Some msg.Body
+        | _ -> return None
+    }
+
+    let dequeueWithAttributes (account : AwsSQSAccount) queueUri (timeout : int option) = async {
+        let! msg = dequeueInternal account queueUri timeout
+
+        match msg with
+        | Some msg -> return Some (msg.ReceiptHandle, msg.Body, msg.Attributes)
+        | _ -> return None
     }
 
     let getCount (account : AwsSQSAccount) queueUri = async {

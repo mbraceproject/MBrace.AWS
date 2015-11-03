@@ -50,6 +50,9 @@
     <Compile Include="Utilities\BlobValue.fs" />
     <Compile Include="Utilities\Table.fs" />
     <Compile Include="Utilities\Sqs.fs" />
+    <Compile Include="Store\S3FileStore.fs" />
+    <Compile Include="Store\Atom.fs" />
+    <Compile Include="Store\Queue.fs" />
     <Compile Include="Runtime\ClusterId.fs" />
     <Compile Include="Runtime\Metadata.fs" />
     <Compile Include="Runtime\Persist.fs" />
@@ -58,11 +61,8 @@
     <Compile Include="Runtime\WorkQueue\WorkItemLeaseToken.fs" />
     <Compile Include="Runtime\WorkQueue\Messaging.fs" />
     <Compile Include="Runtime\WorkQueue\WorkItemQueue.fs" />
-    <Compile Include="Store\S3FileStore.fs" />
-    <Compile Include="Store\Atom.fs" />
-    <Compile Include="Store\Queue.fs" />
     <None Include="paket.references" />
-    <None Include="paket.template" />    
+    <None Include="paket.template" />
   </ItemGroup>
   <PropertyGroup>
     <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>
