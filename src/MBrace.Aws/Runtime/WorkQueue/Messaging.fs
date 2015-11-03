@@ -192,32 +192,33 @@ type internal Topic (clusterId : ClusterId, logger : ISystemLogger) =
 
 /// Queue client implementation
 [<Sealed; AutoSerializable(false)>]
-type internal Queue (clusterId : ClusterId, logger : ISystemLogger) = 
-    let account  = clusterId.SQSAccount
-    let queueUri = clusterId.WorkItemQueue
-    let queue    = SQSQueue<WorkItemMessage>(queueUri, account) :> CloudQueue<WorkItemMessage>
+type internal Queue (clusterId : ClusterId, queueUri, logger : ISystemLogger) = 
+    let account = clusterId.SQSAccount
+    let queue   = SQSQueue<WorkItemMessage>(queueUri, account) :> CloudQueue<WorkItemMessage>
 
     let send msg = queue.EnqueueAsync msg |> Async.StartAsTask :> Task
     let sendBatch msgs = queue.EnqueueBatchAsync msgs |> Async.StartAsTask :> Task
 
-    let dequeue () = async {
-        let! res = Sqs.dequeueWithAttributes account queueUri None
-        match res with
-        | Some (receiptHandle, body, attr) -> 
-            let message = fromBase64<WorkItemMessage> body
-            let receiveCount = 
-                if attr.ContainsKey "ApproximateReceiveCount" 
-                then int <| attr.["ApproximateReceiveCount"] 
-                else 0
-            let attributes = 
-                {
-                    QueueUri      = queueUri
-                    ReceiptHandle = receiptHandle
-                    ReceiveCount  = receiveCount
-                }
-            return Some (message, attributes)
-        | _ -> return None
-    }
+    let dequeue () = 
+        async {
+            let! res = Sqs.dequeueWithAttributes account queueUri None
+            match res with
+            | Some (receiptHandle, body, attr) -> 
+                let message = fromBase64<WorkItemMessage> body
+                let receiveCount = 
+                    if attr.ContainsKey "ApproximateReceiveCount" 
+                    then int <| attr.["ApproximateReceiveCount"] 
+                    else 0
+                let attributes = 
+                    {
+                        QueueUri      = queueUri
+                        ReceiptHandle = receiptHandle
+                        ReceiveCount  = receiveCount
+                    }
+                return Some (message, attributes)
+            | _ -> return None
+        }
+        |> Async.StartAsTask
 
     member this.GetMessageCountAsync() = Sqs.getCount account queueUri
 
@@ -235,22 +236,16 @@ type internal Queue (clusterId : ClusterId, logger : ISystemLogger) =
     }
         
     static member Create(clusterId : ClusterId, logger : ISystemLogger) = async { 
-        // TODO : implement
-
-        let ns = clusterId.ServiceBusAccount.NamespaceManager
-        let! exists = ns.QueueExistsAsync(clusterId.WorkItemQueue)
-        if not exists then 
-            logger.Logf LogLevel.Info "Creating new ServiceBus queue %A" clusterId.WorkItemQueue
-            let metadata = Metadata.Create clusterId
-            let qd = new QueueDescription(clusterId.WorkItemQueue)
-            qd.EnableBatchedOperations <- true
-            qd.EnablePartitioning <- true
-            qd.DefaultMessageTimeToLive <- ServiceBusSettings.MaxTTL 
-            qd.MaxDeliveryCount <- ServiceBusSettings.MaxDeliveryCount
-            qd.LockDuration <- ServiceBusSettings.MaxLockDuration
-            qd.UserMetadata <- Metadata.ToJson metadata
-            do! ns.CreateQueueAsync(qd)
-        else
+        let account = clusterId.SQSAccount
+        let! queueUri = Sqs.tryGetQueueUri account clusterId.WorkItemQueue
+        match queueUri with
+        | Some queueUri ->
             logger.Logf LogLevel.Info "Queue %A already exists." clusterId.WorkItemQueue
-        return new Queue(clusterId, logger)
+            return new Queue(clusterId, queueUri, logger)
+        | None ->
+            logger.Logf LogLevel.Info "Creating new ServiceBus queue %A" clusterId.WorkItemQueue
+            // TODO : what should be the default queue attributes?
+
+            let! queueUri = Sqs.createQueue account clusterId.WorkItemQueue
+            return new Queue(clusterId, queueUri, logger)
     }

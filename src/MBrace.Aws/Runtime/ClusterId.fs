@@ -13,21 +13,14 @@ type ClusterId =
         S3Account       : AwsS3Account
         DynamoDBAccount : AwsDynamoDBAccount
         SQSAccount      : AwsSQSAccount
+               
+        WorkItemQueue   : string // SQS Name
+        WorkItemTopic   : string // SNS Topic
 
-        /// SQS Name
-        WorkItemQueue : string
-        /// SNS Topic
-        WorkItemTopic : string
-
-        /// Runtime S3 bucket name
-        RuntimeS3Bucket : string
-
-        /// Runtime DynamoDB table name
-        RuntimeTable : string
-        /// Runtime logs DynamoDB table name
-        RuntimeLogsTable : string
-        /// User data DynamoDB table name
-        RuntimeUserDataTable : string
+        RuntimeS3Bucket      : string // Runtime S3 bucket name
+        RuntimeTable         : string // Runtime DynamoDB table name
+        RuntimeLogsTable     : string // Runtime logs DynamoDB table name
+        RuntimeUserDataTable : string // User data DynamoDB table name
 
         /// Specifies whether closure serialization
         /// should be optimized using closure sifting.

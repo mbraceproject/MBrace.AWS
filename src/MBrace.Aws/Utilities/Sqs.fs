@@ -87,3 +87,37 @@ module Sqs =
             |> Async.AwaitTaskCorrect
             |> Async.Ignore
     }
+
+    let tryGetQueueUri (account : AwsSQSAccount) queueName = async {
+        let req  = GetQueueUrlRequest(QueueName = queueName)
+        let! ct  = Async.CancellationToken
+        let! res = account.SQSClient.GetQueueUrlAsync(req, ct)
+                   |> Async.AwaitTaskCorrect
+                   |> Async.Catch
+        match res with
+        | Choice1Of2 res -> return Some res.QueueUrl
+        | Choice2Of2 (:? QueueDoesNotExistException) -> return None
+        | Choice2Of2 exn -> return! Async.Raise exn
+    }
+
+    let doesQueueExist (account : AwsSQSAccount) queueName = async {
+        let! queueUri = tryGetQueueUri account queueName
+        match queueUri with
+        | Some _ -> return true
+        | _      -> return false
+    }
+
+    let createQueue (account : AwsSQSAccount) queueName = async {
+        let req  = CreateQueueRequest(QueueName = queueName)
+        let! ct  = Async.CancellationToken
+        let! res = account.SQSClient.CreateQueueAsync(req, ct)
+                   |> Async.AwaitTaskCorrect
+        return res.QueueUrl
+    }
+
+    let createIfNotExist (account : AwsSQSAccount) queueName = async {
+        let! queueUri = tryGetQueueUri account queueName
+        match queueUri with
+        | Some queueUri -> return queueUri
+        | _             -> return! createQueue account queueName
+    }
