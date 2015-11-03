@@ -198,7 +198,7 @@ type internal CloudProcessEntry
 
             | _ -> invalidArg "status" "invalid Cloud process status."
 
-            do! Table.update clusterId.DynamoDBAccount clusterId.RuntimeTable record
+            do! Table.put clusterId.DynamoDBAccount clusterId.RuntimeTable record
         }
         
         member this.GetState(): Async<CloudProcessState> = async {
@@ -261,6 +261,6 @@ type internal CloudProcessEntry
             do! S3Persist.PersistClosure(clusterId, result, blobUri, allowNewSifts = false)
             record.ResultUri <- blobUri
             record.ETag      <- "*"
-            do! Table.update clusterId.DynamoDBAccount clusterId.RuntimeTable record
+            do! Table.put clusterId.DynamoDBAccount clusterId.RuntimeTable record
             return true
         }

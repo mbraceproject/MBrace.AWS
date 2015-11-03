@@ -18,6 +18,7 @@ type Message =
         WorkItemId   : CloudWorkItemId
         ProcessId    : string
         TargetWorker : IWorkerId option
+        BatchIndex   : int option
     }
 
 type internal MessagingClient =
@@ -30,7 +31,7 @@ type internal MessagingClient =
              send          : Message -> Task) = async { 
         // Step 1: initial record entry creation
         let record = WorkItemRecord.FromCloudWorkItem(workItem)
-        do! Table.update clusterId.DynamoDBAccount clusterId.RuntimeTable record
+        do! Table.put clusterId.DynamoDBAccount clusterId.RuntimeTable record
         logger.Logf LogLevel.Debug "workItem:%O : enqueue" workItem.Id
 
         // Step 2: Persist work item payload to blob store
@@ -45,7 +46,7 @@ type internal MessagingClient =
         newRecord.Size        <- nullable size
         newRecord.FaultInfo   <- nullable(int FaultInfo.NoFault)
         newRecord.ETag        <- "*"
-        do! Table.update clusterId.DynamoDBAccount clusterId.RuntimeTable newRecord
+        do! Table.put clusterId.DynamoDBAccount clusterId.RuntimeTable newRecord
 
         // Step 4: send work item message to service bus queue
         let msg = 
@@ -53,11 +54,59 @@ type internal MessagingClient =
                 BlobUri      = blobUri
                 WorkItemId   = workItem.Id
                 ProcessId    = workItem.Process.Id
-                TargetWorker = workItem.TargetWorker 
+                TargetWorker = workItem.TargetWorker
+                BatchIndex   = None
             }
         do! send msg
 
         logger.Logf LogLevel.Debug "workItem:%O : enqueue completed, size %s" workItem.Id (getHumanReadableByteSize size)
+    }
+
+    static member EnqueueBatch
+            (clusterId : ClusterId, 
+             logger    : ISystemLogger, 
+             jobs      : CloudWorkItem[], 
+             send      : Message seq -> Task) = async { 
+        // silent discard if empty
+        if jobs.Length = 0 then return () else
+
+        // Step 1: initial work item record population
+        let records = jobs |> Seq.map WorkItemRecord.FromCloudWorkItem
+        do! Table.putBatch clusterId.DynamoDBAccount clusterId.RuntimeTable records
+
+        // Step 2: persist payload to blob store
+        let headJob = jobs.[0]
+        let blobUri = sprintf "workItem/%s/batch/%s" headJob.Process.Id (fromGuid headJob.Id)
+        do! S3Persist.PersistClosure<MessagePayload>(clusterId, Batch jobs, blobUri, allowNewSifts = false)
+        let! size = S3Persist.GetPersistedClosureSize(clusterId, blobUri)
+
+        // Step 3: update runtime records
+        let now = DateTimeOffset.Now
+        let newRecords = 
+            records |> Seq.map (fun r -> 
+                let newRec = r.CloneDefault()
+                newRec.ETag        <- "*"
+                newRec.Status      <- nullable(int WorkItemStatus.Enqueued)
+                newRec.EnqueueTime <- nullable now
+                newRec.FaultInfo   <- nullable(int FaultInfo.NoFault)
+                newRec.Size        <- nullable(size)
+                newRec)
+
+        do! Table.putBatch clusterId.DynamoDBAccount clusterId.RuntimeTable newRecords
+
+        // Step 4: create work messages and post to service bus queue
+        let mkWorkItemMessage (i : int) (workItem : CloudWorkItem) =
+            {
+                BlobUri      = blobUri
+                WorkItemId   = workItem.Id
+                ProcessId    = workItem.Process.Id
+                TargetWorker = workItem.TargetWorker
+                BatchIndex   = Some i
+            }
+
+        let messages = jobs |> Array.mapi mkWorkItemMessage
+        do! send messages
+        logger.Logf LogLevel.Info "Enqueued batched jobs of %d items for task %s, total size %s." jobs.Length headJob.Process.Id (getHumanReadableByteSize size)
     }
 
 /// Topic client implementation

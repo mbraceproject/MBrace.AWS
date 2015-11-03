@@ -119,7 +119,7 @@ type internal WorkItemLeaseToken =
             record.Completed      <- nullable true
             record.ETag           <- "*" 
 
-            do! Table.update this.ClusterId.DynamoDBAccount this.ClusterId.RuntimeTable record
+            do! Table.put this.ClusterId.DynamoDBAccount this.ClusterId.RuntimeTable record
         }
         
         member this.DeclareFaulted(edi : ExceptionDispatchInfo) : Async<unit> = async {
@@ -136,7 +136,7 @@ type internal WorkItemLeaseToken =
             record.FaultInfo      <- nullable(int FaultInfo.FaultDeclaredByWorker)
             record.ETag           <- "*"
 
-            do! Table.update this.ClusterId.DynamoDBAccount this.ClusterId.RuntimeTable record
+            do! Table.put this.ClusterId.DynamoDBAccount this.ClusterId.RuntimeTable record
         }
         
         member this.FaultInfo : CloudWorkItemFaultInfo = this.FaultInfo

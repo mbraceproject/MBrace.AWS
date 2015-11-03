@@ -44,7 +44,7 @@ module DynamoDBEntryExtensions =
 module internal Table =
     // NOTE: implement a specific put rather than reinvent the object persistence layer as that's a lot
     // of work and at this point not enough payoff
-    let update (account : AwsDynamoDBAccount) tableName (entity : IDynamoDBDocument) =
+    let put (account : AwsDynamoDBAccount) tableName (entity : IDynamoDBDocument) =
         async { 
             let table = Table.LoadTable(account.DynamoDBClient, tableName)
             let doc   = entity.ToDynamoDBDocument()
@@ -53,6 +53,18 @@ module internal Table =
             do! table.UpdateItemAsync(doc, ct)
                 |> Async.AwaitTaskCorrect
                 |> Async.Ignore
+        }
+
+    let putBatch (account : AwsDynamoDBAccount) tableName (entities : 'a seq when 'a :> IDynamoDBDocument) =
+        async {
+            let table = Table.LoadTable(account.DynamoDBClient, tableName)
+            let batch = table.CreateBatchWrite()
+            let docs  = entities |> Seq.map (fun x -> x.ToDynamoDBDocument()) 
+            docs |> Seq.iter batch.AddDocumentToPut
+            let! ct   = Async.CancellationToken
+
+            do! batch.ExecuteAsync(ct)
+                |> Async.AwaitTaskCorrect
         }
 
     let inline query< ^a when ^a : (static member FromDynamoDBDocument : Document -> ^a) > 
