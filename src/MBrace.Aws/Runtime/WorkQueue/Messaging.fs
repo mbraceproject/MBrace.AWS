@@ -248,7 +248,7 @@ type internal Queue (clusterId : ClusterId, queueUri, logger : ISystemLogger) =
     }
         
     static member Create(clusterId : ClusterId, logger : ISystemLogger) = async { 
-        let account = clusterId.SQSAccount
+        let account   = clusterId.SQSAccount
         let! queueUri = Sqs.tryGetQueueUri account clusterId.WorkItemQueue
         match queueUri with
         | Some queueUri ->
