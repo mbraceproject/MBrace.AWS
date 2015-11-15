@@ -21,34 +21,15 @@ type SQSQueue<'T> internal (queueUri, account : AwsSQSAccount) =
 
     [<DataMember(Name = "QueueUri")>]
     let queueUri = queueUri
-
-    let toBatchEntry (message : 'T) =
-        SendMessageBatchRequestEntry(
-            Id = Guid.NewGuid().ToString(),
-            MessageBody = toBase64 message)
-
+    
     interface CloudQueue<'T> with
         member __.Id = queueUri
 
         member __.EnqueueAsync(message) = Sqs.enqueue account queueUri (toBase64 message)
         
         member __.EnqueueBatchAsync(messages) = async {
-            let entries = messages |> Seq.map toBatchEntry
-            let groups = 
-                entries 
-                |> Seq.mapi (fun i e -> i, e)
-                |> Seq.groupBy (fun (i, _) -> i / SqsConstants.maxBatchCount)
-                |> Seq.map (fun (_, gr) -> gr |> Seq.map snd)
-        
-            // TODO: partial failures are not handled right now
-            // TODO: total batch payload size is not respected here
-            for group in groups do
-                let req = SendMessageBatchRequest(QueueUrl = queueUri)
-                req.Entries.AddRange group
-                let! ct = Async.CancellationToken
-                do! account.SQSClient.SendMessageBatchAsync(req, ct)
-                    |> Async.AwaitTaskCorrect
-                    |> Async.Ignore
+            let msgBodies = messages |> Seq.map toBase64
+            do! Sqs.enqueueBatch account queueUri msgBodies
         }
         
         member __.DequeueAsync(timeout) = async {

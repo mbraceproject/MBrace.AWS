@@ -232,6 +232,10 @@ type internal Queue (clusterId : ClusterId, queueUri, logger : ISystemLogger) =
             return new Queue(clusterId, queueUri, logger)
     }
 
+[<AutoOpen>]
+module internal TopicUtils =
+    let getQueueName topic workerId = topic + "-" + workerId
+
 /// Topic subscription client implemented as a worker specific SQS queue
 [<Sealed; AutoSerializable(false)>]
 type internal Subscription 
@@ -241,7 +245,7 @@ type internal Subscription
     let account   = clusterId.SQSAccount
     let topic     = clusterId.WorkItemTopic
     let workerId  = targetWorkerId.Id
-    let queueName = topic + "-" + workerId
+    let queueName = getQueueName topic workerId
 
     // NOTE: the worker specific queue is created on push. 
     // This is to avoid creating new queues unnecessarily,
@@ -277,15 +281,47 @@ type internal Subscription
 type internal Topic (clusterId : ClusterId, logger : ISystemLogger) = 
     let account = clusterId.SQSAccount
     let topic   = clusterId.WorkItemTopic
+    
+    let getQueueUriOrCreate (msg : WorkItemMessage) = async {
+        // since this internal class is only called by the WorkItemQueue
+        // we can safely assume that TargetWorker is Some in this case
+        let (Some workerId) = msg.TargetWorker
+        let queueName = getQueueName topic workerId
+        let! queueUri = Sqs.tryGetQueueUri account queueName
+        match queueUri with
+        | Some uri -> return uri
+        | _ -> return! Sqs.createQueue account queueName
+    }
+
+    let enqueue (msg : WorkItemMessage) = 
+        async {
+            let! queueUri = getQueueUriOrCreate msg
+            let body = toBase64 msg
+            do! Sqs.enqueue account queueUri body
+        } 
+        |> Async.StartAsTask
+        :> Task
+
+    // WorkItemQueue doesn't support mixed messages right now, so it's safe
+    // to assume all messages in a batch have the same TargetWorker
+    let enqueueBatch (msgs : seq<WorkItemMessage>) =
+        async {
+            if msgs |> Seq.isEmpty |> not then
+                let! queueUri = getQueueUriOrCreate (Seq.head msgs)
+                let msgBodies = msgs |> Seq.map toBase64
+                do! Sqs.enqueueBatch account queueUri msgBodies
+        }
+        |> Async.StartAsTask
+        :> Task
 
     member this.GetSubscription(subscriptionId : IWorkerId) = 
         new Subscription(clusterId, subscriptionId, logger)
         
     member this.EnqueueBatch(jobs : CloudWorkItem []) : Async<unit> = 
-        failwith "not implemented yet"
+        MessagingClient.EnqueueBatch(clusterId, logger, jobs, enqueueBatch)
     
     member this.Enqueue(workItem : CloudWorkItem, allowNewSifts : bool) = 
-        failwith "not implemented yet"
+        MessagingClient.Enqueue(clusterId, logger, workItem, allowNewSifts, enqueue)
 
-    static member Create(config, logger : ISystemLogger) = 
-        failwith "not implemented yet"
+    static member Create(clusterId, logger : ISystemLogger) = 
+        new Topic(clusterId, logger)

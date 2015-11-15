@@ -45,7 +45,7 @@ type WorkItemQueue private (queue : Queue, topic : Topic) =
                 raise <| ArgumentOutOfRangeException(sprintf "Max batch size reached : %d/1024" jobs.Length)
             else
                 let nQueue = jobs |> Array.sumBy (fun j -> match j.TargetWorker with None -> 1 | _ -> 0)
-                if nQueue = jobs.Length then return! queue.EnqueueBatch(jobs)
+                if nQueue  = jobs.Length then return! queue.EnqueueBatch(jobs)
                 elif nQueue = 0 then return! topic.EnqueueBatch(jobs)
                 else
                     // TODO : fix this; future MBrace.Core versions will feature mixed modes

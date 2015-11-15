@@ -36,6 +36,30 @@ module Sqs =
             |> Async.Ignore
     }
 
+    let private toBatchEntry msgBody =
+        SendMessageBatchRequestEntry(
+            Id = Guid.NewGuid().ToString(),
+            MessageBody = msgBody)
+
+    let enqueueBatch (account : AwsSQSAccount) queueUri msgBodies = async {
+        let groups = 
+            msgBodies 
+            |> Seq.map toBatchEntry
+            |> Seq.mapi (fun i e -> i, e)
+            |> Seq.groupBy (fun (i, _) -> i / SqsConstants.maxBatchCount)
+            |> Seq.map (fun (_, gr) -> gr |> Seq.map snd)
+        
+        // TODO: partial failures are not handled right now
+        // TODO: total batch payload size is not respected here
+        for group in groups do
+            let req = SendMessageBatchRequest(QueueUrl = queueUri)
+            req.Entries.AddRange group
+            let! ct = Async.CancellationToken
+            do! account.SQSClient.SendMessageBatchAsync(req, ct)
+                |> Async.AwaitTaskCorrect
+                |> Async.Ignore
+    }
+
     let private dequeueInternal (account : AwsSQSAccount) queueUri (timeout : int option) = async {
         let timeout = defaultArg timeout SqsConstants.maxWaitTime
         let req = ReceiveMessageRequest(QueueUrl = queueUri)
