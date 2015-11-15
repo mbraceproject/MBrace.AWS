@@ -169,49 +169,9 @@ type internal MessagingClient =
         logger.Logf LogLevel.Info "Enqueued batched jobs of %d items for task %s, total size %s." jobs.Length headJob.Process.Id (getHumanReadableByteSize size)
     }
 
-/// Topic subscription client
-[<Sealed; AutoSerializable(false)>]
-type internal Subscription (clusterId : ClusterId, targetWorkerId : IWorkerId, logger : ISystemLogger) = 
-    member this.TargetWorkerId = targetWorkerId
-
-    member this.GetMessageCountAsync() = 
-        failwith "not implemented yet"
-
-    member this.TryDequeue(currentWorker : IWorkerId) : Async<ICloudWorkItemLeaseToken option> = 
-        failwith "not implemented yet"
-
-    member this.DequeueAllMessagesBatch() = 
-        failwith "not implemented yet"
-
-/// Topic client implementation
-/// TODO : implement on top of SNS
-[<Sealed; AutoSerializable(false)>]
-type internal Topic (clusterId : ClusterId, logger : ISystemLogger) = 
-    member this.GetMessageCountAsync() = 
-        failwith "not implemented yet"
-
-    member this.GetSubscription(subscriptionId : IWorkerId) : Subscription = 
-        failwith "not implemented yet"
-    
-    member this.EnqueueBatch(jobs : CloudWorkItem []) : Async<unit> = 
-        failwith "not implemented yet"
-    
-    member this.Enqueue(workItem : CloudWorkItem, allowNewSifts : bool) = 
-        failwith "not implemented yet"
-
-    static member Create(config, logger : ISystemLogger) = 
-        failwith "not implemented yet"
-
-/// Queue client implementation
-[<Sealed; AutoSerializable(false)>]
-type internal Queue (clusterId : ClusterId, queueUri, logger : ISystemLogger) = 
-    let account = clusterId.SQSAccount
-    let queue   = SQSQueue<WorkItemMessage>(queueUri, account) :> CloudQueue<WorkItemMessage>
-
-    let send msg = queue.EnqueueAsync msg |> Async.StartAsTask :> Task
-    let sendBatch msgs = queue.EnqueueBatchAsync msgs |> Async.StartAsTask :> Task
-
-    let dequeue () = 
+[<AutoOpen>]
+module private QueueUtils = 
+    let tryDequeue account queueUri = 
         async {
             let! res = Sqs.dequeueWithAttributes account queueUri None
             match res with
@@ -230,20 +190,30 @@ type internal Queue (clusterId : ClusterId, queueUri, logger : ISystemLogger) =
                 return Some (message, attributes)
             | _ -> return None
         }
-        |> Async.StartAsTask
 
-    member this.GetMessageCountAsync() = Sqs.getCount account queueUri
+/// Queue client implementation
+[<Sealed; AutoSerializable(false)>]
+type internal Queue (clusterId : ClusterId, queueUri, logger : ISystemLogger) = 
+    let account = clusterId.SQSAccount
+    let queue   = SQSQueue<WorkItemMessage>(queueUri, account) :> CloudQueue<WorkItemMessage>
 
-    member this.EnqueueBatch(jobs : CloudWorkItem []) = 
+    let send msg = queue.EnqueueAsync msg |> Async.StartAsTask :> Task
+    let sendBatch msgs = queue.EnqueueBatchAsync msgs |> Async.StartAsTask :> Task
+    
+    let tryDequeue () = tryDequeue account queueUri |> Async.StartAsTask
+
+    member __.GetMessageCountAsync() = Sqs.getCount account queueUri
+
+    member __.EnqueueBatch(jobs : CloudWorkItem []) = 
         MessagingClient.EnqueueBatch(clusterId, logger, jobs, sendBatch)
             
-    member this.Enqueue(workItem : CloudWorkItem, allowNewSifts : bool) = 
+    member __.Enqueue(workItem : CloudWorkItem, allowNewSifts : bool) = 
         MessagingClient.Enqueue(clusterId, logger, workItem, allowNewSifts, send)
     
-    member this.TryDequeue(workerId : IWorkerId) : Async<ICloudWorkItemLeaseToken option> = 
-        MessagingClient.TryDequeue(clusterId, logger, workerId, dequeue)
+    member __.TryDequeue(workerId : IWorkerId) = 
+        MessagingClient.TryDequeue(clusterId, logger, workerId, tryDequeue)
 
-    member this.EnqueueMessagesBatch(messages : seq<WorkItemMessage>) = async {
+    member __.EnqueueMessagesBatch(messages : seq<WorkItemMessage>) = async {
         do! queue.EnqueueBatchAsync(messages)
     }
         
@@ -261,3 +231,67 @@ type internal Queue (clusterId : ClusterId, queueUri, logger : ISystemLogger) =
             let! queueUri = Sqs.createQueue account clusterId.WorkItemQueue
             return new Queue(clusterId, queueUri, logger)
     }
+
+/// Topic subscription client implemented as a worker specific SQS queue
+[<Sealed; AutoSerializable(false)>]
+type internal Subscription 
+        (clusterId      : ClusterId, 
+         targetWorkerId : IWorkerId, 
+         logger         : ISystemLogger) = 
+    let account   = clusterId.SQSAccount
+    let topic     = clusterId.WorkItemTopic
+    let workerId  = targetWorkerId.Id
+    let queueName = topic + "-" + workerId
+
+    // NOTE: the worker specific queue is created on push. 
+    // This is to avoid creating new queues unnecessarily,
+    // hence the need for tryGetQueueUri
+    let tryDequeue () = 
+        Sqs.tryGetQueueUri account queueName
+        |> AsyncOption.Bind (tryDequeue account)
+        |> Async.StartAsTask
+
+    let tryGetCount = Sqs.getCount account |> AsyncOption.Lift
+
+    member __.TargetWorkerId = targetWorkerId
+
+    member __.GetMessageCountAsync() =
+        Sqs.tryGetQueueUri account queueName
+        |> AsyncOption.Bind tryGetCount
+        |> AsyncOption.WithDefault 0L
+
+    member __.TryDequeue(currentWorker : IWorkerId) = 
+        MessagingClient.TryDequeue(clusterId, logger, currentWorker, tryDequeue)
+
+    member __.DequeueAllMessagesBatch() = async {
+        let! uri = Sqs.tryGetQueueUri account queueName
+        match uri with
+        | Some queueUri ->
+            let! msgs = Sqs.dequeueAll account queueUri
+            return msgs |> Array.map fromBase64<WorkItemMessage>
+        | _ -> return [||]
+    }
+
+/// Topic client implementation as a worker specific SQS queue
+[<Sealed; AutoSerializable(false)>]
+type internal Topic (clusterId : ClusterId, logger : ISystemLogger) = 
+    let account = clusterId.SQSAccount
+    let topic   = clusterId.WorkItemTopic
+
+    member this.GetMessageCountAsync() = async {
+        
+        
+        return ()
+    }
+
+    member this.GetSubscription(subscriptionId : IWorkerId) = 
+        new Subscription(clusterId, subscriptionId, logger)
+    
+    member this.EnqueueBatch(jobs : CloudWorkItem []) : Async<unit> = 
+        failwith "not implemented yet"
+    
+    member this.Enqueue(workItem : CloudWorkItem, allowNewSifts : bool) = 
+        failwith "not implemented yet"
+
+    static member Create(config, logger : ISystemLogger) = 
+        failwith "not implemented yet"

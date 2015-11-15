@@ -41,6 +41,27 @@ module Utils =
     type Async with
         static member Cast<'U>(task : Async<obj>) = async { let! t = task in return box t :?> 'U }
 
+    type AsyncOption =
+        static member Bind cont p = async {
+            let! x = p
+            match x with
+            | Some x -> return! cont x
+            | _      -> return None
+        }
+
+        static member Lift (f : 'a -> Async<'b>) = 
+            fun x -> async {
+                let! res = f x
+                return Some res
+            }
+
+        static member WithDefault defaultVal p = async {
+            let! p = p
+            match p with
+            | Some x -> return x
+            | _      -> return defaultVal
+        }
+
     [<RequireQualifiedAccess>]
     module Array =
         /// <summary>

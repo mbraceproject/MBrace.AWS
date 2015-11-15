@@ -69,6 +69,41 @@ module Sqs =
         | _ -> return None
     }
 
+    let dequeueBatch (account : AwsSQSAccount) queueUri = async {
+        let req = ReceiveMessageRequest(QueueUrl = queueUri)
+        req.MaxNumberOfMessages <- SqsConstants.maxRecvCount
+        
+        let! ct  = Async.CancellationToken
+        let! res = account.SQSClient.ReceiveMessageAsync(req, ct)
+                   |> Async.AwaitTaskCorrect
+        return res.Messages 
+               |> Seq.map (fun msg -> msg.Body)
+               |> Seq.toArray
+    }
+
+    let dequeueAll (account : AwsSQSAccount) queueUri = async {
+        let msgs = ResizeArray<string>()
+
+        // because of the way SQS works, you can get empty receive
+        // on a request whilst there are still messages on other
+        // hosts, hence we need to tolerate a number of empty
+        // receives with small delay in between
+        let rec loop numEmptyReceives = async {
+            let! batch = dequeueBatch account queueUri
+            match batch with
+            | [||] when numEmptyReceives < 10 -> 
+                do! Async.Sleep 100
+                return! loop (numEmptyReceives + 1)
+            | [||] -> return ()
+            | _    -> 
+                msgs.AddRange batch
+                do! loop 0
+        }
+
+        do! loop 0
+        return msgs.ToArray()
+    }
+
     let getCount (account : AwsSQSAccount) queueUri = async {
         let req = GetQueueAttributesRequest(QueueUrl = queueUri)
         let attrName = QueueAttributeName.ApproximateNumberOfMessages.Value
