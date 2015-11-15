@@ -33,37 +33,6 @@
     <OtherFlags>--warnon:1182</OtherFlags>
     <DebugSymbols>true</DebugSymbols>
   </PropertyGroup>
-  <ItemGroup>
-    <Reference Include="mscorlib" />
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Numerics" />
-    <Reference Include="System.Runtime.Serialization" />
-    <Reference Include="FSharp.Core" />
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="Configuration\ProcessConfiguration.fs" />
-    <Compile Include="Configuration\Accounts.fs" />
-    <Compile Include="Configuration\Validation.fs" />
-    <Compile Include="Utilities\Utils.fs" />
-    <Compile Include="Utilities\BlobValue.fs" />
-    <Compile Include="Utilities\Table.fs" />
-    <Compile Include="Utilities\Sqs.fs" />
-    <Compile Include="Store\S3FileStore.fs" />
-    <Compile Include="Store\Atom.fs" />
-    <Compile Include="Store\Queue.fs" />
-    <Compile Include="Runtime\ClusterId.fs" />
-    <Compile Include="Runtime\Metadata.fs" />
-    <Compile Include="Runtime\Persist.fs" />
-    <Compile Include="Runtime\Entities\WorkItem.fs" />
-    <Compile Include="Runtime\Entities\ProcessEntry.fs" />
-    <Compile Include="Runtime\WorkQueue\WorkItemLeaseToken.fs" />
-    <Compile Include="Runtime\WorkQueue\Messaging.fs" />
-    <Compile Include="Runtime\WorkQueue\WorkItemQueue.fs" />
-    <None Include="paket.references" />
-    <None Include="paket.template" />
-  </ItemGroup>
   <PropertyGroup>
     <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>
   </PropertyGroup>
@@ -88,9 +57,6 @@
   </Target>
   -->
   <Import Project="..\..\.paket\paket.targets" />
-  <ItemGroup>
-    <Folder Include="Runtime\WorkQueue\" />
-  </ItemGroup>
   <Choose>
     <When Condition="$(TargetFrameworkIdentifier) == '.NETCore'">
       <ItemGroup>
@@ -1004,4 +970,38 @@
       </ItemGroup>
     </When>
   </Choose>
+  <ItemGroup>
+    <Compile Include="AssemblyInfo.fs" />
+    <Compile Include="Configuration\ProcessConfiguration.fs" />
+    <Compile Include="Configuration\Accounts.fs" />
+    <Compile Include="Configuration\Validation.fs" />
+    <Compile Include="Utilities\Utils.fs" />
+    <Compile Include="Utilities\BlobValue.fs" />
+    <Compile Include="Utilities\Table.fs" />
+    <Compile Include="Utilities\Sqs.fs" />
+    <Compile Include="Store\S3FileStore.fs" />
+    <Compile Include="Store\Atom.fs" />
+    <Compile Include="Store\Queue.fs" />
+    <Compile Include="Runtime\ClusterId.fs" />
+    <Compile Include="Runtime\Metadata.fs" />
+    <Compile Include="Runtime\Persist.fs" />
+    <Compile Include="Runtime\Entities\WorkItem.fs" />
+    <Compile Include="Runtime\Entities\ProcessEntry.fs" />
+    <Compile Include="Runtime\WorkQueue\WorkItemLeaseToken.fs" />
+    <Compile Include="Runtime\WorkQueue\Messaging.fs" />
+    <Compile Include="Runtime\WorkQueue\WorkItemQueue.fs" />
+    <None Include="paket.references" />
+    <None Include="paket.template" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="mscorlib" />
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Numerics" />
+    <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="FSharp.Core" />
+    <Reference Include="System.ServiceModel" />
+    <Reference Include="System.ServiceModel.Discovery" />
+  </ItemGroup>
 </Project>

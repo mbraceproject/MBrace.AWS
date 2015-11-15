@@ -10,7 +10,7 @@ open MBrace.Aws
 open MBrace.Aws.Runtime.Utilities
 
 /// Implements MBrace.Runtime.IWorkItemQueue
-[<AutoSerializable(false); Sealed>]  
+[<AutoSerializable(false); Sealed>]
 type WorkItemQueue private (queue : Queue, topic : Topic) =
     let mutable dequeueState : (IWorkerId * Subscription) option = None
 

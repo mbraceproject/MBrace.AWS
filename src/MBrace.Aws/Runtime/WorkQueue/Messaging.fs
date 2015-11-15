@@ -278,15 +278,9 @@ type internal Topic (clusterId : ClusterId, logger : ISystemLogger) =
     let account = clusterId.SQSAccount
     let topic   = clusterId.WorkItemTopic
 
-    member this.GetMessageCountAsync() = async {
-        
-        
-        return ()
-    }
-
     member this.GetSubscription(subscriptionId : IWorkerId) = 
         new Subscription(clusterId, subscriptionId, logger)
-    
+        
     member this.EnqueueBatch(jobs : CloudWorkItem []) : Async<unit> = 
         failwith "not implemented yet"
     
