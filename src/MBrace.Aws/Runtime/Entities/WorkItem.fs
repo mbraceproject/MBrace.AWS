@@ -54,7 +54,7 @@ type WorkItemRecord(processId : string, workItemId : string) =
     member val CompletionTime = Nullable<DateTimeOffset>() with get, set
     member val RenewLockTime  = Nullable<DateTimeOffset>() with get, set
 
-    member val DeliveryCount  = Nullable<int>() with get, set   
+    member val DeliveryCount  = Nullable<int>() with get, set
     member val Completed      = Nullable<bool>() with get, set
     member val Type           = null : string with get, set
     member val LastException  = null : string with get, set

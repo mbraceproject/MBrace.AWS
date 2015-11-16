@@ -323,5 +323,13 @@ type internal Topic (clusterId : ClusterId, logger : ISystemLogger) =
     member this.Enqueue(workItem : CloudWorkItem, allowNewSifts : bool) = 
         MessagingClient.Enqueue(clusterId, logger, workItem, allowNewSifts, enqueue)
 
+    member __.Delete(workerId : IWorkerId) = async {
+        let queueName = getQueueName topic workerId.Id
+        let! queueUri = Sqs.tryGetQueueUri account queueName
+        match queueUri with
+        | Some queueUri -> do! Sqs.deleteQueue account queueUri
+        | _ -> return ()
+    }
+
     static member Create(clusterId, logger : ISystemLogger) = 
         new Topic(clusterId, logger)
