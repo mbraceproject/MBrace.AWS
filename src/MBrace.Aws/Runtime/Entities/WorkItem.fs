@@ -32,26 +32,6 @@ type internal FaultInfo =
     | WorkerDeathWhileProcessingWorkItem = 2
     | IsTargetedWorkItemOfDeadWorker     = 3
 
-[<AutoSerializable(true)>]
-type WorkerId internal (workerId : string) = 
-    member this.Id = workerId
-
-    interface IWorkerId with
-        member this.CompareTo(obj: obj): int =
-            match obj with
-            | :? WorkerId as w -> compare workerId w.Id
-            | _ -> invalidArg "obj" "invalid comparand."
-        
-        member this.Id: string = this.Id
-
-    override this.ToString() = this.Id
-    override this.Equals(other:obj) =
-        match other with
-        | :? WorkerId as w -> workerId = w.Id
-        | _ -> false
-
-    override this.GetHashCode() = hash workerId
-
 [<AllowNullLiteral>]
 type WorkItemRecord(processId : string, workItemId : string) = 
     inherit DynamoDBTableEntity(processId, workItemId)
@@ -85,7 +65,7 @@ type WorkItemRecord(processId : string, workItemId : string) =
     new () = new WorkItemRecord(null, null)
 
     member this.CloneDefault() =
-        let p = new WorkItemRecord(this.HashKey, this.RangeKey)
+        let p = new WorkItemRecord(processId, workItemId)
         p.ETag <- this.ETag
         p
 
@@ -163,13 +143,13 @@ type WorkItemRecord(processId : string, workItemId : string) =
             doc.["HashKey"]   <- DynamoDBEntry.op_Implicit(this.HashKey)
             doc.["RangeKey"]  <- DynamoDBEntry.op_Implicit(this.RangeKey)
 
-            doc.["Id"] <- DynamoDBEntry.op_Implicit(this.Id)
+            doc.["Id"]        <- DynamoDBEntry.op_Implicit(this.Id)
             doc.["ProcessId"] <- DynamoDBEntry.op_Implicit(this.ProcessId)
             doc.["Affinity"]  <- DynamoDBEntry.op_Implicit(this.Affinity)
             doc.["Type"]      <- DynamoDBEntry.op_Implicit(this.Type)
             doc.["ETag"]      <- DynamoDBEntry.op_Implicit(this.ETag)
-            doc.["CurrentWorker"]  <- DynamoDBEntry.op_Implicit(this.CurrentWorker)
-            doc.["LastException"]  <- DynamoDBEntry.op_Implicit(this.LastException)
+            doc.["CurrentWorker"] <- DynamoDBEntry.op_Implicit(this.CurrentWorker)
+            doc.["LastException"] <- DynamoDBEntry.op_Implicit(this.LastException)
 
             this.Kind  |> doIfNotNull (fun x -> doc.["Kind"] <- DynamoDBEntry.op_Implicit x)
             this.Index |> doIfNotNull (fun x -> doc.["Index"] <- DynamoDBEntry.op_Implicit x)

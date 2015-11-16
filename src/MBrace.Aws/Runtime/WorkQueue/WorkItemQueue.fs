@@ -60,7 +60,7 @@ type WorkItemQueue private (queue : Queue, topic : Topic) =
 
     static member Create(clusterId : ClusterId, logger : ISystemLogger) = async {
         let! queueT = Queue.Create(clusterId, logger) |> Async.StartChild
-        let! topic = Topic.Create(clusterId, logger)
-        let! queue = queueT
+        let topic   = Topic.Create(clusterId, logger)
+        let! queue  = queueT
         return new WorkItemQueue(queue, topic)
     }

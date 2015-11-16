@@ -55,7 +55,10 @@ module internal Table =
                 |> Async.Ignore
         }
 
-    let putBatch (account : AwsDynamoDBAccount) tableName (entities : 'a seq when 'a :> IDynamoDBDocument) =
+    let putBatch 
+            (account : AwsDynamoDBAccount) 
+            tableName 
+            (entities : 'a seq when 'a :> IDynamoDBDocument) =
         async {
             let table = Table.LoadTable(account.DynamoDBClient, tableName)
             let batch = table.CreateBatchWrite()
@@ -68,7 +71,9 @@ module internal Table =
         }
 
     let inline query< ^a when ^a : (static member FromDynamoDBDocument : Document -> ^a) > 
-            (account : AwsDynamoDBAccount) tableName (hashKey : string) = async {
+            (account : AwsDynamoDBAccount) 
+            tableName 
+            (hashKey : string) = async {
         let results = ResizeArray<_>()
 
         let rec loop lastKey =
@@ -97,7 +102,7 @@ module internal Table =
         return results :> ICollection<_>
     }
 
-    let inline read< ^a when ^a : (static member FromDynamoDBDocument : Document -> ^a) > 
+    let private readInternal 
             (account : AwsDynamoDBAccount) 
             tableName 
             (hashKey : string) 
@@ -109,9 +114,46 @@ module internal Table =
         let! ct  = Async.CancellationToken
         let! res = account.DynamoDBClient.GetItemAsync(req, ct)
                    |> Async.AwaitTaskCorrect
+        return res
+    }
+
+    let inline read< ^a when ^a : (static member FromDynamoDBDocument : Document -> ^a) > 
+            (account : AwsDynamoDBAccount) 
+            tableName 
+            (hashKey : string) 
+            (rangeKey : string) = async {
+        let! res = readInternal account tableName hashKey rangeKey
 
         return Document.FromAttributeMap res.Item 
                |> (fun d -> (^a : (static member FromDynamoDBDocument : Document -> ^a) d))
+    }
+
+    let inline transact2< ^a when ^a : (static member FromDynamoDBDocument : Document -> ^a)
+                             and  ^a :> IDynamoDBDocument >
+            (account : AwsDynamoDBAccount) 
+            tableName 
+            (hashKey : string) 
+            (rangeKey : string)
+            (update : ^a -> ^a) = async {
+        let read () = async {
+            let! res = readInternal account tableName hashKey rangeKey
+            return Document.FromAttributeMap res.Item 
+                   |> (fun d -> (^a : (static member FromDynamoDBDocument : Document -> ^a) d))
+        }
+
+        let rec transact x = async {
+            let x' = update x
+            let! res = Async.Catch <| put account tableName x'
+            match res with
+            | Choice1Of2 _ -> return x'
+            | Choice2Of2 (:? ConditionalCheckFailedException) ->
+                let! x = read()
+                return! transact x
+            | Choice2Of2 exn -> return raise exn
+        }
+        
+        let! x = read()
+        return! transact x
     }
 
     let inline readStringOrDefault (doc : Document) fieldName =
@@ -133,3 +175,8 @@ module internal Table =
 
     let inline readByteArrayOrDefault (doc : Document) fieldName =
         if doc.ContainsKey fieldName then doc.[fieldName].AsByteArray() else null
+
+    let inline readDoubleOrDefault (doc : Document) fieldName =
+        if doc.ContainsKey fieldName 
+        then nullable <| doc.[fieldName].AsDouble() 
+        else nullableDefault<double>
