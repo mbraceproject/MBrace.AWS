@@ -112,7 +112,7 @@ type WorkerManager private (clusterId : ClusterId, logger : ISystemLogger) =
     }
 
     interface IWorkerManager with
-        member this.DeclareWorkerStatus
+        member __.DeclareWorkerStatus
                 (workerId : IWorkerId, 
                  status   : WorkerExecutionStatus) = async {
             logger.Logf LogLevel.Info "Changing worker %O status to %A" workerId status
@@ -127,7 +127,7 @@ type WorkerManager private (clusterId : ClusterId, logger : ISystemLogger) =
                     record
         }
         
-        member this.IncrementWorkItemCount(workerId: IWorkerId) = async {
+        member __.IncrementWorkItemCount(workerId: IWorkerId) = async {
             do! Table.transact2<WorkerRecord> 
                     clusterId.DynamoDBAccount 
                     clusterId.RuntimeTable 
@@ -140,7 +140,7 @@ type WorkerManager private (clusterId : ClusterId, logger : ISystemLogger) =
                 |> Async.Ignore
         }
 
-        member this.DecrementWorkItemCount(workerId: IWorkerId): Async<unit> = async {
+        member __.DecrementWorkItemCount(workerId: IWorkerId): Async<unit> = async {
             do! Table.transact2<WorkerRecord> 
                     clusterId.DynamoDBAccount 
                     clusterId.RuntimeTable 
@@ -155,7 +155,7 @@ type WorkerManager private (clusterId : ClusterId, logger : ISystemLogger) =
         
         member this.GetAvailableWorkers() = this.GetAvailableWorkers()
         
-        member this.SubmitPerformanceMetrics
+        member __.SubmitPerformanceMetrics
                 (workerId : IWorkerId, 
                  perf     : Utils.PerformanceMonitor.PerformanceInfo) = async {
             let record = new WorkerRecord(workerId.Id)
@@ -205,7 +205,7 @@ type WorkerManager private (clusterId : ClusterId, logger : ISystemLogger) =
             return unsubscriber
         }
         
-        member this.TryGetWorkerState(workerId: IWorkerId) = async {
+        member __.TryGetWorkerState(workerId: IWorkerId) = async {
             let! record = 
                 Table.read<WorkerRecord> 
                     clusterId.DynamoDBAccount

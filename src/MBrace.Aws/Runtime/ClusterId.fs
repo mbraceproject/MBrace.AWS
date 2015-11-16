@@ -2,7 +2,7 @@
 
 open MBrace.Runtime
 
-/// Serializable state/configuration record uniquely identifying an MBrace.Azure cluster
+/// Serializable state/configuration record uniquely identifying an MBrace.Aws cluster
 [<AutoSerializable(true); StructuralEquality; StructuralComparison>]
 [<StructuredFormatDisplay("{Id}")>]
 type ClusterId =

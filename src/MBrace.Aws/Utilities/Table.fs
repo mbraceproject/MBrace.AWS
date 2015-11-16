@@ -70,6 +70,33 @@ module internal Table =
                 |> Async.AwaitTaskCorrect
         }
 
+    let delete 
+            (account : AwsDynamoDBAccount) 
+            tableName 
+            (entity : IDynamoDBDocument) =
+        async {
+            let table = Table.LoadTable(account.DynamoDBClient, tableName)
+            let! ct   = Async.CancellationToken
+            do! table.DeleteItemAsync(entity.ToDynamoDBDocument(), ct)
+                |> Async.AwaitTaskCorrect
+                |> Async.Ignore
+        }
+
+    let deleteBatch
+            (account : AwsDynamoDBAccount) 
+            tableName 
+            (entities : 'a seq when 'a :> IDynamoDBDocument) =
+        async {
+            let table = Table.LoadTable(account.DynamoDBClient, tableName)
+            let batch = table.CreateBatchWrite()
+            let docs  = entities |> Seq.map (fun x -> x.ToDynamoDBDocument()) 
+            docs |> Seq.iter batch.AddItemToDelete
+            let! ct   = Async.CancellationToken
+
+            do! batch.ExecuteAsync(ct)
+                |> Async.AwaitTaskCorrect
+        }
+
     let inline query< ^a when ^a : (static member FromDynamoDBDocument : Document -> ^a) > 
             (account : AwsDynamoDBAccount) 
             tableName 
