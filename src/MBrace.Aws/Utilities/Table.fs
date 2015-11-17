@@ -33,27 +33,41 @@ type IDynamoDBDocument =
 [<AutoOpen>]
 module DynamoDBEntryExtensions =
     type DynamoDBEntry with
-        static member op_Implicit (dtOffset : DateTimeOffset) : DynamoDBEntry =           
+        static member op_Implicit (dtOffset : DateTimeOffset) : DynamoDBEntry =
             let entry = new Primitive(dtOffset.ToString())
             entry :> DynamoDBEntry
 
         member this.AsDateTimeOffset() =
             DateTimeOffset.Parse <| this.AsPrimitive().AsString()
 
+[<AutoOpen>]
+module private DynamoDBUtils =
+    let attributeValue (x : string) = new AttributeValue(x)
+
 [<RequireQualifiedAccess>]
 module internal Table =
-    // NOTE: implement a specific put rather than reinvent the object persistence layer as that's a lot
-    // of work and at this point not enough payoff
-    let put (account : AwsDynamoDBAccount) tableName (entity : IDynamoDBDocument) =
+    let private putInternal 
+            (account  : AwsDynamoDBAccount) 
+            tableName 
+            (entity   : IDynamoDBDocument)
+            (opConfig : UpdateItemOperationConfig option) =
         async { 
             let table = Table.LoadTable(account.DynamoDBClient, tableName)
             let doc   = entity.ToDynamoDBDocument()
             let! ct   = Async.CancellationToken
+            
+            let update = 
+                match opConfig with
+                | Some config -> table.UpdateItemAsync(doc, config, ct)
+                | _           -> table.UpdateItemAsync(doc, ct)
 
-            do! table.UpdateItemAsync(doc, ct)
+            do! update
                 |> Async.AwaitTaskCorrect
                 |> Async.Ignore
         }
+
+    let put account tableName entity =
+        putInternal account tableName entity None
 
     let putBatch 
             (account : AwsDynamoDBAccount) 
@@ -155,13 +169,38 @@ module internal Table =
                |> (fun d -> (^a : (static member FromDynamoDBDocument : Document -> ^a) d))
     }
 
-    let inline transact2< ^a when ^a : (static member FromDynamoDBDocument : Document -> ^a)
-                             and  ^a :> IDynamoDBDocument >
+    let inline increment 
             (account : AwsDynamoDBAccount) 
             tableName 
-            (hashKey : string) 
+            hashKey
+            rangeKey
+            fieldToIncr =
+        async {
+            // see http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.Modifying.html#Expressions.Modifying.UpdateExpressions
+            let req  = UpdateItemRequest(TableName = tableName)
+            req.Key.Add("HashKey",  attributeValue hashKey)
+            req.Key.Add("RangeKey", attributeValue rangeKey)
+            req.ExpressionAttributeNames.Add("#F", fieldToIncr)
+            req.ExpressionAttributeValues.Add(":val", attributeValue "1")
+            req.UpdateExpression <- "SET #F = #F+:val"
+            req.ReturnValues <- ReturnValue.UPDATED_NEW
+
+            let! ct  = Async.CancellationToken
+            let! res = account.DynamoDBClient.UpdateItemAsync(req, ct)
+                       |> Async.AwaitTaskCorrect
+        
+            let newValue = res.Attributes.[fieldToIncr]
+            return System.Int64.Parse newValue.N
+        }
+
+    let inline transact< ^a when ^a : (static member FromDynamoDBDocument : Document -> ^a)
+                            and  ^a :> IDynamoDBDocument >
+            (account  : AwsDynamoDBAccount) 
+            tableName 
+            (hashKey  : string) 
             (rangeKey : string)
-            (update : ^a -> ^a) = async {
+            (conditionalField : ^a -> string * string option) // used to perform conditional update
+            (update   : ^a -> ^a) = async {
         let read () = async {
             let! res = readInternal account tableName hashKey rangeKey
             return Document.FromAttributeMap res.Item 
@@ -170,7 +209,17 @@ module internal Table =
 
         let rec transact x = async {
             let x' = update x
-            let! res = Async.Catch <| put account tableName x'
+            
+            let config = UpdateItemOperationConfig()
+            let (condField, condFieldVal) = conditionalField x
+            match condFieldVal with
+            | Some x ->
+                config.Expected.Add(condField, DynamoDBEntry.op_Implicit x)
+            | _ -> 
+                config.ConditionalExpression.ExpressionAttributeNames.Add("#F", condField)
+                config.ConditionalExpression.ExpressionStatement <- "attribute_not_exists(#F)"
+
+            let! res = Async.Catch <| putInternal account tableName x' (Some config)
             match res with
             | Choice1Of2 _ -> return x'
             | Choice2Of2 (:? ConditionalCheckFailedException) ->

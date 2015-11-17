@@ -14,7 +14,7 @@ open MBrace.Aws.Runtime.Utilities
 
 [<AllowNullLiteral>]
 type CloudProcessRecord(taskId) = 
-    inherit DynamoDBTableEntity(CloudProcessRecord.DefaultPartitionKey, taskId)
+    inherit DynamoDBTableEntity(CloudProcessRecord.DefaultHashKey, taskId)
 
     member val Id   : string = taskId with get, set
     member val Name : string = null with get, set
@@ -29,7 +29,7 @@ type CloudProcessRecord(taskId) =
     member val CancellationTokenSource : byte [] = null with get, set
     member val ResultUri : string = null with get, set
     member val TypeName  : string = null with get, set
-    member val Type  : byte [] = null with get, set
+    member val Type         : byte [] = null with get, set
     member val Dependencies : byte [] = null with get, set
     member val AdditionalResources : byte [] = null with get, set
     member val ETag : string = null with get, set
@@ -41,7 +41,7 @@ type CloudProcessRecord(taskId) =
 
     override this.ToString() = sprintf "task:%A" taskId
 
-    static member DefaultPartitionKey = "task"
+    static member DefaultHashKey = "task"
 
     static member CreateNew(taskId : string, info : CloudProcessInfo) =
         let serializer = ProcessConfiguration.BinarySerializer
@@ -58,7 +58,7 @@ type CloudProcessRecord(taskId) =
         record.TypeName <- info.ReturnTypeName
         record.CancellationTokenSource <- serializer.Pickle info.CancellationTokenSource
         info.AdditionalResources |> Option.iter (fun r -> record.AdditionalResources <- serializer.Pickle r)
-        record       
+        record
 
     member record.ToCloudProcessInfo() =
         let serializer = ProcessConfiguration.BinarySerializer
@@ -78,7 +78,7 @@ type CloudProcessRecord(taskId) =
         return! Table.read<CloudProcessRecord> 
                     clusterId.DynamoDBAccount 
                     clusterId.RuntimeTable 
-                    CloudProcessRecord.DefaultPartitionKey 
+                    CloudProcessRecord.DefaultHashKey 
                     processId
     }
 

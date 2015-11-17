@@ -31,7 +31,7 @@ type CloudProcessManager private (clusterId : ClusterId, logger : ISystemLogger)
                 Table.query<CloudProcessRecord> 
                     clusterId.DynamoDBAccount 
                     clusterId.RuntimeTable 
-                    CloudProcessRecord.DefaultPartitionKey
+                    CloudProcessRecord.DefaultHashKey
             do! Table.deleteBatch 
                     clusterId.DynamoDBAccount 
                     clusterId.RuntimeTable 
@@ -52,7 +52,7 @@ type CloudProcessManager private (clusterId : ClusterId, logger : ISystemLogger)
                 Table.query<CloudProcessRecord> 
                     clusterId.DynamoDBAccount 
                     clusterId.RuntimeTable 
-                    CloudProcessRecord.DefaultPartitionKey
+                    CloudProcessRecord.DefaultHashKey
             return records 
                    |> Seq.map(fun r ->
                         new CloudProcessEntry(
@@ -66,7 +66,7 @@ type CloudProcessManager private (clusterId : ClusterId, logger : ISystemLogger)
                 Table.read<CloudProcessRecord> 
                     clusterId.DynamoDBAccount
                     clusterId.RuntimeTable
-                    CloudProcessRecord.DefaultPartitionKey
+                    CloudProcessRecord.DefaultHashKey
                     taskId
             match record with
             | null -> return None 

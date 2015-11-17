@@ -38,6 +38,12 @@ module Utils =
         |> ProcessConfiguration.BinarySerializer.Pickle 
         |> Convert.ToBase64String
 
+    module Option =
+        let ofNullable (x : Nullable<'T>) =
+            match x with
+            | Nullable x -> Some x
+            | _          -> None
+
     type Async with
         static member Cast<'U>(task : Async<obj>) = async { let! t = task in return box t :?> 'U }
 

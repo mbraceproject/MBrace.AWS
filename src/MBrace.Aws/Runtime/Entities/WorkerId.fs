@@ -30,7 +30,7 @@ type WorkerId internal (workerId : string) =
 
 [<AllowNullLiteral>]
 type WorkerRecord(workerId : string) =
-    inherit DynamoDBTableEntity(WorkerRecord.DefaultPartitionKey, workerId)
+    inherit DynamoDBTableEntity(WorkerRecord.DefaultHashKey, workerId)
     
     member val Id                 = workerId with get, set
     member val Hostname           = Unchecked.defaultof<string> with get, set
@@ -81,7 +81,7 @@ type WorkerRecord(workerId : string) =
 
     override this.ToString () = sprintf "worker:%A" this.Id
 
-    static member DefaultPartitionKey = "worker"
+    static member DefaultHashKey = "worker"
 
     static member FromDynamoDBDocument (doc : Document) = 
         let workerId = doc.["Id"].AsString()
@@ -121,7 +121,7 @@ type WorkerRecord(workerId : string) =
             doc.["RangeKey"] <- DynamoDBEntry.op_Implicit(this.RangeKey)
 
             doc.["Id"]       <- DynamoDBEntry.op_Implicit(this.Id)
-            doc.["HostName"] <- DynamoDBEntry.op_Implicit(this.Hostname)            
+            doc.["HostName"] <- DynamoDBEntry.op_Implicit(this.Hostname)
             doc.["Version"]  <- DynamoDBEntry.op_Implicit(this.Version)
             doc.["Status"]   <- DynamoDBEntry.op_Implicit(this.Status)
             doc.["ETag"]     <- DynamoDBEntry.op_Implicit(this.ETag)

@@ -45,7 +45,7 @@ type WorkerManager private (clusterId : ClusterId, logger : ISystemLogger) =
             Table.query<WorkerRecord> 
                 clusterId.DynamoDBAccount
                 clusterId.RuntimeTable
-                WorkerRecord.DefaultPartitionKey
+                WorkerRecord.DefaultHashKey
         let state = records |> Seq.map mkWorkerState |> Seq.toArray
         return state
     }
@@ -128,11 +128,16 @@ type WorkerManager private (clusterId : ClusterId, logger : ISystemLogger) =
         }
         
         member __.IncrementWorkItemCount(workerId: IWorkerId) = async {
-            do! Table.transact2<WorkerRecord> 
+            do! Table.transact<WorkerRecord> 
                     clusterId.DynamoDBAccount 
                     clusterId.RuntimeTable 
-                    WorkerRecord.DefaultPartitionKey 
+                    WorkerRecord.DefaultHashKey 
                     workerId.Id 
+                    (fun e -> 
+                        let expectedValue = 
+                            Option.ofNullable e.ActiveWorkItems 
+                            |> Option.map string
+                        "ActiveWorkItems", expectedValue)
                     (fun e -> 
                         let ec = e.CloneDefault()
                         ec.ActiveWorkItems <- e.ActiveWorkItems ?+ 1
@@ -141,11 +146,16 @@ type WorkerManager private (clusterId : ClusterId, logger : ISystemLogger) =
         }
 
         member __.DecrementWorkItemCount(workerId: IWorkerId): Async<unit> = async {
-            do! Table.transact2<WorkerRecord> 
+            do! Table.transact<WorkerRecord> 
                     clusterId.DynamoDBAccount 
                     clusterId.RuntimeTable 
-                    WorkerRecord.DefaultPartitionKey 
+                    WorkerRecord.DefaultHashKey 
                     workerId.Id 
+                    (fun e -> 
+                        let expectedValue = 
+                            Option.ofNullable e.ActiveWorkItems 
+                            |> Option.map string
+                        "ActiveWorkItems", expectedValue)
                     (fun e -> 
                         let ec = e.CloneDefault()
                         ec.ActiveWorkItems <- e.ActiveWorkItems ?- 1
@@ -210,7 +220,7 @@ type WorkerManager private (clusterId : ClusterId, logger : ISystemLogger) =
                 Table.read<WorkerRecord> 
                     clusterId.DynamoDBAccount
                     clusterId.RuntimeTable 
-                    WorkerRecord.DefaultPartitionKey
+                    WorkerRecord.DefaultHashKey
                     workerId.Id
             
             match record with
