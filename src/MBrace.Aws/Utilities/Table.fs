@@ -46,25 +46,94 @@ module private DynamoDBUtils =
 
 [<RequireQualifiedAccess>]
 module internal Table =
+    type TableConfig =
+        {
+            ReadThroughput  : int64
+            WriteThroughput : int64
+            HashKey         : string
+            RangeKey        : string
+        }
+
+        static member Default = 
+            {
+                ReadThroughput  = 10L
+                WriteThroughput = 10L
+                HashKey         = "HashKey"
+                RangeKey        = "RangeKey"
+            }
+
+    /// Creates a new table and wait till its status is confirmed as Active
+    let createIfNotExists 
+            (account : AwsDynamoDBAccount) 
+            tableName
+            (tableConfig : TableConfig option)
+            (maxRetries  : int option) = async {
+        let tableConfig = defaultArg tableConfig TableConfig.Default
+        let maxRetries  = defaultArg maxRetries 3
+
+        let req = CreateTableRequest(TableName = tableName)
+        req.KeySchema.Add(new KeySchemaElement(tableConfig.HashKey, KeyType.HASH))
+        req.KeySchema.Add(new KeySchemaElement(tableConfig.RangeKey, KeyType.RANGE))
+        req.ProvisionedThroughput.ReadCapacityUnits  <- tableConfig.ReadThroughput
+        req.ProvisionedThroughput.WriteCapacityUnits <- tableConfig.WriteThroughput
+
+        let create = async {
+            let! ct  = Async.CancellationToken
+            let! res = account.DynamoDBClient.CreateTableAsync(req, ct)
+                       |> Async.AwaitTaskCorrect
+                       |> Async.Catch
+
+            match res with
+            | Choice1Of2 res -> 
+                return res.TableDescription.TableStatus
+            | Choice2Of2 (:? ResourceInUseException) -> 
+                return TableStatus.ACTIVE
+            | Choice2Of2 exn -> 
+                return! Async.Raise exn
+        }
+
+        let rec confirmIsActive () = async {
+            let req  = DescribeTableRequest(TableName = tableName)
+            let! ct  = Async.CancellationToken
+            let! res = account.DynamoDBClient.DescribeTableAsync(req, ct)
+                       |> Async.AwaitTaskCorrect
+            if res.Table.TableStatus = TableStatus.ACTIVE
+            then return ()
+            else return! confirmIsActive()
+        }
+
+        let rec loop attemptsLeft = async {
+            if attemptsLeft <= 0 
+            then return () 
+            else
+                let! res = Async.Catch create
+                match res with
+                | Choice1Of2 status when status = TableStatus.ACTIVE -> return ()
+                | Choice1Of2 _ -> do! confirmIsActive()
+                | _ -> return! loop (attemptsLeft - 1)
+        }
+
+        do! loop maxRetries
+    }
+
     let private putInternal 
             (account  : AwsDynamoDBAccount) 
             tableName 
             (entity   : IDynamoDBDocument)
-            (opConfig : UpdateItemOperationConfig option) =
-        async { 
-            let table = Table.LoadTable(account.DynamoDBClient, tableName)
-            let doc   = entity.ToDynamoDBDocument()
-            let! ct   = Async.CancellationToken
+            (opConfig : UpdateItemOperationConfig option) = async { 
+        let table = Table.LoadTable(account.DynamoDBClient, tableName)
+        let doc   = entity.ToDynamoDBDocument()
+        let! ct   = Async.CancellationToken
             
-            let update = 
-                match opConfig with
-                | Some config -> table.UpdateItemAsync(doc, config, ct)
-                | _           -> table.UpdateItemAsync(doc, ct)
+        let update = 
+            match opConfig with
+            | Some config -> table.UpdateItemAsync(doc, config, ct)
+            | _           -> table.UpdateItemAsync(doc, ct)
 
-            do! update
-                |> Async.AwaitTaskCorrect
-                |> Async.Ignore
-        }
+        do! update
+            |> Async.AwaitTaskCorrect
+            |> Async.Ignore
+    }
 
     let put account tableName entity =
         putInternal account tableName entity None
@@ -72,44 +141,41 @@ module internal Table =
     let putBatch 
             (account : AwsDynamoDBAccount) 
             tableName 
-            (entities : 'a seq when 'a :> IDynamoDBDocument) =
-        async {
-            let table = Table.LoadTable(account.DynamoDBClient, tableName)
-            let batch = table.CreateBatchWrite()
-            let docs  = entities |> Seq.map (fun x -> x.ToDynamoDBDocument()) 
-            docs |> Seq.iter batch.AddDocumentToPut
-            let! ct   = Async.CancellationToken
+            (entities : 'a seq when 'a :> IDynamoDBDocument) = async {
+        let table = Table.LoadTable(account.DynamoDBClient, tableName)
+        let batch = table.CreateBatchWrite()
+        let docs  = entities |> Seq.map (fun x -> x.ToDynamoDBDocument()) 
+        docs |> Seq.iter batch.AddDocumentToPut
+        let! ct   = Async.CancellationToken
 
-            do! batch.ExecuteAsync(ct)
-                |> Async.AwaitTaskCorrect
-        }
+        do! batch.ExecuteAsync(ct)
+            |> Async.AwaitTaskCorrect
+    }
 
     let delete 
             (account : AwsDynamoDBAccount) 
             tableName 
-            (entity : IDynamoDBDocument) =
-        async {
-            let table = Table.LoadTable(account.DynamoDBClient, tableName)
-            let! ct   = Async.CancellationToken
-            do! table.DeleteItemAsync(entity.ToDynamoDBDocument(), ct)
-                |> Async.AwaitTaskCorrect
-                |> Async.Ignore
-        }
+            (entity : IDynamoDBDocument) = async {
+        let table = Table.LoadTable(account.DynamoDBClient, tableName)
+        let! ct   = Async.CancellationToken
+        do! table.DeleteItemAsync(entity.ToDynamoDBDocument(), ct)
+            |> Async.AwaitTaskCorrect
+            |> Async.Ignore
+    }
 
     let deleteBatch
             (account : AwsDynamoDBAccount) 
             tableName 
-            (entities : 'a seq when 'a :> IDynamoDBDocument) =
-        async {
-            let table = Table.LoadTable(account.DynamoDBClient, tableName)
-            let batch = table.CreateBatchWrite()
-            let docs  = entities |> Seq.map (fun x -> x.ToDynamoDBDocument()) 
-            docs |> Seq.iter batch.AddItemToDelete
-            let! ct   = Async.CancellationToken
+            (entities : 'a seq when 'a :> IDynamoDBDocument) = async {
+        let table = Table.LoadTable(account.DynamoDBClient, tableName)
+        let batch = table.CreateBatchWrite()
+        let docs  = entities |> Seq.map (fun x -> x.ToDynamoDBDocument()) 
+        docs |> Seq.iter batch.AddItemToDelete
+        let! ct   = Async.CancellationToken
 
-            do! batch.ExecuteAsync(ct)
-                |> Async.AwaitTaskCorrect
-        }
+        do! batch.ExecuteAsync(ct)
+            |> Async.AwaitTaskCorrect
+    }
 
     let inline query< ^a when ^a : (static member FromDynamoDBDocument : Document -> ^a) > 
             (account : AwsDynamoDBAccount) 
@@ -174,24 +240,23 @@ module internal Table =
             tableName 
             hashKey
             rangeKey
-            fieldToIncr =
-        async {
-            // see http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.Modifying.html#Expressions.Modifying.UpdateExpressions
-            let req  = UpdateItemRequest(TableName = tableName)
-            req.Key.Add("HashKey",  attributeValue hashKey)
-            req.Key.Add("RangeKey", attributeValue rangeKey)
-            req.ExpressionAttributeNames.Add("#F", fieldToIncr)
-            req.ExpressionAttributeValues.Add(":val", attributeValue "1")
-            req.UpdateExpression <- "SET #F = #F+:val"
-            req.ReturnValues <- ReturnValue.UPDATED_NEW
+            fieldToIncr = async {
+        // see http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.Modifying.html#Expressions.Modifying.UpdateExpressions
+        let req  = UpdateItemRequest(TableName = tableName)
+        req.Key.Add("HashKey",  attributeValue hashKey)
+        req.Key.Add("RangeKey", attributeValue rangeKey)
+        req.ExpressionAttributeNames.Add("#F", fieldToIncr)
+        req.ExpressionAttributeValues.Add(":val", attributeValue "1")
+        req.UpdateExpression <- "SET #F = #F+:val"
+        req.ReturnValues <- ReturnValue.UPDATED_NEW
 
-            let! ct  = Async.CancellationToken
-            let! res = account.DynamoDBClient.UpdateItemAsync(req, ct)
-                       |> Async.AwaitTaskCorrect
+        let! ct  = Async.CancellationToken
+        let! res = account.DynamoDBClient.UpdateItemAsync(req, ct)
+                    |> Async.AwaitTaskCorrect
         
-            let newValue = res.Attributes.[fieldToIncr]
-            return System.Int64.Parse newValue.N
-        }
+        let newValue = res.Attributes.[fieldToIncr]
+        return System.Int64.Parse newValue.N
+    }
 
     let inline transact< ^a when ^a : (static member FromDynamoDBDocument : Document -> ^a)
                             and  ^a :> IDynamoDBDocument >

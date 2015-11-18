@@ -107,11 +107,11 @@ type internal WorkItemLeaseMonitor private
 
         | Some Complete ->
             do! deleteMsg()
-            logger.Logf LogLevel.Info "%A : completed" info
+            logger.LogInfof "%A : completed" info
 
         | Some Abandon ->
-            do! deleteMsg()           
-            logger.Logf LogLevel.Info "%A : abandoned" info
+            do! deleteMsg()
+            logger.LogInfof "%A : abandoned" info
     }
 
     let cts = new CancellationTokenSource()

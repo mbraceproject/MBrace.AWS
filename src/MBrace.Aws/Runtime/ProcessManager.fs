@@ -40,7 +40,7 @@ type CloudProcessManager private (clusterId : ClusterId, logger : ISystemLogger)
         
         member __.StartProcess(info: CloudProcessInfo) = async {
             let taskId = guid()
-            logger.Logf LogLevel.Info "Creating cloud process %A" taskId
+            logger.LogInfof "Creating cloud process %A" taskId
             let record = CloudProcessRecord.CreateNew(taskId, info)
             do! Table.put clusterId.DynamoDBAccount clusterId.RuntimeTable record
             let tcs = new CloudProcessEntry(clusterId, taskId, info)

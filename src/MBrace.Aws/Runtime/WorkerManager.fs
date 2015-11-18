@@ -93,7 +93,7 @@ type WorkerManager private (clusterId : ClusterId, logger : ISystemLogger) =
 
         let cullWorker(worker : WorkerState) = async {
             try 
-                logger.Logf LogLevel.Info "WorkerManager : culling inactive worker '%O'" worker.Id.Id
+                logger.LogInfof "WorkerManager : culling inactive worker '%O'" worker.Id.Id
                 // TODO : change QueueFault to WorkerDeath
                 do! (this :> IWorkerManager).DeclareWorkerStatus(worker.Id, WorkerExecutionStatus.WorkerDeath)
             with e ->
@@ -107,7 +107,7 @@ type WorkerManager private (clusterId : ClusterId, logger : ISystemLogger) =
     }
 
     member this.UnsubscribeWorker(workerId : IWorkerId) = async {
-        logger.Logf LogLevel.Info "Unsubscribing worker %O" workerId
+        logger.LogInfof "Unsubscribing worker %O" workerId
         return! (this :> IWorkerManager).DeclareWorkerStatus(workerId, WorkerExecutionStatus.Stopped)
     }
 
@@ -115,7 +115,7 @@ type WorkerManager private (clusterId : ClusterId, logger : ISystemLogger) =
         member __.DeclareWorkerStatus
                 (workerId : IWorkerId, 
                  status   : WorkerExecutionStatus) = async {
-            logger.Logf LogLevel.Info "Changing worker %O status to %A" workerId status
+            logger.LogInfof "Changing worker %O status to %A" workerId status
 
             let record = new WorkerRecord(workerId.Id)
             record.ETag <- "*"
@@ -181,7 +181,7 @@ type WorkerManager private (clusterId : ClusterId, logger : ISystemLogger) =
         member this.SubscribeWorker
                 (workerId : IWorkerId, 
                  info     : WorkerInfo) = async {
-            logger.Logf LogLevel.Info "Subscribing worker %O" clusterId
+            logger.LogInfof "Subscribing worker %O" clusterId
 
             let joined = DateTimeOffset.UtcNow
             let record = new WorkerRecord(workerId.Id)

@@ -986,6 +986,7 @@
     <Compile Include="Runtime\Metadata.fs" />
     <Compile Include="Runtime\Persist.fs" />
     <Compile Include="Runtime\Entities\Counters.fs" />
+    <Compile Include="Runtime\Entities\Logging.fs" />
     <Compile Include="Runtime\Entities\WorkerId.fs" />
     <Compile Include="Runtime\Entities\WorkItem.fs" />
     <Compile Include="Runtime\Entities\ProcessEntry.fs" />

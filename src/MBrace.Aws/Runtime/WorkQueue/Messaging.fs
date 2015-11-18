@@ -166,7 +166,11 @@ type internal MessagingClient =
 
         let messages = jobs |> Array.mapi mkWorkItemMessage
         do! send messages
-        logger.Logf LogLevel.Info "Enqueued batched jobs of %d items for task %s, total size %s." jobs.Length headJob.Process.Id (getHumanReadableByteSize size)
+        logger.LogInfof 
+            "Enqueued batched jobs of %d items for task %s, total size %s." 
+            jobs.Length 
+            headJob.Process.Id 
+            (getHumanReadableByteSize size)
     }
 
 [<AutoOpen>]
@@ -222,10 +226,10 @@ type internal Queue (clusterId : ClusterId, queueUri, logger : ISystemLogger) =
         let! queueUri = Sqs.tryGetQueueUri account clusterId.WorkItemQueue
         match queueUri with
         | Some queueUri ->
-            logger.Logf LogLevel.Info "Queue %A already exists." clusterId.WorkItemQueue
+            logger.LogInfof "Queue %A already exists." clusterId.WorkItemQueue
             return new Queue(clusterId, queueUri, logger)
         | None ->
-            logger.Logf LogLevel.Info "Creating new ServiceBus queue %A" clusterId.WorkItemQueue
+            logger.LogInfof "Creating new ServiceBus queue %A" clusterId.WorkItemQueue
             // TODO : what should be the default queue attributes?
 
             let! queueUri = Sqs.createQueue account clusterId.WorkItemQueue

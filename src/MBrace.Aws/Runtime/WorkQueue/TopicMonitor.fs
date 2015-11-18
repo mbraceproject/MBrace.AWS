@@ -35,8 +35,13 @@ type TopicMonitor private
         let subscription = topic.GetSubscription(worker)
         let! allMessages = subscription.DequeueAllMessagesBatch()
         if not <| Array.isEmpty allMessages then
-            logger.Logf LogLevel.Info "TopicMonitor : perfoming worker queue maintance for %A." worker.Id
-            logger.Logf LogLevel.Info "TopicMonitor : moving %d messages to main queue for %A" allMessages.Length worker.Id
+            logger.LogInfof 
+                "TopicMonitor : perfoming worker queue maintance for %A." 
+                worker.Id
+            logger.LogInfof 
+                "TopicMonitor : moving %d messages to main queue for %A" 
+                allMessages.Length 
+                worker.Id
             do! queue.EnqueueMessagesBatch(allMessages)
             do! topic.Delete worker
     }
