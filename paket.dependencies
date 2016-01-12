@@ -3,16 +3,15 @@ source https://nuget.org/api/v2
 nuget FSharp.Formatting
 nuget NUnit 
 nuget NUnit.Runners
+nuget NuGet.CommandLine
 nuget FAKE
 nuget SourceLink.Fake
-nuget MBrace.Core
-nuget MBrace.Runtime
+nuget MBrace.Core ~> 1.0.10
+nuget MBrace.Runtime ~> 1.0.10
 nuget MBrace.Tests
-nuget FsPickler
-nuget FsPickler.Json
 
-nuget AWSSDK.S3
-nuget AWSSDK.DynamoDBv2
-nuget AWSSDK.SQS
+nuget AWSSDK.S3 ~> 3.0
+nuget AWSSDK.DynamoDBv2 ~> 3.0
+nuget AWSSDK.SQS ~> 3.0
 
 github fsharp/FAKE modules/Octokit/Octokit.fsx
