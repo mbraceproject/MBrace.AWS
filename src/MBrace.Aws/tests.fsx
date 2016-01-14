@@ -1,34 +1,33 @@
-﻿#r "../../packages/FsPickler/lib/net40/FsPickler.dll"
-#r "../../packages/AWSSDK.Core/lib/net45/AWSSDK.Core.dll"
-#r "../../packages/AWSSDK.S3/lib/net45/AWSSDK.S3.dll"
-#r "../../packages/AWSSDK.DynamoDBv2/lib/net45/AWSSDK.DynamoDBv2.dll"
-#r "../../packages/AWSSDK.SQS/lib/net45/AWSSDK.SQS.dll"
+﻿#I "../../bin"
+#r "FsPickler.dll"
+#r "AWSSDK.Core.dll"
+#r "AWSSDK.S3.dll"
+#r "AWSSDK.DynamoDBv2.dll"
+#r "AWSSDK.SQS.dll"
+#r "MBrace.Runtime.dll"
+#r "MBrace.Aws.dll"
 
 
 open Amazon
 open Amazon.Runtime
 open Amazon.S3
+open Amazon.SQS
+open Amazon.DynamoDBv2
 
 open Nessos.FsPickler
+open MBrace.Aws.Runtime
 
-let key = ""
-let secret = ""
+let clone x = FsPickler.Clone x
 
-let client = new AmazonS3Client(key, secret, RegionEndpoint.EUCentral1) :> IAmazonS3
 
-let bucks = client.ListBuckets().Buckets |> Seq.toArray
+let account = AwsAccount.Create("eirik-nessos", RegionEndpoint.EUCentral1)
 
-client.GetBucketLocation "mbracetest"
+let buckets = account.S3Client.ListBuckets().Buckets |> Seq.toArray
 
-let buck2 = bucks.[1]
+let buck = buckets.[0]
 
-client.UploadObjectFromFilePath("mbracetest", "foo.png", "/Users/eirik/Desktop/untitled.png", new System.Collections.Generic.Dictionary<_,_>())
-client.UploadObjectFromFilePath("mbracetest", "foo/bar/proedros.mp4", "/Users/eirik/Desktop/video-1450800103.mp4.mp4", new System.Collections.Generic.Dictionary<_,_>())
+buck.BucketName
 
-let listed = client.ListObjects("mbracetest").S3Objects |> Seq.toArray
+let account' = clone account
 
-client.PutBucket("mbracetest")
-
-listed.[1]
-
-client.U
+obj.ReferenceEquals(account.S3Client, account'.S3Client)

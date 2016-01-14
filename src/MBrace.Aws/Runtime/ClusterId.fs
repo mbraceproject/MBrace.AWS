@@ -10,9 +10,9 @@ type ClusterId =
         /// Runtime version string
         Version : string
 
-        S3Account       : AwsS3Account
-        DynamoDBAccount : AwsDynamoDBAccount
-        SQSAccount      : AwsSQSAccount
+        S3Account       : AwsAccount
+        DynamoDBAccount : AwsAccount
+        SQSAccount      : AwsAccount
                
         WorkItemQueue   : string // SQS Name
         WorkItemTopic   : string // SNS Topic

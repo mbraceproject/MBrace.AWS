@@ -17,7 +17,7 @@ open MBrace.Aws.Store
 type ClusterManager =
     {
         ClusterId               : ClusterId
-        Configuration           : Configuration
+//        Configuration           : Configuration
         Serializer              : FsPicklerSerializer
         Logger                  : ISystemLogger
         Resources               : ResourceRegistry
@@ -26,10 +26,10 @@ type ClusterManager =
         ProcessManager          : CloudProcessManager
         AssemblyManager         : StoreAssemblyManager
         LocalLoggerManager      : ILocalSystemLogManager
-        SystemLoggerManager     : TableSystemLogManager
-        CloudLoggerManager      : TableCloudLogManager
-        CancellationFactory     : TableCancellationTokenFactory
+//        SystemLoggerManager     : TableSystemLogManager
+//        CloudLoggerManager      : TableCloudLogManager
+//        CancellationFactory     : TableCancellationTokenFactory
         CounterFactory          : TableCounterFactory
-        ResultAggregatorFactory : TableResultAggregatorFactory
+//        ResultAggregatorFactory : TableResultAggregatorFactory
     }
     // TODO

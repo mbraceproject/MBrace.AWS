@@ -14,7 +14,7 @@ open Amazon.S3.Model
 
 /// Represents a value that has been persisted to blob store
 [<Sealed; DataContract>]
-type BlobValue<'T> internal (account : AwsS3Account, bucketName : string, key : string) =    
+type BlobValue<'T> internal (account : AwsAccount, bucketName : string, key : string) =    
     [<DataMember(Name = "account")>]
     let account = account
 
@@ -103,5 +103,5 @@ type BlobValue =
     /// <param name="account">AWS S3 account.</param>
     /// <param name="container">Bucket to blob.</param>
     /// <param name="path">Blob key.</param>
-    static member Define<'T>(account : AwsS3Account, bucketName : string, key : string) = 
+    static member Define<'T>(account : AwsAccount, bucketName : string, key : string) = 
         new BlobValue<'T>(account, bucketName, key)

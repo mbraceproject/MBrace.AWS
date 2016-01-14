@@ -28,7 +28,7 @@ module SqsConstants =
 
 [<RequireQualifiedAccess>]
 module Sqs =
-    let enqueue (account : AwsSQSAccount) queueUri msgBody = async {
+    let enqueue (account : AwsAccount) queueUri msgBody = async {
         let req = SendMessageRequest(QueueUrl = queueUri, MessageBody = msgBody)
         let! ct = Async.CancellationToken
         do! account.SQSClient.SendMessageAsync(req, ct) 
@@ -41,7 +41,7 @@ module Sqs =
             Id = Guid.NewGuid().ToString(),
             MessageBody = msgBody)
 
-    let enqueueBatch (account : AwsSQSAccount) queueUri msgBodies = async {
+    let enqueueBatch (account : AwsAccount) queueUri msgBodies = async {
         let groups = 
             msgBodies 
             |> Seq.map toBatchEntry
@@ -60,7 +60,7 @@ module Sqs =
                 |> Async.Ignore
     }
 
-    let private dequeueInternal (account : AwsSQSAccount) queueUri (timeout : int option) = async {
+    let private dequeueInternal (account : AwsAccount) queueUri (timeout : int option) = async {
         let timeout = defaultArg timeout SqsConstants.maxWaitTime
         let req = ReceiveMessageRequest(QueueUrl = queueUri)
         req.MaxNumberOfMessages <- 1
@@ -77,7 +77,7 @@ module Sqs =
         else return None
     }
 
-    let dequeue (account : AwsSQSAccount) queueUri (timeout : int option) = async {
+    let dequeue (account : AwsAccount) queueUri (timeout : int option) = async {
         let! msg = dequeueInternal account queueUri timeout
 
         match msg with
@@ -85,7 +85,7 @@ module Sqs =
         | _ -> return None
     }
 
-    let dequeueWithAttributes (account : AwsSQSAccount) queueUri (timeout : int option) = async {
+    let dequeueWithAttributes (account : AwsAccount) queueUri (timeout : int option) = async {
         let! msg = dequeueInternal account queueUri timeout
 
         match msg with
@@ -93,7 +93,7 @@ module Sqs =
         | _ -> return None
     }
 
-    let dequeueBatch (account : AwsSQSAccount) queueUri = async {
+    let dequeueBatch (account : AwsAccount) queueUri = async {
         let req = ReceiveMessageRequest(QueueUrl = queueUri)
         req.MaxNumberOfMessages <- SqsConstants.maxRecvCount
         
@@ -105,7 +105,7 @@ module Sqs =
                |> Seq.toArray
     }
 
-    let dequeueAll (account : AwsSQSAccount) queueUri = async {
+    let dequeueAll (account : AwsAccount) queueUri = async {
         let msgs = ResizeArray<string>()
 
         // because of the way SQS works, you can get empty receive
@@ -128,7 +128,7 @@ module Sqs =
         return msgs.ToArray()
     }
 
-    let getCount (account : AwsSQSAccount) queueUri = async {
+    let getCount (account : AwsAccount) queueUri = async {
         let req = GetQueueAttributesRequest(QueueUrl = queueUri)
         let attrName = QueueAttributeName.ApproximateNumberOfMessages.Value
         req.AttributeNames.Add(attrName)
@@ -139,7 +139,7 @@ module Sqs =
         return int64 res.ApproximateNumberOfMessages
     }
 
-    let deleteQueue (account : AwsSQSAccount) queueUri = async {
+    let deleteQueue (account : AwsAccount) queueUri = async {
         let req = DeleteQueueRequest(QueueUrl = queueUri)
         let! ct = Async.CancellationToken
         do! account.SQSClient.DeleteQueueAsync(req, ct)
@@ -147,7 +147,7 @@ module Sqs =
             |> Async.Ignore
     }
 
-    let tryGetQueueUri (account : AwsSQSAccount) queueName = async {
+    let tryGetQueueUri (account : AwsAccount) queueName = async {
         let req  = GetQueueUrlRequest(QueueName = queueName)
         let! ct  = Async.CancellationToken
         let! res = account.SQSClient.GetQueueUrlAsync(req, ct)
@@ -159,14 +159,14 @@ module Sqs =
         | Choice2Of2 exn -> return! Async.Raise exn
     }
 
-    let doesQueueExist (account : AwsSQSAccount) queueName = async {
+    let doesQueueExist (account : AwsAccount) queueName = async {
         let! queueUri = tryGetQueueUri account queueName
         match queueUri with
         | Some _ -> return true
         | _      -> return false
     }
 
-    let createQueue (account : AwsSQSAccount) queueName = async {
+    let createQueue (account : AwsAccount) queueName = async {
         let req  = CreateQueueRequest(QueueName = queueName)
         let! ct  = Async.CancellationToken
         let! res = account.SQSClient.CreateQueueAsync(req, ct)
@@ -174,7 +174,7 @@ module Sqs =
         return res.QueueUrl
     }
 
-    let createIfNotExist (account : AwsSQSAccount) queueName = async {
+    let createIfNotExist (account : AwsAccount) queueName = async {
         let! queueUri = tryGetQueueUri account queueName
         match queueUri with
         | Some queueUri -> return queueUri

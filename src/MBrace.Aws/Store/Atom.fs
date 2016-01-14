@@ -52,7 +52,7 @@ module private DynamoDBAtomUtils =
 [<AutoSerializable(true) ; Sealed; DataContract>]
 type DynamoDBAtom<'T> internal 
         (tableName : string, 
-         account   : AwsDynamoDBAccount,
+         account   : AwsAccount,
          hashKey   : string) =
     [<DataMember(Name = "DynamoDBAccount")>]
     let account = account
@@ -171,7 +171,7 @@ type DynamoDBAtom<'T> internal
 /// CloudAtom provider implementation on top of Amazon DynamoDB.
 [<Sealed; DataContract>]
 type DynamoDBAtomProvider private 
-        (account : AwsDynamoDBAccount, 
+        (account : AwsAccount, 
          defaultTable : string) =
     [<DataMember(Name = "Account")>]
     let account = account
@@ -183,7 +183,7 @@ type DynamoDBAtomProvider private
     /// connects to provided DynamoDB table.
     /// </summary>
     static member Create 
-            (account : AwsDynamoDBAccount, 
+            (account : AwsAccount, 
              ?defaultTable : string) =
         let defaultTable = 
             match defaultTable with

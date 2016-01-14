@@ -15,7 +15,7 @@ open MBrace.Aws.Runtime.Utilities
 
 /// CloudQueue implementation on top of Amazon SQS
 [<AutoSerializable(true) ; Sealed; DataContract>]
-type SQSQueue<'T> internal (queueUri, account : AwsSQSAccount) =
+type SQSQueue<'T> internal (queueUri, account : AwsAccount) =
     [<DataMember(Name = "Account")>]
     let account = account
 

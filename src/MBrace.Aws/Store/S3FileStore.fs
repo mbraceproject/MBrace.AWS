@@ -35,7 +35,7 @@ open MBrace.Aws.Runtime
 ///  MBrace File Store implementation that uses Amazon S3 as backend.
 [<Sealed; DataContract>]
 type S3FileStore private 
-        (account    : AwsS3Account, 
+        (account    : AwsAccount, 
          bucketName : string, 
          defaultDir : string) =
     [<DataMember(Name = "S3Account")>]

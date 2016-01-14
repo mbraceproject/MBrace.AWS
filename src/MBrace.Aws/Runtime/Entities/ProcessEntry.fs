@@ -232,7 +232,7 @@ type internal CloudProcessEntry
                     | WorkItemStatus.Dequeued
                     | WorkItemStatus.Started   -> (a + 1, c, f)
                     | WorkItemStatus.Completed -> (a, c + 1, f)
-                    | _ as s -> failwith "Invalid WorkItemStatus %A" s) (0, 0, 0)
+                    | _ as s -> failwithf "Invalid WorkItemStatus %A" s) (0, 0, 0)
 
             return 
                 { 
