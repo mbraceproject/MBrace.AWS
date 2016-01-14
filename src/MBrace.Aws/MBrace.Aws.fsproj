@@ -64,6 +64,7 @@
     <Compile Include="Configuration\Accounts.fs" />
     <Compile Include="Configuration\Validation.fs" />
     <Compile Include="Utilities\Utils.fs" />
+    <Compile Include="Utilities\S3Utils.fs" />
     <Compile Include="Utilities\BlobValue.fs" />
     <Compile Include="Utilities\Table.fs" />
     <Compile Include="Utilities\Sqs.fs" />

@@ -10,28 +10,6 @@ open Amazon.S3.Model
 open MBrace.Core.Internals
 open MBrace.Aws.Runtime
 
-//[<Sealed>]
-//type internal S3WriteStream () =
-//    inherit Stream()
-//
-//    let inner = new MemoryStream()
-//
-//    override __.CanRead    = false
-//    override __.CanSeek    = false
-//    override __.CanWrite   = true
-//    override __.CanTimeout = true
-//
-//    override __.Length = inner.Length
-//    override __.Position 
-//        with get () = inner.Position 
-//        and  set x  = inner.Position <- x
-//
-//    override __.SetLength _ = raise <| NotSupportedException()
-//    override __.Seek (_, _) = raise <| NotSupportedException()
-//    override __.Read (_, _, _) = raise <| NotSupportedException()
-//    override __.Write (buffer, offset, count) = inner.Write(buffer, offset, count)
-//    override __.Flush() = inner.Flush()
-
 ///  MBrace File Store implementation that uses Amazon S3 as backend.
 [<Sealed; DataContract>]
 type S3FileStore private 
