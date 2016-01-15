@@ -5,9 +5,11 @@ open System.Net
 open System.IO
 open System.Threading
 open System.Threading.Tasks
+open System.Text.RegularExpressions
 
 open MBrace.Core.Internals
 open MBrace.Runtime.Utils
+open MBrace.Aws.Runtime
 
 open Amazon.S3
 open Amazon.S3.Model
@@ -15,8 +17,95 @@ open Amazon.S3.Model
 [<AutoOpen>]
 module S3Utils =
 
+    let private s3Regex = new Regex("^\s*/([^/]*)/?(.*)", RegexOptions.Compiled)
+    let private s3UriRegex = new Regex("^\s*s3://([^/]+)/?(.*)", RegexOptions.Compiled)
+    let private s3ArnRegex = new Regex("^\s*arn:aws:s3:::([^/]+)/?(.*)", RegexOptions.Compiled)
+    let private directoryNameRegex = new Regex("^(.*)[^/]+$", RegexOptions.Compiled ||| RegexOptions.RightToLeft)
+    let private fileNameRegex = new Regex("[^/]*$", RegexOptions.Compiled)
+    let private lastFolderRegex = new Regex("([^/]*)/[^/]*$", RegexOptions.Compiled)
+
+    type S3Path = { Bucket : string ; Key : string }
+    with
+        member p.FullPath = 
+            if String.IsNullOrEmpty p.Key then "/" + p.Bucket
+            else
+                sprintf "/%s/%s" p.Bucket p.Key
+
+        member p.IsBucket = String.IsNullOrEmpty p.Key
+        member p.IsRoot = String.IsNullOrEmpty p.Bucket
+        member p.IsObject = not(p.IsRoot || p.IsBucket)
+
+        static member TryParse (path : string, ?forceKeyNameGuidelines : bool, ?asDirectory : bool) =
+            let forceKeyNameGuidelines = defaultArg forceKeyNameGuidelines false
+            let asDirectory = defaultArg asDirectory false
+            let inline extractResult (m : Match) =
+                let bucketName = m.Groups.[1].Value
+                let keyName = m.Groups.[2].Value
+                if not (String.IsNullOrEmpty bucketName || Validate.tryBucketName bucketName) then None
+                elif not (String.IsNullOrEmpty keyName || Validate.tryKeyName forceKeyNameGuidelines keyName) then None
+                else
+                    Some { Bucket = bucketName ; Key = if asDirectory && keyName <> "" && not <| keyName.EndsWith "/" then keyName + "/" else keyName  }
+                
+            let m = s3Regex.Match path
+            if m.Success then extractResult m else
+            
+            let m = s3UriRegex.Match path
+            if m.Success then extractResult m else
+
+            let m = s3ArnRegex.Match path
+            if m.Success then extractResult m else
+
+            None
+
+        static member Parse(path : string, ?forceKeyNameGuidelines : bool, ?asDirectory : bool) : S3Path =
+            let forceKeyNameGuidelines = defaultArg forceKeyNameGuidelines false
+            let asDirectory = defaultArg asDirectory false
+            let inline extractResult (m : Match) =
+                let bucketName = m.Groups.[1].Value
+                let keyName = m.Groups.[2].Value
+                if not <| String.IsNullOrEmpty bucketName then Validate.bucketName bucketName
+                if not <| String.IsNullOrEmpty keyName then Validate.keyName forceKeyNameGuidelines keyName
+                { Bucket = bucketName ; Key = if asDirectory && keyName <> "" && not <| keyName.EndsWith "/" then keyName + "/" else keyName }
+
+            let m = s3Regex.Match path
+            if m.Success then extractResult m else
+            
+            let m = s3UriRegex.Match path
+            if m.Success then extractResult m else
+
+            let m = s3ArnRegex.Match path
+            if m.Success then extractResult m else
+
+            invalidArg "path" <| sprintf "Invalid S3 path format '%s'." path
+
+        static member Combine([<ParamArray>]paths : string []) = 
+            let acc = new ResizeArray<string>()
+            for path in paths do
+                if path.StartsWith "/" || path.StartsWith "s3://" || path.StartsWith "arn:aws:s3:::" then acc.Clear()
+                elif acc.Count > 0 && not <| acc.[acc.Count - 1].EndsWith "/" then acc.Add "/"
+                acc.Add path
+
+            String.concat "" acc
+
+        static member Normalize(path : string) = S3Path.Parse(path).FullPath
+
+        static member GetDirectoryName(path : string) = 
+            let m = directoryNameRegex.Match path
+            if m.Success then m.Groups.[1].Value
+            elif path.Contains "/" then path
+            else ""
+
+        static member GetFileName(path : string) =
+            let m = fileNameRegex.Match path
+            if m.Success then m.Groups.[0].Value else ""
+
+        static member GetFolderName(path : string) =
+            let m = lastFolderRegex.Match path
+            if m.Success then m.Groups.[1].Value else ""
+
+
     [<Sealed; AutoSerializable(false)>]
-    type private S3WriteStream (client : IAmazonS3, bucketName : string, key : string, uploadId : string, timeout : int option) =
+    type private S3WriteStream (client : IAmazonS3, bucketName : string, key : string, uploadId : string, timeout : TimeSpan option) =
         inherit Stream()
 
         static let bufSize = 5 * 1024 * 1024 // 5 MiB : the minimum upload size per non-terminal chunk permited by Amazon
@@ -119,7 +208,7 @@ module S3Utils =
         /// <param name="bucketName"></param>
         /// <param name="key"></param>
         /// <param name="timeout"></param>
-        member s3.GetObjectWriteStreamAsync(bucketName : string, key : string, ?timeout : int) : Async<Stream> = async {
+        member s3.GetObjectWriteStreamAsync(bucketName : string, key : string, ?timeout : TimeSpan) : Async<Stream> = async {
             let request = new InitiateMultipartUploadRequest(BucketName = bucketName, Key = key)
             let! response = s3.InitiateMultipartUploadAsync(request) |> Async.AwaitTaskCorrect
             return new S3WriteStream(s3, bucketName, key, response.UploadId, timeout) :> Stream
