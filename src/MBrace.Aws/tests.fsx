@@ -27,7 +27,7 @@ let run x = Async.RunSynchronously x
 
 let clearBuckets() = async {
     let! buckets = store.EnumerateDirectories "/"
-    let! _ = buckets |> Seq.map (fun b -> store.DeleteDirectory(b,true)) |> Async.Parallel
+    let! _ = buckets |> Seq.filter (fun b -> b.StartsWith "/mbrace") |> Seq.map (fun b -> store.DeleteDirectory(b,true)) |> Async.Parallel
     return ()
 }
 
