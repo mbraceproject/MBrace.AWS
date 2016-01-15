@@ -1,2 +1,7 @@
 NUnit
-NUnit.Runners
+MBrace.Core
+MBrace.Runtime
+MBrace.Tests
+AWSSDK.S3
+AWSSDK.DynamoDBv2
+AWSSDK.SQS

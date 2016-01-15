@@ -1,1 +1,0 @@
-module MBrace.Aws.Tests
