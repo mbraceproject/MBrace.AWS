@@ -197,7 +197,7 @@ module S3Utils =
             position <- position + int64 (count - offset)
             
         override __.Flush() = ()
-        override __.Close() = checkClosed() ; Async.RunSynchronously(close(), cancellationToken = cts.Token)
+        override __.Close() = if not isClosed then Async.RunSynchronously(close(), cancellationToken = cts.Token)
 
 
     type IAmazonS3 with
