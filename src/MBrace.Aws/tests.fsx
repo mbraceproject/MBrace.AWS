@@ -4,6 +4,7 @@
 #r "AWSSDK.S3.dll"
 #r "AWSSDK.DynamoDBv2.dll"
 #r "AWSSDK.SQS.dll"
+#r "MBrace.Core.dll"
 #r "MBrace.Runtime.dll"
 #r "MBrace.Aws.dll"
 
@@ -14,20 +15,20 @@ open Amazon.S3
 open Amazon.SQS
 open Amazon.DynamoDBv2
 
-open Nessos.FsPickler
+open MBrace.Core
+open MBrace.Core.Internals
 open MBrace.Aws.Runtime
+open MBrace.Aws.Store
 
-let clone x = FsPickler.Clone x
+let account = AwsAccount.Create("Default", RegionEndpoint.EUCentral1)
+let store = S3FileStore.Create(account) :> ICloudFileStore
 
+let run x = Async.RunSynchronously x
 
-let account = AwsAccount.Create("eirik-nessos", RegionEndpoint.EUCentral1)
+let clearBuckets() = async {
+    let! buckets = store.EnumerateDirectories "/"
+    let! _ = buckets |> Seq.map (fun b -> store.DeleteDirectory(b,true)) |> Async.Parallel
+    return ()
+}
 
-let buckets = account.S3Client.ListBuckets().Buckets |> Seq.toArray
-
-let buck = buckets.[0]
-
-buck.BucketName
-
-let account' = clone account
-
-obj.ReferenceEquals(account.S3Client, account'.S3Client)
+clearBuckets() |> run
