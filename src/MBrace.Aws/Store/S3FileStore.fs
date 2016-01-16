@@ -272,12 +272,12 @@ type S3FileStore private (account : AwsAccount, defaultBucket : string) =
             let s3p = normalize false path
             if not <| s3p.IsObject then invalidArg "path" <| sprintf "path '%s' is not a valid S3 object." path
             do! ensureBucketExists s3p
-            let! metaRes = getObjMetadata account s3p // hmmmm
             let! result = async {
                 use! stream = account.S3Client.GetObjectWriteStreamAsync(s3p.Bucket, s3p.Key, timeout = TimeSpan.FromMinutes(40.))
                 return! writer stream
             }
             
+            let! metaRes = getObjMetadata account s3p // hmmmm
             return metaRes.ETag, result
         }
         
