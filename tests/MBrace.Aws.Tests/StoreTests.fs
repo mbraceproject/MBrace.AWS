@@ -23,7 +23,7 @@ type ``Local S3 FileStore Tests`` () =
     let account = AwsAccount.Create("Default", RegionEndpoint.EUCentral1)
     let s3Store = S3FileStore.Create(account)
     let serializer = new FsPicklerBinarySerializer(useVagabond = false)
-    let imem = ThreadPoolRuntime.Create(fileStore = s3Store, serializer = serializer, memoryEmulation = MemoryEmulation.Copied)
+    let imem = ThreadPoolRuntime.Create(fileStore = s3Store, serializer = serializer, memoryEmulation = MemoryEmulation.Shared)
 
     override __.FileStore = s3Store :> _
     override __.Serializer = serializer :> _

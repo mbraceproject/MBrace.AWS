@@ -17,7 +17,7 @@ module private S3FileStoreImpl =
 
     let emptyProps : IDictionary<string, obj> = dict []
 
-    let getRandomBucketName() = "/mbrace" + Guid.NewGuid().ToString("N")
+    let getRandomBucketName() =  sprintf "/mbrace%s/" <| Guid.NewGuid().ToString("N")
 
     let getObjMetadata (account : AwsAccount) (path : S3Path) = async {
         let req = GetObjectMetadataRequest(BucketName = path.Bucket , Key = path.Key)
