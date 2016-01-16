@@ -61,9 +61,14 @@ type S3FileStore private (account : AwsAccount, defaultBucket : string) =
         | Some p -> p
         | None -> let cp = S3Path.Combine(defaultBucket, path) in S3Path.Parse(cp, asDirectory = asDirectory)
 
-    let ensureBucketExists (s3p : S3Path) = async {
+    let bucketExists (s3p : S3Path) = async {
         let! listed = account.S3Client.ListBucketsAsync() |> Async.AwaitTaskCorrect
-        if listed.Buckets |> Seq.exists (fun b -> b.BucketName = s3p.Bucket) |> not then
+        return listed.Buckets |> Seq.exists (fun b -> b.BucketName = s3p.Bucket)
+    }
+
+    let ensureBucketExists (s3p : S3Path) = async {
+        let! exists = bucketExists s3p
+        if not exists then
             let! ct = Async.CancellationToken
             let! _result = account.S3Client.PutBucketAsync(s3p.Bucket, ct) |> Async.AwaitTaskCorrect
             return ()
@@ -95,8 +100,9 @@ type S3FileStore private (account : AwsAccount, defaultBucket : string) =
 
         member __.DirectoryExists(directory : string) = async {
             let s3Path = normalize true directory
-            if s3Path.IsRoot then return true
-            elif not <| account.S3Client.DoesS3BucketExist s3Path.Bucket then return false
+            if s3Path.IsRoot then return true else
+            let! bucketExists = bucketExists s3Path
+            if not bucketExists then return false
             elif s3Path.IsBucket then return true
             else
                 let req = ListObjectsRequest(BucketName = s3Path.Bucket, Prefix = s3Path.Key)

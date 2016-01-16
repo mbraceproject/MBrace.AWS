@@ -32,3 +32,10 @@ let clearBuckets() = async {
 }
 
 clearBuckets() |> run
+
+let dir = store.GetRandomDirectoryName()
+store.DirectoryExists dir |> run
+store.CreateDirectory dir |> run
+store.DirectoryExists dir |> run
+
+store.EnumerateDirectories "/" |> run
