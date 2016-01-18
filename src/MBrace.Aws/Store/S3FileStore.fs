@@ -131,39 +131,52 @@ type S3FileStore private (account : AwsAccount, defaultBucket : string) =
             if s3p.IsRoot then return invalidOp "cannot delete the root folder."
 
             let! ct = Async.CancellationToken
-            let! response = account.S3Client.ListObjectsAsync(s3p.Bucket, prefix = s3p.Key, cancellationToken = ct) |> Async.AwaitTask
 
-            do! response.S3Objects
-                |> Seq.map (fun obj -> S3Path.Combine("/", s3p.Bucket, obj.Key))
-                |> Seq.map (this :> ICloudFileStore).DeleteFile
-                |> Async.Parallel
-                |> Async.Ignore
+            try 
+                let! response = account.S3Client.ListObjectsAsync(s3p.Bucket, prefix = s3p.Key, cancellationToken = ct) |> Async.AwaitTask
 
-            if s3p.IsBucket then
-                let! _ = account.S3Client.DeleteBucketAsync s3p.Bucket |> Async.AwaitTaskCorrect
-                return ()
+                do! response.S3Objects
+                    |> Seq.map (fun obj -> S3Path.Combine("/", s3p.Bucket, obj.Key))
+                    |> Seq.map (this :> ICloudFileStore).DeleteFile
+                    |> Async.Parallel
+                    |> Async.Ignore
+
+                if s3p.IsBucket then
+                    let! _ = account.S3Client.DeleteBucketAsync s3p.Bucket |> Async.AwaitTaskCorrect
+                    return ()
+
+            with e when StoreException.NotFound e ->
+                return raise <| new DirectoryNotFoundException(directory, e)
         }
 
         member __.EnumerateDirectories(directory : string) = async {
             let s3p = normalize true directory
-            if s3p.IsRoot then 
-                let! ct = Async.CancellationToken
-                let! listed = account.S3Client.ListBucketsAsync(ct) |> Async.AwaitTaskCorrect
-                return listed.Buckets |> Seq.map (fun b -> "/" + b.BucketName) |> Seq.toArray
-            else
-                return! enumerateDir account s3p (fun res -> res.CommonPrefixes |> Seq.map (fun p -> S3Path.Combine("/", s3p.Bucket, p)))
+            try 
+                if s3p.IsRoot then 
+                    let! ct = Async.CancellationToken
+                    let! listed = account.S3Client.ListBucketsAsync(ct) |> Async.AwaitTaskCorrect
+                    return listed.Buckets |> Seq.map (fun b -> sprintf "/%s/" b.BucketName) |> Seq.toArray
+                else
+                    return! enumerateDir account s3p (fun res -> res.CommonPrefixes |> Seq.map (fun p -> S3Path.Combine("/", s3p.Bucket, p)))
+
+            with e when StoreException.NotFound e ->
+                return raise <| new DirectoryNotFoundException(directory, e)
         }
 
         member __.EnumerateFiles(directory : string) = async {
             let s3p = normalize true directory
             if s3p.IsRoot then return [||] else
 
-            let map (res : ListObjectsResponse) =
-                res.S3Objects 
-                |> Seq.filter (fun obj -> not (String.IsNullOrEmpty obj.Key || obj.Key.EndsWith "/"))
-                |> Seq.map (fun obj -> S3Path.Combine("/", s3p.Bucket, obj.Key))
+            try
+                let map (res : ListObjectsResponse) =
+                    res.S3Objects 
+                    |> Seq.filter (fun obj -> not (String.IsNullOrEmpty obj.Key || obj.Key.EndsWith "/"))
+                    |> Seq.map (fun obj -> S3Path.Combine("/", s3p.Bucket, obj.Key))
 
-            return! enumerateDir account s3p map
+                return! enumerateDir account s3p map
+
+            with e when StoreException.NotFound e -> 
+                return raise <| new DirectoryNotFoundException(directory, e)
         }
 
         //#endregion
@@ -177,29 +190,41 @@ type S3FileStore private (account : AwsAccount, defaultBucket : string) =
             if not <| s3p.IsObject then invalidArg "path" <| sprintf "path '%s' is not a valid S3 object." path
             let req = DeleteObjectRequest(BucketName = s3p.Bucket, Key = s3p.Key)
             let! ct = Async.CancellationToken
-            do! account.S3Client.DeleteObjectAsync(req, ct) 
-                |> Async.AwaitTaskCorrect
-                |> Async.Ignore
+            try
+                do! account.S3Client.DeleteObjectAsync(req, ct) 
+                    |> Async.AwaitTaskCorrect
+                    |> Async.Ignore
+
+            with e when StoreException.NotFound e ->
+                return raise <| new FileNotFoundException(path, e)
         }
         
         member __.DownloadToLocalFile(cloudSourcePath : string, localTargetPath : string) = async {
             let s3p = normalize false cloudSourcePath
             if not <| s3p.IsObject then invalidArg "path" <| sprintf "path '%s' is not a valid S3 object." cloudSourcePath
             let! ct = Async.CancellationToken
-            do! 
-                account.S3Client.DownloadToFilePathAsync(s3p.Bucket, s3p.Key, localTargetPath, emptyProps, ct)
-                |> Async.AwaitTaskCorrect
+            try
+                do! 
+                    account.S3Client.DownloadToFilePathAsync(s3p.Bucket, s3p.Key, localTargetPath, emptyProps, ct)
+                    |> Async.AwaitTaskCorrect
+
+            with e when StoreException.NotFound e ->
+                return raise <| new FileNotFoundException(cloudSourcePath, e)
         }
 
         member __.DownloadToStream(cloudSourcePath : string, stream : Stream) = async {
             let s3p = normalize false cloudSourcePath
             if not <| s3p.IsObject then invalidArg "path" <| sprintf "path '%s' is not a valid S3 object." cloudSourcePath
             let! ct = Async.CancellationToken
-            let! objStream = 
-                account.S3Client.GetObjectStreamAsync(s3p.Bucket, s3p.Key, emptyProps, ct)
-                |> Async.AwaitTaskCorrect
+            try
+                let! objStream = 
+                    account.S3Client.GetObjectStreamAsync(s3p.Bucket, s3p.Key, emptyProps, ct)
+                    |> Async.AwaitTaskCorrect
 
-            do! objStream.CopyToAsync(stream) |> Async.AwaitTaskCorrect
+                do! objStream.CopyToAsync(stream) |> Async.AwaitTaskCorrect
+
+            with e when StoreException.NotFound e ->
+                return raise <| new FileNotFoundException(cloudSourcePath, e)
         }
 
         member this.FileExists(path : string) = async {
@@ -210,15 +235,21 @@ type S3FileStore private (account : AwsAccount, defaultBucket : string) =
         member __.GetFileSize(path : string) = async {
             let s3p = normalize false path
             if not <| s3p.IsObject then invalidArg "path" <| sprintf "path '%s' is not a valid S3 object." path
-            let! res = getObjMetadata account s3p
-            return res.ContentLength
+            let! res = getObjMetadata account s3p |> Async.Catch
+            match res with
+            | Choice1Of2 m -> return m.ContentLength
+            | Choice2Of2 e when StoreException.NotFound e -> return! Async.Raise <| FileNotFoundException(path, e)
+            | Choice2Of2 e -> return! Async.Raise e
         }
 
         member __.GetLastModifiedTime(path : string, _isDirectory : bool) = async {
             let s3p = normalize false path
-            if not <| s3p.IsObject then raise <| new FileNotFoundException()
-            let! res = getObjMetadata account s3p
-            return DateTimeOffset(res.LastModified) // returns UTC datetime kind, so wrapping is safe here
+            if not <| s3p.IsObject then raise <| new FileNotFoundException(path)
+            let! res = getObjMetadata account s3p |> Async.Catch
+            match res with
+            | Choice1Of2 m -> return DateTimeOffset(m.LastModified) // returns UTC datetime kind, so wrapping is safe here
+            | Choice2Of2 e when StoreException.NotFound e -> return! Async.Raise <| FileNotFoundException(path, e)
+            | Choice2Of2 e -> return! Async.Raise e
         }
                 
         member __.IsPathRooted(path : string) = S3Path.TryParse path |> Option.isSome
@@ -236,7 +267,9 @@ type S3FileStore private (account : AwsAccount, defaultBucket : string) =
 
             match res with
             | Choice1Of2 res -> return Some res
-            | _ -> return None
+            | Choice2Of2 e when StoreException.PreconditionFailed e -> return None
+            | Choice2Of2 e when StoreException.NotFound e -> return raise <| new FileNotFoundException(path, e)
+            | Choice2Of2 e -> return! Async.Raise e
         }
         
         member __.TryGetETag(path : string) = async {
@@ -245,7 +278,8 @@ type S3FileStore private (account : AwsAccount, defaultBucket : string) =
             let! res = getObjMetadata account s3p |> Async.Catch
             match res with
             | Choice1Of2 res -> return Some res.ETag
-            | _ -> return None
+            | Choice2Of2 e when StoreException.NotFound e -> return None
+            | Choice2Of2 e -> return! Async.Raise e
         }
 
         member __.UploadFromLocalFile(localSourcePath : string, cloudTargetPath : string) = async {
@@ -288,9 +322,13 @@ type S3FileStore private (account : AwsAccount, defaultBucket : string) =
         member __.BeginRead(path : string) = async {
             let s3p = normalize false path
             if not <| s3p.IsObject then invalidArg "path" <| sprintf "path '%s' is not a valid S3 object." path
-            return! 
-                account.S3Client.GetObjectStreamAsync(s3p.Bucket, s3p.Key, emptyProps) 
-                |> Async.AwaitTaskCorrect
+            try
+                return! 
+                    account.S3Client.GetObjectStreamAsync(s3p.Bucket, s3p.Key, emptyProps) 
+                    |> Async.AwaitTaskCorrect
+
+            with e when StoreException.NotFound e ->
+                return raise <| new FileNotFoundException(path, e)
         }
 
         member __.BeginWrite(path : string) = async {

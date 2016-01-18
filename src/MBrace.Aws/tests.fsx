@@ -38,4 +38,14 @@ store.DirectoryExists dir |> run
 store.CreateDirectory dir |> run
 store.DirectoryExists dir |> run
 
-store.EnumerateDirectories "/" |> run
+store.EnumerateDirectories store.RootDirectory |> run
+
+open Amazon.Runtime
+
+let e = try store.BeginRead "/poutses/mple.txt" |> run ; failwith "" with e -> e :?> AmazonServiceException
+
+open System.Net
+
+e.StatusCode
+
+StoreException.NotFound e

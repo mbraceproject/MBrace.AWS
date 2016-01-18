@@ -2,8 +2,11 @@
 
 open System
 open System.IO
+open System.Net
 open System.Text.RegularExpressions
 open System.Threading.Tasks
+
+open Amazon.Runtime
 
 open MBrace.Aws.Runtime
 
@@ -24,6 +27,21 @@ module Utils =
 
     let (|Null|Nullable|) (value : Nullable<'T>) =
         if value.HasValue then Nullable(value.Value) else Null
+
+    [<RequireQualifiedAccess>]
+    module StoreException =
+        let checkExn code (e : exn) =
+            match e with
+            | :? AmazonServiceException as e when e.StatusCode = code -> true
+            | :? AggregateException as e ->
+                match e.InnerException with
+                | :? AmazonServiceException as e when e.StatusCode = code -> true
+                | _ -> false
+            | _ -> false
+    
+        let PreconditionFailed (e : exn) = checkExn HttpStatusCode.PreconditionFailed e
+        let Conflict (e : exn) = checkExn HttpStatusCode.Conflict e
+        let NotFound (e : exn) = checkExn HttpStatusCode.NotFound e
 
     let doIfNotNull f = function
         | Nullable(x) -> f x
