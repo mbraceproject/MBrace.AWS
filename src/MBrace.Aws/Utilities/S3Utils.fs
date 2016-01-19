@@ -115,34 +115,37 @@ module S3Utils =
         let mutable isClosed = false
         let mutable position = 0L
         let mutable i = 0
-        let buffer = bufPool.TakeBuffer(bufSize)
+        let mutable buffer = bufPool.TakeBuffer bufSize
         let uploads = new ResizeArray<Task<UploadPartResponse>>()
 
         let checkClosed() = if isClosed then raise <| new ObjectDisposedException("S3WriteStream")
 
-        let upload (bytes : byte []) (offset : int) (count : int) =
-            let request = 
-                new UploadPartRequest(
-                    BucketName = bucketName, 
-                    Key = key, 
-                    UploadId = uploadId, 
-                    PartNumber = uploads.Count + 1, 
-                    InputStream = new MemoryStream(bytes, offset, count))
+        let upload releaseBuf (bytes : byte []) (offset : int) (count : int) =
+            let request = new UploadPartRequest(
+                                BucketName = bucketName, 
+                                Key = key, 
+                                UploadId = uploadId, 
+                                PartNumber = uploads.Count + 1, 
+                                InputStream = new MemoryStream(bytes, offset, count))
 
             let task = client.UploadPartAsync(request, cts.Token)
+            if releaseBuf then
+                ignore <| task.ContinueWith(fun (_ : Task) -> bufPool.ReturnBuffer bytes)
+
             uploads.Add(task)
 
-        let flush () =
+        let flush isFinalFlush =
             if i > 0 then
-                upload buffer 0 i
-                i <- 0
+                upload true buffer 0 i
+                if not isFinalFlush then 
+                    buffer <- bufPool.TakeBuffer bufSize
+                    i <- 0
 
         let close () = async {
             isClosed <- true
-            flush()
-            if uploads.Count = 0 then upload buffer 0 0
+            flush true
+            if uploads.Count = 0 then upload false buffer 0 0 // part uploads require at least one chunk
             let! results = uploads |> Task.WhenAll |> Async.AwaitTaskCorrect
-            bufPool.ReturnBuffer buffer
             let partETags = results |> Seq.map (fun r -> new PartETag(r.PartNumber, r.ETag))
             let request = 
                 new CompleteMultipartUploadRequest(
@@ -179,23 +182,23 @@ module S3Utils =
         override __.Write (source : byte [], offset : int, count : int) =
             checkClosed()
             if offset < 0 || count < 0 || offset + count > source.Length then raise <| ArgumentOutOfRangeException()
-            elif i + count < bufSize then
-                Buffer.BlockCopy(source, offset, buffer, i, count)
-                i <- i + count
-            elif i = 0 then
-                upload source offset count
-            else
+
+            let mutable offset = offset
+            let mutable count = count
+
+            while i + count >= bufSize do
                 let k = bufSize - i
                 Buffer.BlockCopy(source, offset, buffer, i, k)
                 i <- bufSize
-                flush()
-                if count - k < bufSize then
-                    Buffer.BlockCopy(source, offset + k, buffer, 0, count - k)
-                    i <- count - k
-                else
-                    upload source (offset + k) (count - k)
+                offset <- offset + k
+                count <- count - k
+                position <- position + int64 k
+                flush false
 
-            position <- position + int64 (count - offset)
+            if count > 0 then
+                Buffer.BlockCopy(source, offset, buffer, i, count)
+                position <- position + int64 count
+                i <- i + count
             
         override __.Flush() = ()
         override __.Close() = if not isClosed then Async.RunSynchronously(close(), cancellationToken = cts.Token)
