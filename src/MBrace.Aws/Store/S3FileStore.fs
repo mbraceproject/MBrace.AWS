@@ -279,16 +279,16 @@ type S3FileStore private (account : AwsAccount, defaultBucket : string) =
         member __.ReadETag(path : string, etag : string) = async {
             let s3p = normalize false path
             if not <| s3p.IsObject then invalidArg "path" <| sprintf "path '%s' is not a valid S3 object." path
-            let props = dict [("IfMatch", box etag)]
 
             let! ct = Async.CancellationToken
+            let req = new GetObjectRequest(BucketName = s3p.Bucket, Key = s3p.Key, EtagToMatch = etag)
             let! res = 
-                account.S3Client.GetObjectStreamAsync(s3p.Bucket, path, props, ct) 
+                account.S3Client.GetObjectAsync(req, ct) 
                 |> Async.AwaitTaskCorrect
                 |> Async.Catch
 
             match res with
-            | Choice1Of2 res -> return Some res
+            | Choice1Of2 res -> return Some res.ResponseStream
             | Choice2Of2 e when StoreException.PreconditionFailed e -> return None
             | Choice2Of2 e when StoreException.NotFound e -> return raise <| new FileNotFoundException(path, e)
             | Choice2Of2 e -> return! Async.Raise e
