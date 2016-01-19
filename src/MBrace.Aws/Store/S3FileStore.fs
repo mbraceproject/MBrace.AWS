@@ -9,6 +9,7 @@ open System.Runtime.Serialization
 open Amazon.S3.Model
 
 open MBrace.Core.Internals
+open MBrace.Runtime.Utils.Retry
 open MBrace.Aws.Runtime
 open MBrace.Aws.Runtime.Utilities
 
@@ -16,6 +17,11 @@ open MBrace.Aws.Runtime.Utilities
 module private S3FileStoreImpl =
 
     let emptyProps : IDictionary<string, obj> = dict []
+
+    let conflictRetryPolicy =
+        Policy(fun retries exn -> 
+            if StoreException.Conflict exn && retries < 5 then Some (TimeSpan.FromSeconds 2.) 
+            else None)
 
     let getRandomBucketName() =  sprintf "/mbrace%s/" <| Guid.NewGuid().ToString("N")
 
@@ -62,17 +68,19 @@ type S3FileStore private (account : AwsAccount, defaultBucket : string) =
         | None -> let cp = S3Path.Combine(defaultBucket, path) in S3Path.Parse(cp, asDirectory = asDirectory)
 
     let bucketExists (s3p : S3Path) = async {
-        let! listed = account.S3Client.ListBucketsAsync() |> Async.AwaitTaskCorrect
+        let! ct = Async.CancellationToken
+        let! listed = account.S3Client.ListBucketsAsync(ct) |> Async.AwaitTaskCorrect
         return listed.Buckets |> Seq.exists (fun b -> b.BucketName = s3p.Bucket)
     }
 
-    let ensureBucketExists (s3p : S3Path) = async {
-        let! exists = bucketExists s3p
-        if not exists then
-            let! ct = Async.CancellationToken
-            let! _result = account.S3Client.PutBucketAsync(s3p.Bucket, ct) |> Async.AwaitTaskCorrect
-            return ()
-    }
+    let ensureBucketExists (s3p : S3Path) = 
+        retryAsync conflictRetryPolicy <| async {
+            let! exists = bucketExists s3p
+            if not exists then
+                let! ct = Async.CancellationToken
+                let! _result = account.S3Client.PutBucketAsync(s3p.Bucket, ct) |> Async.AwaitTaskCorrect
+                return ()
+        }
 
     /// <summary>
     ///     Creates an MBrace CloudFileStore implementation targeting Amazon S3s
