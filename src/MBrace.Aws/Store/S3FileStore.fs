@@ -79,7 +79,16 @@ type S3FileStore private (account : AwsAccount, defaultBucket : string) =
             if not exists then
                 let! ct = Async.CancellationToken
                 let! _result = account.S3Client.PutBucketAsync(s3p.Bucket, ct) |> Async.AwaitTaskCorrect
-                return ()
+                let rec await n = async {
+                    let! exists = bucketExists s3p
+                    if not exists && n > 0 then
+                        do! Async.Sleep 1000
+                        return! await (n-1)
+                    else
+                        Console.WriteLine "CREATED"
+                }
+
+                do! await 1000
         }
 
     /// <summary>
