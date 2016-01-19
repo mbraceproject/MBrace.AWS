@@ -140,8 +140,9 @@ module S3Utils =
         let close () = async {
             isClosed <- true
             flush()
-            bufPool.ReturnBuffer buffer
+            if uploads.Count = 0 then upload buffer 0 0
             let! results = uploads |> Task.WhenAll |> Async.AwaitTaskCorrect
+            bufPool.ReturnBuffer buffer
             let partETags = results |> Seq.map (fun r -> new PartETag(r.PartNumber, r.ETag))
             let request = 
                 new CompleteMultipartUploadRequest(

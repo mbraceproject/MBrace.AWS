@@ -39,3 +39,12 @@ store.CreateDirectory dir |> run
 store.DirectoryExists dir |> run
 
 store.EnumerateDirectories store.RootDirectory |> run
+
+
+let files = [for i in 1 .. 10 -> store.Combine(dir, sprintf "file-%d" i)]
+
+files |> Seq.map (fun f -> async { use! s = store.BeginWrite f in s.WriteByte 1uy}) |> Async.Parallel |> run
+
+account.S3Client.DeleteObject("mbrace34f3d50021d64666a9815b617410891f", "poutsa")
+
+store.EnumerateFiles dir |> run

@@ -1,11 +1,13 @@
 ﻿namespace MBrace.Aws.Store
 
 open System
-open System.Text.RegularExpressions
 open System.Collections.Generic
+open System.Net
 open System.IO
 open System.Runtime.Serialization
+open System.Text.RegularExpressions
 
+open Amazon.S3
 open Amazon.S3.Model
 
 open MBrace.Core.Internals
@@ -18,10 +20,12 @@ module private S3FileStoreImpl =
 
     let emptyProps : IDictionary<string, obj> = dict []
 
-    let conflictRetryPolicy =
+    let bucketRetryPolicy =
         Policy(fun retries exn -> 
-            if StoreException.Conflict exn && retries < 5 then Some (TimeSpan.FromSeconds 2.) 
-            else None)
+            match exn with
+            | :? AmazonS3Exception as e when e.StatusCode = HttpStatusCode.Conflict && retries < 10 -> Some (TimeSpan.FromSeconds 2.)
+            | :? AmazonS3Exception as e when e.StatusCode = HttpStatusCode.NotFound && e.Message.Contains "bucket" && retries < 10 -> Some (TimeSpan.FromSeconds 2.)
+            | _ -> None)
 
     let getRandomBucketName() =  sprintf "/mbrace%s/" <| Guid.NewGuid().ToString("N")
 
@@ -67,28 +71,24 @@ type S3FileStore private (account : AwsAccount, defaultBucket : string) =
         | Some p -> p
         | None -> let cp = S3Path.Combine(defaultBucket, path) in S3Path.Parse(cp, asDirectory = asDirectory)
 
-    let bucketExists (s3p : S3Path) = async {
+    let tryGetBucket (s3p : S3Path) = async {
         let! ct = Async.CancellationToken
         let! listed = account.S3Client.ListBucketsAsync(ct) |> Async.AwaitTaskCorrect
-        return listed.Buckets |> Seq.exists (fun b -> b.BucketName = s3p.Bucket)
+        return listed.Buckets |> Seq.tryFind (fun b -> b.BucketName = s3p.Bucket)
     }
 
     let ensureBucketExists (s3p : S3Path) = 
-        retryAsync conflictRetryPolicy <| async {
-            let! exists = bucketExists s3p
-            if not exists then
+        retryAsync bucketRetryPolicy <| async {
+            let! buckOpt = tryGetBucket s3p
+            if Option.isNone buckOpt then
                 let! ct = Async.CancellationToken
                 let! _result = account.S3Client.PutBucketAsync(s3p.Bucket, ct) |> Async.AwaitTaskCorrect
-                let rec await n = async {
-                    let! exists = bucketExists s3p
-                    if not exists && n > 0 then
-                        do! Async.Sleep 1000
-                        return! await (n-1)
-                    else
-                        Console.WriteLine "CREATED"
-                }
+                ()
 
-                do! await 1000
+            if buckOpt |> Option.forall (fun b -> DateTime.UtcNow - b.CreationDate < TimeSpan.FromMinutes 1.) then
+                let! ct = Async.CancellationToken
+                let! _ = account.S3Client.DeleteObjectAsync(s3p.Bucket, Guid.NewGuid().ToString("N"), ct)
+                ()
         }
 
     /// <summary>
@@ -118,8 +118,8 @@ type S3FileStore private (account : AwsAccount, defaultBucket : string) =
         member __.DirectoryExists(directory : string) = async {
             let s3Path = normalize true directory
             if s3Path.IsRoot then return true else
-            let! bucketExists = bucketExists s3Path
-            if not bucketExists then return false
+            let! buckOpt = tryGetBucket s3Path
+            if Option.isNone buckOpt then return false
             elif s3Path.IsBucket then return true
             else
                 let req = ListObjectsRequest(BucketName = s3Path.Bucket, Prefix = s3Path.Key)
