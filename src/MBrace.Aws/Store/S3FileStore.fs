@@ -86,11 +86,13 @@ type S3FileStore private (account : AwsAccount, defaultBucket : string) =
                 ()
 
             if buckOpt |> Option.forall (fun b -> (DateTime.UtcNow - b.CreationDate).Duration() < TimeSpan.FromMinutes 1.) then
+                // addresses an issue where S3 erroneously reports that bucket does not exist even if it has been created
+                // the workflow below will typically trigger this error, forcing a retry of the operation after a delay
                 let! ct = Async.CancellationToken
                 let! r1 = account.S3Client.InitiateMultipartUploadAsync(InitiateMultipartUploadRequest(BucketName = s3p.Bucket, Key = Guid.NewGuid().ToString("N")), ct) |> Async.AwaitTaskCorrect
-                let! _r2 = account.S3Client.UploadPartAsync(new UploadPartRequest(BucketName = r1.BucketName, Key = r1.Key, PartNumber = 1, UploadId = r1.UploadId, InputStream = new MemoryStream([||])), ct) |> Async.AwaitTaskCorrect
+                let! _r2 = account.S3Client.UploadPartAsync(UploadPartRequest(BucketName = r1.BucketName, Key = r1.Key, PartNumber = 1, UploadId = r1.UploadId, InputStream = new MemoryStream([||])), ct) |> Async.AwaitTaskCorrect
                 let! _r3 = account.S3Client.AbortMultipartUploadAsync(AbortMultipartUploadRequest(BucketName = r1.BucketName, Key = r1.Key, UploadId = r1.UploadId), ct) |> Async.AwaitTaskCorrect
-//                let! _r3 = account.S3Client.CompleteMultipartUploadAsync(new CompleteMultipartUploadRequest(BucketName = r1.BucketName, Key = r1.Key, UploadId = r1.UploadId, PartETags = ResizeArray [new PartETag(1, _r2.ETag)]), ct) |> Async.AwaitTaskCorrect
+//                let! _r3 = account.S3Client.CompleteMultipartUploadAsync(CompleteMultipartUploadRequest(BucketName = r1.BucketName, Key = r1.Key, UploadId = r1.UploadId, PartETags = ResizeArray [new PartETag(1, _r2.ETag)]), ct) |> Async.AwaitTaskCorrect
                 ()
         }
 
