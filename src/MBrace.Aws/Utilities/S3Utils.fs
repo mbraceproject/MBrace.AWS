@@ -112,13 +112,14 @@ module S3Utils =
         static let bufPool = System.ServiceModel.Channels.BufferManager.CreateBufferManager(256L, bufSize)
 
         let cts = new CancellationTokenSource()
-        let mutable isClosed = false
         let mutable position = 0L
         let mutable i = 0
         let mutable buffer = bufPool.TakeBuffer bufSize
         let uploads = new ResizeArray<Task<UploadPartResponse>>()
 
-        let checkClosed() = if isClosed then raise <| new ObjectDisposedException("S3WriteStream")
+        let mutable isClosed = 0
+        let acquireClose() = Interlocked.CompareExchange(&isClosed, 1, 0) = 0
+        let checkClosed() = if isClosed = 1 then raise <| new ObjectDisposedException("S3WriteStream")
 
         let upload releaseBuf (bytes : byte []) (offset : int) (count : int) =
             let request = new UploadPartRequest(
@@ -142,7 +143,8 @@ module S3Utils =
                     i <- 0
 
         let close () = async {
-            isClosed <- true
+            if not <| acquireClose() then raise <| new ObjectDisposedException("S3WriteStream")
+
             flush true
             if uploads.Count = 0 then upload false buffer 0 0 // part uploads require at least one chunk
             let! results = uploads |> Task.WhenAll |> Async.AwaitTaskCorrect
@@ -160,10 +162,10 @@ module S3Utils =
 
         do 
             match timeout with
-            | None -> ()
             | Some t ->
-                let _ = cts.Token.Register(fun () -> client.AbortMultipartUploadAsync(bucketName, key, uploadId) |> ignore)
+                let _ = cts.Token.Register(fun () -> if acquireClose() then client.AbortMultipartUploadAsync(bucketName, key, uploadId) |> ignore)
                 cts.CancelAfter t
+            | _ -> ()
 
         override __.CanRead    = false
         override __.CanSeek    = false
@@ -201,7 +203,7 @@ module S3Utils =
                 i <- i + count
             
         override __.Flush() = ()
-        override __.Close() = if not isClosed then Async.RunSynchronously(close(), cancellationToken = cts.Token)
+        override __.Close() = Async.RunSync(close(), cancellationToken = cts.Token)
 
 
     type IAmazonS3 with
@@ -213,7 +215,8 @@ module S3Utils =
         /// <param name="key"></param>
         /// <param name="timeout"></param>
         member s3.GetObjectWriteStreamAsync(bucketName : string, key : string, ?timeout : TimeSpan) : Async<Stream> = async {
+            let! ct = Async.CancellationToken
             let request = new InitiateMultipartUploadRequest(BucketName = bucketName, Key = key)
-            let! response = s3.InitiateMultipartUploadAsync(request) |> Async.AwaitTaskCorrect
+            let! response = s3.InitiateMultipartUploadAsync(request, ct) |> Async.AwaitTaskCorrect
             return new S3WriteStream(s3, bucketName, key, response.UploadId, timeout) :> Stream
         }

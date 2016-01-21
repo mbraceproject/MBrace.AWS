@@ -4,6 +4,7 @@
 #r "AWSSDK.S3.dll"
 #r "AWSSDK.DynamoDBv2.dll"
 #r "AWSSDK.SQS.dll"
+#r "Vagabond.dll"
 #r "MBrace.Core.dll"
 #r "MBrace.Runtime.dll"
 #r "MBrace.Aws.dll"
@@ -33,18 +34,32 @@ let clearBuckets() = async {
 
 clearBuckets() |> run
 
-let dir = store.GetRandomDirectoryName()
-store.DirectoryExists dir |> run
-store.CreateDirectory dir |> run
-store.DirectoryExists dir |> run
+/////////////////////
 
-store.EnumerateDirectories store.RootDirectory |> run
+open Amazon.S3
+open Amazon.S3.Model
+open System
+open System.Net
+
+let s3Client = account.S3Client
+
+let rec ensureBucketCreated (bucketName : string) =
+    let r = s3Client.ListBuckets()
+    if r.Buckets |> Seq.exists(fun b -> b.BucketName = bucketName) |> not then
+        let success =
+            try let _ = s3Client.PutBucket(bucketName) in true
+            with :? AmazonS3Exception as e when e.StatusCode = HttpStatusCode.Conflict -> false
+
+        if not success then ensureBucketCreated bucketName
 
 
-let files = [for i in 1 .. 10 -> store.Combine(dir, sprintf "file-%d" i)]
+let test () =
+    let bucketName = "mbrace" + Guid.NewGuid().ToString("N")
+    [|1 .. 100|] |> Array.Parallel.iter (fun _ -> ensureBucketCreated bucketName)
 
-files |> Seq.map (fun f -> async { use! s = store.BeginWrite f in s.WriteByte 1uy}) |> Async.Parallel |> run
+    let resp = s3Client.InitiateMultipartUpload(new InitiateMultipartUploadRequest(BucketName = bucketName, Key = "test"))
+    let resp2 = s3Client.UploadPart(new UploadPartRequest(BucketName = resp.BucketName, Key = resp.Key, PartNumber = 1, UploadId = resp.UploadId, InputStream = new System.IO.MemoryStream([|1uy .. 255uy|])))
+    let resp3 = s3Client.CompleteMultipartUpload(new CompleteMultipartUploadRequest(BucketName = resp.BucketName, Key = resp.Key, UploadId = resp.UploadId, PartETags = new ResizeArray<_>([new PartETag(1, resp2.ETag)])))
+    ()
 
-account.S3Client.DeleteObject("mbrace34f3d50021d64666a9815b617410891f", "poutsa")
-
-store.EnumerateFiles dir |> run
+test ()
