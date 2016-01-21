@@ -105,7 +105,7 @@ module S3Utils =
 
 
     [<Sealed; AutoSerializable(false)>]
-    type private S3WriteStream (client : IAmazonS3, bucketName : string, key : string, uploadId : string, timeout : TimeSpan option) =
+    type S3WriteStream internal (client : IAmazonS3, bucketName : string, key : string, uploadId : string, timeout : TimeSpan option) =
         inherit Stream()
 
         static let bufSize = 5 * 1024 * 1024 // 5 MiB : the minimum upload size per non-terminal chunk permited by Amazon
@@ -115,6 +115,7 @@ module S3Utils =
         let mutable position = 0L
         let mutable i = 0
         let mutable buffer = bufPool.TakeBuffer bufSize
+        let mutable etag : string option = None
         let uploads = new ResizeArray<Task<UploadPartResponse>>()
 
         let mutable isClosed = 0
@@ -156,7 +157,8 @@ module S3Utils =
                     UploadId = uploadId,
                     PartETags = new ResizeArray<_>(partETags))
 
-            let! _ = Async.AwaitTaskCorrect <| client.CompleteMultipartUploadAsync(request, cts.Token)
+            let! response = Async.AwaitTaskCorrect <| client.CompleteMultipartUploadAsync(request, cts.Token)
+            etag <- Some response.ETag
             return ()
         }
 
@@ -209,8 +211,68 @@ module S3Utils =
         override __.Flush() = ()
         override __.Close() = Async.RunSync(close(), cancellationToken = cts.Token)
 
+        /// Abort object write operation
         member __.Abort() = checkClosed() ; abort ()
+        /// Gets the etag of the writen object; must only be called after Close() has completed
+        member __.ETag = Option.get etag
+        member __.CloseAsync() = close()
 
+    [<Sealed; AutoSerializable(false)>]
+    type S3SeekableReadStream internal (client : IAmazonS3, bucketName : string, key : string, length : int64, stream : Stream, timeout : TimeSpan option, etag : string) =
+        inherit Stream()
+
+        let mutable stream = stream
+        let mutable position = 0L
+
+        let mutable isClosed = 0
+        let acquireClose() = Interlocked.CompareExchange(&isClosed, 1, 0) = 0 
+        let checkClosed() = if isClosed = 1 then raise <| new ObjectDisposedException("S3SeekableReadStream")
+
+        static member internal GetRangedStream (client : IAmazonS3) bucket key (index : (int64 * int64) option) (etag : string option) (timeout : TimeSpan option) = async {
+            let req = new GetObjectRequest(BucketName = bucket, Key = key)
+            index |> Option.iter (fun (s,e) -> req.ByteRange <- new ByteRange(s,e))
+            etag |> Option.iter (fun e -> req.EtagToMatch <- e)
+            timeout |> Option.iter (fun t -> req.ResponseExpires <- DateTime.Now + t)
+
+            let! ct = Async.CancellationToken
+            let! res = client.GetObjectAsync(req, ct) |> Async.AwaitTaskCorrect
+            return res
+        }
+        
+        override __.CanRead    = true
+        override __.CanSeek    = true
+        override __.CanWrite   = false
+        override __.CanTimeout = true
+
+        override __.Length = length
+        override __.Position 
+            with get () = position
+            and  set i  = __.Seek(i, SeekOrigin.Begin) |> ignore
+
+        override __.SetLength _ = raise <| NotSupportedException()
+        override __.Seek (i : int64, origin : SeekOrigin) =
+            checkClosed()
+            let start = 
+                match origin with 
+                | SeekOrigin.Begin -> i
+                | SeekOrigin.Current -> position + i
+                | _ -> invalidArg "origin" "not supported SeekOrigin.End"
+
+            stream.Close()
+            let response = S3SeekableReadStream.GetRangedStream client bucketName key (Some(start, length)) (Some etag) timeout |> Async.RunSync
+            stream <- response.ResponseStream
+            position <- start
+            start
+
+        override __.Read (buf, off, cnt) = 
+            let read = stream.Read(buf, off, cnt) 
+            position <- position + int64 read 
+            read
+
+        override __.Write (_, _, _) = raise <| NotSupportedException()
+            
+        override __.Flush() = ()
+        override __.Close() = if acquireClose() then stream.Close()
 
     type IAmazonS3 with
 
@@ -220,9 +282,21 @@ module S3Utils =
         /// <param name="bucketName"></param>
         /// <param name="key"></param>
         /// <param name="timeout"></param>
-        member s3.GetObjectWriteStreamAsync(bucketName : string, key : string, ?timeout : TimeSpan) : Async<Stream> = async {
+        member s3.GetObjectWriteStreamAsync(bucketName : string, key : string, ?timeout : TimeSpan) : Async<S3WriteStream> = async {
             let! ct = Async.CancellationToken
             let request = new InitiateMultipartUploadRequest(BucketName = bucketName, Key = key)
             let! response = s3.InitiateMultipartUploadAsync(request, ct) |> Async.AwaitTaskCorrect
-            return new S3WriteStream(s3, bucketName, key, response.UploadId, timeout) :> Stream
+            return new S3WriteStream(s3, bucketName, key, response.UploadId, timeout)
+        }
+
+        /// <summary>
+        ///     Asynchronously gets a seekable read stream for given uri in S3 storage
+        /// </summary>
+        /// <param name="bucketName"></param>
+        /// <param name="key"></param>
+        /// <param name="timeout"></param>
+        /// <param name="etag"></param>
+        member s3.GetObjectSeekableReadStreamAsync(bucketName : string, key : string, ?timeout : TimeSpan, ?etag : string) : Async<S3SeekableReadStream> = async {
+            let! response = S3SeekableReadStream.GetRangedStream s3 bucketName key None etag timeout
+            return new S3SeekableReadStream(s3, bucketName, key, response.ContentLength, response.ResponseStream, timeout, response.ETag)
         }

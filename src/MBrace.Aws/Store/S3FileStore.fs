@@ -294,18 +294,13 @@ type S3FileStore private (account : AwsAccount, defaultBucket : string) =
             let s3p = normalize false path
             if not <| s3p.IsObject then invalidArg "path" <| sprintf "path '%s' is not a valid S3 object." path
 
-            let! ct = Async.CancellationToken
-            let req = new GetObjectRequest(BucketName = s3p.Bucket, Key = s3p.Key, EtagToMatch = etag)
-            let! res = 
-                account.S3Client.GetObjectAsync(req, ct) 
-                |> Async.AwaitTaskCorrect
-                |> Async.Catch
+            try
+                let! stream = account.S3Client.GetObjectSeekableReadStreamAsync(s3p.Bucket, s3p.Key, timeout = TimeSpan.FromMinutes 40., etag = etag)
+                return Some(stream :> Stream)
 
-            match res with
-            | Choice1Of2 res -> return Some res.ResponseStream
-            | Choice2Of2 e when StoreException.PreconditionFailed e -> return None
-            | Choice2Of2 e when StoreException.NotFound e -> return raise <| new FileNotFoundException(path, e)
-            | Choice2Of2 e -> return! Async.Raise e
+            with
+            | e when StoreException.PreconditionFailed e -> return None
+            | e when StoreException.NotFound e -> return raise <| new FileNotFoundException(path, e)
         }
         
         member __.TryGetETag(path : string) = async {
@@ -342,13 +337,10 @@ type S3FileStore private (account : AwsAccount, defaultBucket : string) =
             let s3p = normalize false path
             if not <| s3p.IsObject then invalidArg "path" <| sprintf "path '%s' is not a valid S3 object." path
             do! ensureBucketExists s3p
-            let! result = async {
-                use! stream = account.S3Client.GetObjectWriteStreamAsync(s3p.Bucket, s3p.Key, timeout = TimeSpan.FromMinutes(40.))
-                return! writer stream
-            }
-            
-            let! metaRes = getObjMetadata account s3p // hmmmm
-            return metaRes.ETag, result
+            let! stream = account.S3Client.GetObjectWriteStreamAsync(s3p.Bucket, s3p.Key, timeout = TimeSpan.FromMinutes(40.))
+            let! result = writer stream
+            do! stream.CloseAsync()
+            return stream.ETag, result
         }
         
         //#endregion
@@ -358,10 +350,9 @@ type S3FileStore private (account : AwsAccount, defaultBucket : string) =
         member __.BeginRead(path : string) = async {
             let s3p = normalize false path
             if not <| s3p.IsObject then invalidArg "path" <| sprintf "path '%s' is not a valid S3 object." path
-            try
-                return! 
-                    account.S3Client.GetObjectStreamAsync(s3p.Bucket, s3p.Key, emptyProps) 
-                    |> Async.AwaitTaskCorrect
+            try 
+                let! stream = account.S3Client.GetObjectSeekableReadStreamAsync(s3p.Bucket, s3p.Key, timeout = TimeSpan.FromMinutes(40.))
+                return stream :> Stream
 
             with e when StoreException.NotFound e ->
                 return raise <| new FileNotFoundException(path, e)
@@ -371,7 +362,8 @@ type S3FileStore private (account : AwsAccount, defaultBucket : string) =
             let s3p = normalize false path
             if not <| s3p.IsObject then invalidArg "path" <| sprintf "path '%s' is not a valid S3 object." path
             do! ensureBucketExists s3p
-            return! account.S3Client.GetObjectWriteStreamAsync(s3p.Bucket, s3p.Key, timeout = TimeSpan.FromMinutes(40.))
+            let! writeStream = account.S3Client.GetObjectWriteStreamAsync(s3p.Bucket, s3p.Key, timeout = TimeSpan.FromMinutes(40.))
+            return writeStream :> Stream
         }
 
         member __.WithDefaultDirectory(directory : string) = S3FileStore.Create(account, directory) :> _
