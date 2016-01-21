@@ -23,8 +23,8 @@ module private S3FileStoreImpl =
     let bucketRetryPolicy =
         Policy(fun retries exn -> 
             match exn with
-            | :? AmazonS3Exception as e when e.StatusCode = HttpStatusCode.Conflict && retries < 10 -> Some (TimeSpan.FromSeconds 2.)
-            | :? AmazonS3Exception as e when e.StatusCode = HttpStatusCode.NotFound && e.Message.Contains "bucket" && retries < 10 -> Some (TimeSpan.FromSeconds 2.)
+            | :? AmazonS3Exception as e when e.StatusCode = HttpStatusCode.Conflict && retries < 20 -> Some (TimeSpan.FromSeconds 2.)
+            | :? AmazonS3Exception as e when e.StatusCode = HttpStatusCode.NotFound && e.Message.Contains "bucket" && retries < 20 -> Some (TimeSpan.FromSeconds 2.)
             | _ -> None)
 
     let getRandomBucketName() =  sprintf "/mbrace%s/" <| Guid.NewGuid().ToString("N")
@@ -85,9 +85,12 @@ type S3FileStore private (account : AwsAccount, defaultBucket : string) =
                 let! _result = account.S3Client.PutBucketAsync(s3p.Bucket, ct) |> Async.AwaitTaskCorrect
                 ()
 
-            if buckOpt |> Option.forall (fun b -> DateTime.UtcNow - b.CreationDate < TimeSpan.FromMinutes 1.) then
+            if buckOpt |> Option.forall (fun b -> (DateTime.UtcNow - b.CreationDate).Duration() < TimeSpan.FromMinutes 1.) then
                 let! ct = Async.CancellationToken
-                let! _ = account.S3Client.DeleteObjectAsync(s3p.Bucket, Guid.NewGuid().ToString("N"), ct)
+                let! r1 = account.S3Client.InitiateMultipartUploadAsync(InitiateMultipartUploadRequest(BucketName = s3p.Bucket, Key = Guid.NewGuid().ToString("N")), ct) |> Async.AwaitTaskCorrect
+                let! _r2 = account.S3Client.UploadPartAsync(new UploadPartRequest(BucketName = r1.BucketName, Key = r1.Key, PartNumber = 1, UploadId = r1.UploadId, InputStream = new MemoryStream([||])), ct) |> Async.AwaitTaskCorrect
+                let! _r3 = account.S3Client.AbortMultipartUploadAsync(AbortMultipartUploadRequest(BucketName = r1.BucketName, Key = r1.Key, UploadId = r1.UploadId), ct) |> Async.AwaitTaskCorrect
+//                let! _r3 = account.S3Client.CompleteMultipartUploadAsync(new CompleteMultipartUploadRequest(BucketName = r1.BucketName, Key = r1.Key, UploadId = r1.UploadId, PartETags = ResizeArray [new PartETag(1, _r2.ETag)]), ct) |> Async.AwaitTaskCorrect
                 ()
         }
 

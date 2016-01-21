@@ -143,7 +143,7 @@ module S3Utils =
                     i <- 0
 
         let close () = async {
-            if not <| acquireClose() then raise <| new ObjectDisposedException("S3WriteStream")
+            if not <| acquireClose() then () else
 
             flush true
             if uploads.Count = 0 then upload false buffer 0 0 // part uploads require at least one chunk
@@ -160,12 +160,16 @@ module S3Utils =
             return ()
         }
 
+        let abort () =
+            if acquireClose() then 
+                client.AbortMultipartUploadAsync(bucketName, key, uploadId) |> ignore
+
         do 
             match timeout with
+            | None -> ()
             | Some t ->
-                let _ = cts.Token.Register(fun () -> if acquireClose() then client.AbortMultipartUploadAsync(bucketName, key, uploadId) |> ignore)
+                let _ = cts.Token.Register(fun () -> abort())
                 cts.CancelAfter t
-            | _ -> ()
 
         override __.CanRead    = false
         override __.CanSeek    = false
@@ -204,6 +208,8 @@ module S3Utils =
             
         override __.Flush() = ()
         override __.Close() = Async.RunSync(close(), cancellationToken = cts.Token)
+
+        member __.Abort() = checkClosed() ; abort ()
 
 
     type IAmazonS3 with
