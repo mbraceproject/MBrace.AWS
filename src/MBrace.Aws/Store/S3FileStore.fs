@@ -27,7 +27,12 @@ module private S3FileStoreImpl =
             | :? AmazonS3Exception as e when e.StatusCode = HttpStatusCode.NotFound && e.Message.Contains "bucket" && retries < 20 -> Some (TimeSpan.FromSeconds 2.)
             | _ -> None)
 
-    let getRandomBucketName() =  sprintf "/mbrace%s/" <| Guid.NewGuid().ToString("N")
+    let getRandomBucketName prefix = sprintf "/%s%s/" prefix <| Guid.NewGuid().ToString("N")
+    let mkRandomBucketRegex prefix = new Regex(sprintf "%s[a-f0-9]{32}" prefix, RegexOptions.Compiled)
+
+    let validateBucketPrefix prefix = 
+        if String.length prefix > 31 then invalidArg "bucketprefix" "must be at most 31 characters"
+        Validate.bucketName prefix
 
     let getObjMetadata (account : AwsAccount) (path : S3Path) = async {
         let req = GetObjectMetadataRequest(BucketName = path.Bucket , Key = path.Key)
@@ -58,13 +63,16 @@ module private S3FileStoreImpl =
 
 ///  MBrace File Store implementation that uses Amazon S3 as backend.
 [<Sealed; DataContract>]
-type S3FileStore private (account : AwsAccount, defaultBucket : string) =
+type S3FileStore private (account : AwsAccount, defaultBucket : string, bucketPrefix : string) =
 
     [<DataMember(Name = "S3Account")>]
     let account = account
 
     [<DataMember(Name = "DefaultBucket")>]
     let defaultBucket = defaultBucket
+
+    [<DataMember(Name = "BucketPrefix")>]
+    let bucketPrefix = bucketPrefix
 
     let normalize asDirectory (path : string) =
         match S3Path.TryParse (path, asDirectory = asDirectory) with
@@ -101,11 +109,33 @@ type S3FileStore private (account : AwsAccount, defaultBucket : string) =
     /// </summary>
     /// <param name="account">AwsAccount to be used.</param>
     /// <param name="defaultBucket">Default S3 Bucket to be used. Will auto-generate name if not specified.</param>
-    static member Create(account : AwsAccount, ?defaultBucket : string) =
-        let defaultBucket = match defaultBucket with Some b -> b | None -> getRandomBucketName()
+    /// <param name="bucketPrefix">Prefix for randomly generated S3 buckets. Defaults to "mbrace".</param>
+    static member Create(account : AwsAccount, ?defaultBucket : string, ?bucketPrefix : string) =
+        let bucketPrefix = defaultArg bucketPrefix "mbrace"
+        do validateBucketPrefix bucketPrefix
+        let defaultBucket = match defaultBucket with Some b -> b | None -> getRandomBucketName bucketPrefix
         let s3p = S3Path.Parse(S3Path.Combine("/", defaultBucket))
         if not s3p.IsBucket then invalidArg "defaultBucket" <| sprintf "supplied path '%s' is not a valid S3 bucket." defaultBucket
-        new S3FileStore(account, s3p.FullPath)
+        new S3FileStore(account, s3p.FullPath, bucketPrefix)
+
+    /// Bucket prefix used in random bucket generation
+    member __.BucketPrefix = bucketPrefix
+
+    /// <summary>
+    ///     Clears all randomly named S3 buckets that match the given prefix.
+    /// </summary>
+    /// <param name="prefix">Prefix to clear. Defaults to the bucket prefix of the current store instance.</param>
+    member this.ClearBucketsAsync(?prefix : string) = async {
+        let bucketRegex = mkRandomBucketRegex (defaultArg prefix bucketPrefix)
+        let store = this :> ICloudFileStore
+        let! buckets = store.EnumerateDirectories "/"
+        do! buckets
+            |> Seq.filter bucketRegex.IsMatch 
+            |> Seq.map (fun b -> store.DeleteDirectory(b,true))
+            |> Async.Parallel
+            |> Async.Ignore
+    }
+
 
     interface ICloudFileStore with
         member __.Name = "MBrace.Aws.Store.S3FileStore"
@@ -118,7 +148,7 @@ type S3FileStore private (account : AwsAccount, defaultBucket : string) =
 
         member __.GetDirectoryName(path : string) = S3Path.GetDirectoryName path
 
-        member __.GetRandomDirectoryName() = getRandomBucketName()
+        member __.GetRandomDirectoryName() = getRandomBucketName bucketPrefix
 
         member __.DirectoryExists(directory : string) = async {
             let s3Path = normalize true directory
