@@ -1,4 +1,4 @@
-﻿namespace MBrace.Aws.Runtime
+﻿namespace MBrace.AWS.Runtime
 
 open System
 open System.IO
@@ -13,8 +13,8 @@ open MBrace.Runtime.Utils
 
 open Amazon.SQS.Model
 
-open MBrace.Aws.Runtime
-open MBrace.Aws.Runtime.Utilities
+open MBrace.AWS.Runtime
+open MBrace.AWS.Runtime.Utilities
 
 type WorkItemMessage = 
     {

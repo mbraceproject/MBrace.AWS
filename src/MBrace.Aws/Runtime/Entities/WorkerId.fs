@@ -1,10 +1,10 @@
-﻿namespace MBrace.Aws.Runtime
+﻿namespace MBrace.AWS.Runtime
 
 open System
 
 open MBrace.Runtime
 open MBrace.Runtime.Utils.PerformanceMonitor
-open MBrace.Aws.Runtime.Utilities
+open MBrace.AWS.Runtime.Utilities
 
 open Amazon.DynamoDBv2.DocumentModel
 

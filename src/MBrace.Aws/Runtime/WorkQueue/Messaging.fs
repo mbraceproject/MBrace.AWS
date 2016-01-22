@@ -1,4 +1,4 @@
-﻿namespace MBrace.Aws.Runtime
+﻿namespace MBrace.AWS.Runtime
 
 open System
 open System.IO
@@ -10,9 +10,9 @@ open MBrace.Runtime
 open MBrace.Runtime.Utils
 open MBrace.Runtime.Utils.Retry
 
-open MBrace.Aws.Runtime
-open MBrace.Aws.Runtime.Utilities
-open MBrace.Aws.Store
+open MBrace.AWS.Runtime
+open MBrace.AWS.Runtime.Utilities
+open MBrace.AWS.Store
 
 type internal MessagingClient =
     static member TryDequeue 

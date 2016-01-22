@@ -1,4 +1,4 @@
-﻿namespace MBrace.Aws.Runtime.Utilities
+﻿namespace MBrace.AWS.Runtime.Utilities
 
 open System
 open System.Collections.Generic
@@ -10,7 +10,7 @@ open Amazon.DynamoDBv2.DocumentModel
 open Amazon.DynamoDBv2.Model
 
 open MBrace.Core.Internals
-open MBrace.Aws.Runtime
+open MBrace.AWS.Runtime
 
 [<AllowNullLiteral>]
 type IDynamoDBTableEntity =

@@ -1,4 +1,4 @@
-﻿namespace MBrace.Aws.Runtime
+﻿namespace MBrace.AWS.Runtime
 
 open System
 open System.Runtime.Serialization
@@ -10,8 +10,8 @@ open MBrace.Core.Internals
 open MBrace.Runtime
 open MBrace.Runtime.Utils
 open MBrace.Runtime.Components
-open MBrace.Aws
-open MBrace.Aws.Runtime.Utilities
+open MBrace.AWS
+open MBrace.AWS.Runtime.Utilities
 
 [<Sealed; AutoSerializable(false)>]
 type CloudProcessManager private (clusterId : ClusterId, logger : ISystemLogger) =

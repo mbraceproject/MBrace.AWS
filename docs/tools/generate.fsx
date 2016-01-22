@@ -11,17 +11,17 @@
 // (This is the original behaviour of ProjectScaffold prior to multi project support)
 let referenceBinaries = []
 // Web site location for the generated documentation
-let website = "/MBrace.Aws"
+let website = "/MBrace.AWS"
 
 let githubLink = "http://github.com/theburningmonk/MBrace.AWS"
 
 // Specify more information about your project
 let info =
-  [ "project-name", "MBrace.Aws"
+  [ "project-name", "MBrace.AWS"
     "project-author", "Yan Cui"
     "project-summary", "AWS backend for MBrace"
     "project-github", githubLink
-    "project-nuget", "http://nuget.org/packages/MBrace.Aws" ]
+    "project-nuget", "http://nuget.org/packages/MBrace.AWS" ]
 
 // --------------------------------------------------------------------------------------
 // For typical project, no changes are needed below

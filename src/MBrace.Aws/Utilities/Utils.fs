@@ -1,4 +1,4 @@
-﻿namespace MBrace.Aws.Runtime.Utilities
+﻿namespace MBrace.AWS.Runtime.Utilities
 
 open System
 open System.IO
@@ -8,7 +8,7 @@ open System.Threading.Tasks
 
 open Amazon.Runtime
 
-open MBrace.Aws.Runtime
+open MBrace.AWS.Runtime
 
 [<AutoOpen>]
 module Utils =

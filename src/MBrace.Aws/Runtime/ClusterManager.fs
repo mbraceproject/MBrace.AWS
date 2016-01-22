@@ -1,4 +1,4 @@
-﻿namespace MBrace.Aws.Runtime
+﻿namespace MBrace.AWS.Runtime
 
 open System
 open System.Reflection
@@ -8,11 +8,11 @@ open Nessos.FsPickler
 open MBrace.Core.Internals
 open MBrace.Runtime
 open MBrace.Runtime.Components
-open MBrace.Aws
-open MBrace.Aws.Store
+open MBrace.AWS
+open MBrace.AWS.Store
 
 /// The ClusterManager contains all resources necessary for running
-/// MBrace.Aws cluster operations for the current process.
+/// MBrace.AWS cluster operations for the current process.
 [<AutoSerializable(false)>]
 type ClusterManager =
     {

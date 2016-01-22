@@ -10,8 +10,8 @@ Introducing your project
 Say more
 
 *)
-#r "MBrace.Aws.dll"
-open MBrace.Aws
+#r "MBrace.AWS.dll"
+open MBrace.AWS
 
 Library.hello 0
 (**

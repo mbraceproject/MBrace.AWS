@@ -1,4 +1,4 @@
-﻿namespace MBrace.Aws.Runtime
+﻿namespace MBrace.AWS.Runtime
 
 open System
 open System.IO
@@ -21,7 +21,7 @@ type ProcessConfiguration private () =
 
     static let checkInitialized () =
         if not isInitialized.Value then
-            invalidOp "Aws configuration has not been initialized in the current process."
+            invalidOp "AWS configuration has not been initialized in the current process."
             
     static let getDefaultWorkingDir () =
         WorkingDirectory.GetDefaultWorkingDirectoryForProcess(
@@ -55,7 +55,7 @@ type ProcessConfiguration private () =
                     isClientSession = isClientInstance, 
                     forceLocalFSharpCore = true)
 
-                objectCache <- InMemoryCache.Create(name = "MBrace.Aws object cache")
+                objectCache <- InMemoryCache.Create(name = "MBrace.AWS object cache")
                 localFileStore <- 
                     FileSystemStore.Create(
                         rootPath = Path.Combine(workingDirectory, "localStore"),
@@ -103,7 +103,7 @@ type ProcessConfiguration private () =
         checkInitialized()
         localFileStore
 
-    /// MBrace.Aws compiled version
+    /// MBrace.AWS compiled version
     static member Version = 
         checkInitialized()
         version

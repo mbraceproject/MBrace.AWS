@@ -7,7 +7,7 @@
 #r "Vagabond.dll"
 #r "MBrace.Core.dll"
 #r "MBrace.Runtime.dll"
-#r "MBrace.Aws.dll"
+#r "MBrace.AWS.dll"
 
 
 open Amazon
@@ -18,8 +18,8 @@ open Amazon.DynamoDBv2
 
 open MBrace.Core
 open MBrace.Core.Internals
-open MBrace.Aws.Runtime
-open MBrace.Aws.Store
+open MBrace.AWS.Runtime
+open MBrace.AWS.Store
 
 let account = AwsAccount.Create("Default", RegionEndpoint.EUCentral1)
 let store = S3FileStore.Create(account) :> ICloudFileStore

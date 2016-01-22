@@ -1,4 +1,4 @@
-﻿namespace MBrace.Aws.Store
+﻿namespace MBrace.AWS.Store
 
 open System
 open System.IO
@@ -9,7 +9,7 @@ open Amazon.DynamoDBv2.Model
 
 open MBrace.Core
 open MBrace.Core.Internals
-open MBrace.Aws.Runtime
+open MBrace.AWS.Runtime
 
 [<AutoOpen>]
 module private DynamoDBAtomUtils =

@@ -1,4 +1,4 @@
-﻿namespace MBrace.Aws.Store
+﻿namespace MBrace.AWS.Store
 
 open System
 open System.Runtime.Serialization
@@ -10,8 +10,8 @@ open MBrace.Core
 open MBrace.Core.Internals
 open MBrace.Runtime.Utils.PrettyPrinters
 
-open MBrace.Aws.Runtime
-open MBrace.Aws.Runtime.Utilities
+open MBrace.AWS.Runtime
+open MBrace.AWS.Runtime.Utilities
 
 /// CloudQueue implementation on top of Amazon SQS
 [<AutoSerializable(true) ; Sealed; DataContract>]

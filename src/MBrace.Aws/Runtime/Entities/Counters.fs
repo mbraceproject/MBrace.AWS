@@ -1,12 +1,12 @@
-﻿namespace MBrace.Aws.Runtime
+﻿namespace MBrace.AWS.Runtime
 
 open System
 open System.Runtime.Serialization
 
 open MBrace.Runtime
-open MBrace.Aws.Runtime
-open MBrace.Aws.Runtime.Utilities
-open MBrace.Aws
+open MBrace.AWS.Runtime
+open MBrace.AWS.Runtime.Utilities
+open MBrace.AWS
 
 open Amazon.DynamoDBv2.DocumentModel
 

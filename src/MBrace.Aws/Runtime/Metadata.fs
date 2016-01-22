@@ -1,8 +1,8 @@
-﻿namespace MBrace.Aws.Runtime
+﻿namespace MBrace.AWS.Runtime
 
 open System
 
-open MBrace.Aws
+open MBrace.AWS
 
 type Metadata =
     {

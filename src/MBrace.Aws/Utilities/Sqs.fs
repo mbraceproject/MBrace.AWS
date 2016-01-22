@@ -1,4 +1,4 @@
-﻿namespace MBrace.Aws.Runtime.Utilities
+﻿namespace MBrace.AWS.Runtime.Utilities
 
 open System
 open System.Collections.Generic
@@ -9,7 +9,7 @@ open Amazon.SQS.Model
 open Nessos.FsPickler
 
 open MBrace.Core.Internals
-open MBrace.Aws.Runtime
+open MBrace.AWS.Runtime
 
 [<RequireQualifiedAccess>]
 module SqsConstants =

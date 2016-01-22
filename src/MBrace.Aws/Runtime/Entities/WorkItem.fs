@@ -1,4 +1,4 @@
-﻿namespace MBrace.Aws.Runtime
+﻿namespace MBrace.AWS.Runtime
 
 open System
 
@@ -6,7 +6,7 @@ open Amazon.DynamoDBv2.DocumentModel
 
 open MBrace.Runtime
 open MBrace.Runtime.Utils
-open MBrace.Aws.Runtime.Utilities
+open MBrace.AWS.Runtime.Utilities
 
 /// Blob payload of serialized work items 
 type MessagePayload =

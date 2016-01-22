@@ -1,8 +1,8 @@
-﻿namespace MBrace.Aws.Runtime
+﻿namespace MBrace.AWS.Runtime
 
 open MBrace.Runtime
 
-/// Serializable state/configuration record uniquely identifying an MBrace.Aws cluster
+/// Serializable state/configuration record uniquely identifying an MBrace.AWS cluster
 [<AutoSerializable(true); StructuralEquality; StructuralComparison>]
 [<StructuredFormatDisplay("{Id}")>]
 type ClusterId =

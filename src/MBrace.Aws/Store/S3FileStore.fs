@@ -1,4 +1,4 @@
-﻿namespace MBrace.Aws.Store
+﻿namespace MBrace.AWS.Store
 
 open System
 open System.Collections.Generic
@@ -12,8 +12,8 @@ open Amazon.S3.Model
 
 open MBrace.Core.Internals
 open MBrace.Runtime.Utils.Retry
-open MBrace.Aws.Runtime
-open MBrace.Aws.Runtime.Utilities
+open MBrace.AWS.Runtime
+open MBrace.AWS.Runtime.Utilities
 
 [<AutoOpen>]
 module private S3FileStoreImpl =
@@ -138,7 +138,7 @@ type S3FileStore private (account : AwsAccount, defaultBucket : string, bucketPr
 
 
     interface ICloudFileStore with
-        member __.Name = "MBrace.Aws.Store.S3FileStore"
+        member __.Name = "MBrace.AWS.Store.S3FileStore"
         member __.Id = sprintf "Access Key %s, Region %O" account.AccessKey account.Region
         member __.IsCaseSensitiveFileSystem = true
         

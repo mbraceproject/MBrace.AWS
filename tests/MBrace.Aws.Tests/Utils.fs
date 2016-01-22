@@ -1,4 +1,4 @@
-﻿namespace MBrace.Aws.Tests
+﻿namespace MBrace.AWS.Tests
 
 open System
 open System.IO
@@ -15,9 +15,9 @@ open MBrace.Runtime
 open MBrace.Runtime.Components
 open MBrace.ThreadPool
 
-open MBrace.Aws
-open MBrace.Aws.Runtime
-open MBrace.Aws.Store
+open MBrace.AWS
+open MBrace.AWS.Runtime
+open MBrace.AWS.Store
 
 [<AutoOpen>]
 module Utils =

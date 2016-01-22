@@ -1,4 +1,4 @@
-﻿namespace MBrace.Aws.Runtime.Utilities
+﻿namespace MBrace.AWS.Runtime.Utilities
 
 open System
 open System.Net
@@ -9,7 +9,7 @@ open System.Text.RegularExpressions
 
 open MBrace.Core.Internals
 open MBrace.Runtime.Utils
-open MBrace.Aws.Runtime
+open MBrace.AWS.Runtime
 
 open Amazon.S3
 open Amazon.S3.Model

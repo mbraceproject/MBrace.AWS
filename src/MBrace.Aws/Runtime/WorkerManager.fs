@@ -1,4 +1,4 @@
-﻿namespace MBrace.Aws.Runtime
+﻿namespace MBrace.AWS.Runtime
 
 open System
 
@@ -8,8 +8,8 @@ open MBrace.Core
 open MBrace.Core.Internals
 open MBrace.Runtime
 
-open MBrace.Aws
-open MBrace.Aws.Runtime.Utilities
+open MBrace.AWS
+open MBrace.AWS.Runtime.Utilities
 
 [<AutoSerializable(false)>]
 type WorkerManager private (clusterId : ClusterId, logger : ISystemLogger) =

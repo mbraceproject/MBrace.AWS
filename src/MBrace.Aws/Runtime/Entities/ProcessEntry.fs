@@ -1,4 +1,4 @@
-﻿namespace MBrace.Aws.Runtime
+﻿namespace MBrace.AWS.Runtime
 
 open System
 open System.Runtime.Serialization
@@ -9,8 +9,8 @@ open Nessos.FsPickler
 
 open MBrace.Core
 open MBrace.Runtime
-open MBrace.Aws
-open MBrace.Aws.Runtime.Utilities
+open MBrace.AWS
+open MBrace.AWS.Runtime.Utilities
 
 [<AllowNullLiteral>]
 type CloudProcessRecord(taskId) = 

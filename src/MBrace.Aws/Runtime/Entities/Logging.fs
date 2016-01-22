@@ -1,4 +1,4 @@
-﻿namespace MBrace.Aws.Runtime
+﻿namespace MBrace.AWS.Runtime
 
 open System
 open System.Collections.Generic
@@ -12,8 +12,8 @@ open MBrace.Core.Internals
 open MBrace.Runtime
 open MBrace.Runtime.Utils
 open MBrace.Runtime.Utils.PrettyPrinters
-open MBrace.Aws
-open MBrace.Aws.Runtime.Utilities
+open MBrace.AWS
+open MBrace.AWS.Runtime.Utilities
 
 module private Logger =
     let mkSystemLogHashKey (loggerId : string) = 

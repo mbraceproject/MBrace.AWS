@@ -1,4 +1,4 @@
-﻿namespace MBrace.Aws.Runtime.Utilities
+﻿namespace MBrace.AWS.Runtime.Utilities
 
 open System
 open System.IO
@@ -6,9 +6,9 @@ open System.Runtime.Serialization
 
 open MBrace.Core.Internals
 open MBrace.Runtime.Utils
-open MBrace.Aws
-open MBrace.Aws.Runtime
-open MBrace.Aws.Runtime.Utilities
+open MBrace.AWS
+open MBrace.AWS.Runtime
+open MBrace.AWS.Runtime.Utilities
 
 open Amazon.S3.Model
 

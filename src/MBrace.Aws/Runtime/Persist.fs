@@ -1,4 +1,4 @@
-﻿namespace MBrace.Aws.Runtime
+﻿namespace MBrace.AWS.Runtime
 
 open Nessos.FsPickler
 
@@ -6,7 +6,7 @@ open MBrace.Core
 open MBrace.Core.Internals
 open MBrace.Runtime
 open MBrace.Runtime.Components
-open MBrace.Aws.Runtime.Utilities
+open MBrace.AWS.Runtime.Utilities
 
 /// Provides functionality for persisting values/closures to S3 and performs object sifting.
 [<AbstractClass; Sealed; AutoSerializable(false)>]

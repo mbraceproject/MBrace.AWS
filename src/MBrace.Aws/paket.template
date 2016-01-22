@@ -4,11 +4,11 @@ owners
 authors 
     Yan Cui
 projectUrl
-    http://github.com/theburningmonk/MBrace.Aws
+    http://github.com/theburningmonk/MBrace.AWS
 iconUrl
-    https://raw.githubusercontent.com/theburningmonk/MBrace.Aws/master/docs/files/img/logo.png
+    https://raw.githubusercontent.com/theburningmonk/MBrace.AWS/master/docs/files/img/logo.png
 licenseUrl
-    http://github.com/theburningmonk/MBrace.Aws/blob/master/LICENSE.txt
+    http://github.com/theburningmonk/MBrace.AWS/blob/master/LICENSE.txt
 requireLicenseAcceptance
     false
 copyright

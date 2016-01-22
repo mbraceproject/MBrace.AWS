@@ -4,7 +4,7 @@
 #I "../../bin"
 
 (**
-MBrace.Aws
+MBrace.AWS
 ======================
 
 Documentation
@@ -13,8 +13,8 @@ Documentation
   <div class="span1"></div>
   <div class="span6">
     <div class="well well-small" id="nuget">
-      The MBrace.Aws library can be <a href="https://nuget.org/packages/MBrace.Aws">installed from NuGet</a>:
-      <pre>PM> Install-Package MBrace.Aws</pre>
+      The MBrace.AWS library can be <a href="https://nuget.org/packages/MBrace.AWS">installed from NuGet</a>:
+      <pre>PM> Install-Package MBrace.AWS</pre>
     </div>
   </div>
   <div class="span1"></div>
@@ -26,8 +26,8 @@ Example
 This example demonstrates using a function defined in this sample library.
 
 *)
-#r "MBrace.Aws.dll"
-open MBrace.Aws
+#r "MBrace.AWS.dll"
+open MBrace.AWS
 
 printfn "hello = %i" <| Library.hello 0
 
@@ -59,9 +59,9 @@ The library is available under Public Domain license, which allows modification 
 redistribution for both commercial and non-commercial purposes. For more information see the 
 [License file][license] in the GitHub repository. 
 
-  [content]: https://github.com/fsprojects/MBrace.Aws/tree/master/docs/content
-  [gh]: https://github.com/fsprojects/MBrace.Aws
-  [issues]: https://github.com/fsprojects/MBrace.Aws/issues
-  [readme]: https://github.com/fsprojects/MBrace.Aws/blob/master/README.md
-  [license]: https://github.com/fsprojects/MBrace.Aws/blob/master/LICENSE.txt
+  [content]: https://github.com/fsprojects/MBrace.AWS/tree/master/docs/content
+  [gh]: https://github.com/fsprojects/MBrace.AWS
+  [issues]: https://github.com/fsprojects/MBrace.AWS/issues
+  [readme]: https://github.com/fsprojects/MBrace.AWS/blob/master/README.md
+  [license]: https://github.com/fsprojects/MBrace.AWS/blob/master/LICENSE.txt
 *)
