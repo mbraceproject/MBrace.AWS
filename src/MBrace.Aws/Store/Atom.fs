@@ -1,34 +1,30 @@
 ﻿namespace MBrace.AWS.Store
 
 open System
+open System.Net
 open System.IO
 open System.Runtime.Serialization
+open System.Text.RegularExpressions
 
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 
 open MBrace.Core
 open MBrace.Core.Internals
+open MBrace.Runtime.Utils.Retry
 open MBrace.AWS.Runtime
 
 [<AutoOpen>]
 module private DynamoDBAtomUtils =
-    let random = new Random(int DateTime.UtcNow.Ticks)
-    let randOf (x : char []) = x.[random.Next(0, x.Length)]
-    let alpha = [|'a'..'z'|]
-    let alphaNumeric = Array.append alpha [|'0'..'9'|]
-    
-    let randomTableName () =
-        let name = 
-            [| yield randOf alpha
-               for _i = 1 to 64 do 
-                   yield randOf alphaNumeric |]
-
-        new String(name)
 
     // max item size is 400KB including attribute length, etc.
     // allow 1KB for all that leaves 399KB for actula payload
     let maxPayload = 399L * 1024L
+
+    let getRandomTableName (prefix : string) =
+        sprintf "%s-%s" prefix <| Guid.NewGuid().ToString("N")
+
+    let mkRandomTableRegex prefix = new Regex(sprintf "%s-[0-9a-z]{32}" prefix, RegexOptions.Compiled)
 
     let timestamp () = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.zzzz")
 
@@ -50,11 +46,9 @@ module private DynamoDBAtomUtils =
 
 /// CloudAtom implementation on top of Amazon DynamoDB
 [<AutoSerializable(true) ; Sealed; DataContract>]
-type DynamoDBAtom<'T> internal 
-        (tableName : string, 
-         account   : AwsAccount,
-         hashKey   : string) =
-    [<DataMember(Name = "DynamoDBAccount")>]
+type DynamoDBAtom<'T> internal (tableName : string, account : AwsAccount, hashKey : string) =
+
+    [<DataMember(Name = "AWSAccount")>]
     let account = account
 
     [<DataMember(Name = "TableName")>]
@@ -77,27 +71,10 @@ type DynamoDBAtom<'T> internal
         return ProcessConfiguration.BinarySerializer.UnPickle<'T>(blob)
     }
 
-    /// Default function for calcuating delay (in milliseconds) between retries
-    /// based on (http://en.wikipedia.org/wiki/Exponential_backoff)
-    /// After 8 retries the delay starts to become unreasonable for most 
-    /// scenarios, so cap the delay at that
-    let exponentialDelay =
-        let calcDelay retries = 
-            let rec sum acc = function | 0 -> acc | n -> sum (acc + n) (n - 1)
-
-            let n = pown 2 retries - 1
-            let slots = float (sum 0 n) / float (n + 1)
-            int (100.0 * slots)
-
-        let delays = [| 0..8 |] |> Array.map calcDelay
-
-        (fun retries -> delays.[min retries 8])
-
     let updateReq (newBlob : byte[]) = 
         let req = UpdateItemRequest(TableName = tableName)
         req.Key.Add("HashKey", attrValueString hashKey)
         req.AttributeUpdates.Add("Blob", updateAttrValueBytes newBlob)
-
         req
 
     interface CloudAtom<'T> with
@@ -130,13 +107,11 @@ type DynamoDBAtom<'T> internal
         member __.TransactAsync (transaction, maxRetries) = async {
             let serializer = ProcessConfiguration.BinarySerializer
 
-            // TODO : is infinite retry really the right thing to do?
-            let maxRetries = defaultArg maxRetries Int32.MaxValue
+            let maxRetries = defaultArg maxRetries 20
+            let policy = RetryPolicy.Retry(maxRetries, delay = 0.1<sec>)
 
-            let rec update count = async {
-                if count >= maxRetries then
-                    return raise <| exn("Maximum number of retries exceeded.")
-                else
+            return! retryAsync policy <| 
+                async {
                     let! oldItem = getItemAsync()
                     let oldTimestamp = oldItem.Item.["LastModified"].S
                     let oldBlob  = oldItem.Item.["Blob"].B.ToArray()
@@ -145,61 +120,83 @@ type DynamoDBAtom<'T> internal
                     let newBinary = serializer.Pickle newValue
                     
                     let req = updateReq newBinary
-                    req.Expected.Add(
-                        "LastModified", 
-                        expectedAttrValueString oldTimestamp)
-                    req.AttributeUpdates.Add(
-                        "LastModified", 
-                        updateAttrValueString <| timestamp())
+                    req.Expected.Add("LastModified", expectedAttrValueString oldTimestamp)
+                    req.AttributeUpdates.Add("LastModified", updateAttrValueString <| timestamp())
 
-                    let! res = 
+                    let! result =
                         account.DynamoDBClient.UpdateItemAsync(req)
                         |> Async.AwaitTaskCorrect
-                        |> Async.Catch
 
-                    match res with
-                    | Choice1Of2 _ -> return returnValue
-                    | Choice2Of2 (:? ConditionalCheckFailedException) -> 
-                        do! Async.Sleep <| exponentialDelay count
-                        return! update (count+1)
-                    | Choice2Of2 exn -> return raise exn
-            }
+                    if result.HttpStatusCode <> HttpStatusCode.OK then
+                        return invalidOp <| sprintf "Request has failed with %O." result.HttpStatusCode
+                        
 
-            return! update 0
+                    return returnValue
+                }
         }
 
 /// CloudAtom provider implementation on top of Amazon DynamoDB.
 [<Sealed; DataContract>]
-type DynamoDBAtomProvider private 
-        (account : AwsAccount, 
-         defaultTable : string) =
+type DynamoDBAtomProvider private (account : AwsAccount, defaultTable : string, tablePrefix : string) =
+    
     [<DataMember(Name = "Account")>]
     let account = account
 
     [<DataMember(Name = "DefaultTable")>]
     let defaultTable = defaultTable
 
+    [<DataMember(Name = "TablePrefix")>]
+    let tablePrefix = tablePrefix
+
+    /// <summary>
     /// Creates an AWS DynamoDB-based atom provider that
     /// connects to provided DynamoDB table.
     /// </summary>
-    static member Create 
-            (account : AwsAccount, 
-             ?defaultTable : string) =
+    /// <param name="account">AWS account to be used by the provider.</param>
+    /// <param name="defaultTable">Default table container.</param>
+    static member Create (account : AwsAccount, ?defaultTable : string, ?tablePrefix : string) =
+        let tablePrefix =
+            match tablePrefix with
+            | None -> "cloudAtom"
+            | Some tp when tp.Length > 220 -> invalidArg "tablePrefix" "must be at most 220 characters long."
+            | Some tp -> Validate.tableName tp ; tp
+
         let defaultTable = 
             match defaultTable with
-            | Some x -> x
-            | _ -> randomTableName()
-        new DynamoDBAtomProvider(account, defaultTable)
+            | Some x -> Validate.tableName x ; x
+            | _ -> getRandomTableName tablePrefix
+
+        new DynamoDBAtomProvider(account, defaultTable, tablePrefix)
+
+    /// Table prefix used in random table name generation
+    member __.TablePrefix = tablePrefix
+
+    /// <summary>
+    ///     Clears all randomly named DynamoDB tables that match the given prefix.
+    /// </summary>
+    /// <param name="prefix">Prefix to clear. Defaults to the table prefix of the current store instance.</param>
+    member this.ClearTablesAsync(?prefix : string) = async {
+        let tableRegex = mkRandomTableRegex (defaultArg prefix tablePrefix)
+        let store = this :> ICloudAtomProvider
+        let! ct = Async.CancellationToken
+        let! tables = account.DynamoDBClient.ListTablesAsync(ct) |> Async.AwaitTaskCorrect
+        do! tables.TableNames
+            |> Seq.filter tableRegex.IsMatch 
+            |> Seq.map (fun b -> store.DisposeContainer b)
+            |> Async.Parallel
+            |> Async.Ignore
+    }
         
     interface ICloudAtomProvider with
         member __.Id = sprintf "arn:aws:dynamodb:table/%s" defaultTable
         member __.Name = "AWS DynamoDB CloudAtom Provider"
         member __.DefaultContainer = defaultTable
 
-        member __.WithDefaultContainer (tableName : string) = 
-            new DynamoDBAtomProvider(account, tableName) :> _
+        member __.WithDefaultContainer (tableName : string) =
+            Validate.tableName tableName
+            new DynamoDBAtomProvider(account, tableName, tablePrefix) :> _
 
-        member __.IsSupportedValue(value) = 
+        member __.IsSupportedValue(value : 'T) = 
             let size = ProcessConfiguration.BinarySerializer.ComputeSize value
             size <= maxPayload
 
@@ -222,16 +219,17 @@ type DynamoDBAtomProvider private
             return new DynamoDBAtom<'T>(tableName, account, atomId) :> CloudAtom<'T>
         }
         
-        member __.GetAtomById(tableName, atomId) = async {
+        member __.GetAtomById(tableName : string, atomId : string) = async {
+            Validate.tableName tableName
+            // TODO : check that table entry exists?
             return new DynamoDBAtom<'T>(tableName, account, atomId) :> CloudAtom<'T>
         }
 
-        member __.GetRandomAtomIdentifier() = 
-            sprintf "cloudAtom-%s" <| mkUUID()
-        member __.GetRandomContainerName() = 
-            "cloudAtom" + randomTableName()
+        member __.GetRandomAtomIdentifier() = sprintf "cloudAtom-%s" <| mkUUID()
+        member __.GetRandomContainerName() = getRandomTableName tablePrefix
 
-        member __.DisposeContainer(tableName) = async {
+        member __.DisposeContainer(tableName : string) = async {
+            Validate.tableName tableName
             let req = DeleteTableRequest(TableName = tableName)
             do! account.DynamoDBClient.DeleteTableAsync(req)
                 |> Async.AwaitTaskCorrect

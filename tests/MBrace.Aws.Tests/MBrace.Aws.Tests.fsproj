@@ -8,7 +8,7 @@
     <ProjectGuid>e7bbbe5e-616e-4f85-94ce-e912cb342e9f</ProjectGuid>
     <OutputType>Library</OutputType>
     <RootNamespace>MBrace.Aws.Tests</RootNamespace>
-    <AssemblyName>MBrace.Aws.Tests</AssemblyName>
+    <AssemblyName>MBrace.AWS.Tests</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <TargetFSharpCoreVersion>4.4.0.0</TargetFSharpCoreVersion>
     <Name>MBrace.Aws.Tests</Name>
@@ -67,6 +67,7 @@
   <ItemGroup>
     <Compile Include="Utils.fs" />
     <Compile Include="StoreTests.fs" />
+    <Compile Include="AtomTests.fs" />
     <None Include="paket.references" />
     <Content Include="App.config" />
   </ItemGroup>

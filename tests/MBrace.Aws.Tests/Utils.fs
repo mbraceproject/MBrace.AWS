@@ -22,6 +22,8 @@ open MBrace.AWS.Store
 [<AutoOpen>]
 module Utils =
 
+    let init() = ProcessConfiguration.InitAsClient()
+
     let getEnvironmentVariable (envName:string) =
         let aux found target =
             if String.IsNullOrWhiteSpace found then Environment.GetEnvironmentVariable(envName, target)
