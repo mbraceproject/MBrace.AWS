@@ -1,4 +1,4 @@
-namespace MBrace.AWS.Tests
+namespace MBrace.AWS.Tests.Store
 
 open System.IO
 open NUnit.Framework
@@ -16,6 +16,7 @@ open MBrace.ThreadPool
 open MBrace.AWS
 open MBrace.AWS.Runtime
 open MBrace.AWS.Store
+open MBrace.AWS.Tests
 
 [<TestFixture>]
 type ``Local S3 FileStore Tests`` () =

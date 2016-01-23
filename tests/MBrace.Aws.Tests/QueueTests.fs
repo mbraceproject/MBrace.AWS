@@ -19,25 +19,25 @@ open MBrace.AWS.Store
 open MBrace.AWS.Tests
 
 [<TestFixture>]
-type ``Local DynamoDB Atom Tests`` () =
-    inherit ``CloudAtom Tests``(parallelismFactor = 100)
+type ``Local SQS Queue Tests`` () =
+    inherit ``CloudQueue Tests``(parallelismFactor = 100)
 
     static do init()
 
     let account = getAWSTestAccount()
 
-    let tablePrefix = sprintf "testmbrace-%s" <| System.Guid.NewGuid().ToString("N")
-    let ddbAtomProvider = DynamoDBAtomProvider.Create(account, tablePrefix = tablePrefix)
+    let queuePrefix = sprintf "testmbrace-%s" <| System.Guid.NewGuid().ToString("N")
+    let sqsQueueProvider = SQSQueueProvider.Create(account, queuePrefix = queuePrefix)
     let serializer = new FsPicklerBinarySerializer(useVagabond = false)
-    let imem = ThreadPoolRuntime.Create(atomProvider = ddbAtomProvider, serializer = serializer, memoryEmulation = MemoryEmulation.Shared)
+    let imem = ThreadPoolRuntime.Create(queueProvider = sqsQueueProvider, serializer = serializer, memoryEmulation = MemoryEmulation.Shared)
 
     let run x = Async.RunSync x
 
     [<TestFixtureTearDown>]
     member __.``Clean up leftover buckets``() =
-        ddbAtomProvider.ClearTablesAsync() |> run
+        ()
+//        ddbAtomProvider.ClearTablesAsync() |> run
 
     override __.Run(wf : Cloud<'T>) = imem.RunSynchronously wf
     override __.RunLocally(wf : Cloud<'T>) = imem.RunSynchronously wf
     override __.IsSupportedNamedLookup = true
-    override __.Repeats = 10

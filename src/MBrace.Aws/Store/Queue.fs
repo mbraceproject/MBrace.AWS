@@ -14,7 +14,7 @@ open MBrace.AWS.Runtime
 open MBrace.AWS.Runtime.Utilities
 
 /// CloudQueue implementation on top of Amazon SQS
-[<AutoSerializable(true) ; Sealed; DataContract>]
+[<Sealed; DataContract>]
 type SQSQueue<'T> internal (queueUri, account : AwsAccount) =
     [<DataMember(Name = "Account")>]
     let account = account
@@ -71,3 +71,25 @@ type SQSQueue<'T> internal (queueUri, account : AwsAccount) =
         member x.GetCountAsync() = Sqs.getCount account queueUri
 
         member x.Dispose() = Sqs.deleteQueue account queueUri
+
+[<Sealed; DataContract>]
+type SQSQueueProvider private (account : AwsAccount, queuePrefix : string) =
+    [<DataMember(Name = "Account")>]
+    let account = account
+
+    [<DataMember(Name = "QueuePrefix")>]
+    let queuePrefix = queuePrefix
+
+    static member Create(account : AwsAccount, ?queuePrefix : string) = 
+        let queuePrefix = defaultArg queuePrefix "mbrace"
+        new SQSQueueProvider(account, queuePrefix)
+
+    interface ICloudQueueProvider with
+        member x.CreateQueue(queueId : string) = async {
+            return failwith "not implemeted yet"
+        }
+
+        member x.GetQueueById(queueId : string) = failwith "Not implemented yet"
+        member x.GetRandomQueueName() = failwith "Not implemented yet"
+        member x.Id = failwith "Not implemented yet"
+        member x.Name = failwith "Not implemented yet"

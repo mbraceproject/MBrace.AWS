@@ -68,6 +68,7 @@
     <Compile Include="Utils.fs" />
     <Compile Include="StoreTests.fs" />
     <Compile Include="AtomTests.fs" />
+    <Compile Include="QueueTests.fs" />
     <None Include="paket.references" />
     <Content Include="App.config" />
   </ItemGroup>
