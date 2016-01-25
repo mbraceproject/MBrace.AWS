@@ -87,7 +87,6 @@
     <Compile Include="Runtime\WorkQueue\TopicMonitor.fs" />
     <Compile Include="Runtime\WorkQueue\WorkItemQueue.fs" />
     <Compile Include="Runtime\ClusterManager.fs" />
-    <None Include="tests.fsx" />
     <None Include="paket.references" />
     <None Include="paket.template" />
   </ItemGroup>
