@@ -20,7 +20,7 @@ open MBrace.AWS.Tests
 
 [<TestFixture>]
 type ``Local S3 FileStore Tests`` () =
-    inherit ``CloudFileStore Tests``(parallelismFactor = 100)
+    inherit ``CloudFileStore Tests``(parallelismFactor = 20)
 
     let account = getAWSTestAccount()
 
@@ -31,6 +31,12 @@ type ``Local S3 FileStore Tests`` () =
     let imem = ThreadPoolRuntime.Create(fileStore = store, serializer = serializer, memoryEmulation = MemoryEmulation.Shared)
 
     let run x = Async.RunSync x
+
+    override __.FileStore = store
+    override __.Serializer = serializer :> _
+    override __.IsCaseSensitive = true
+    override __.Run(wf : Cloud<'T>) = imem.RunSynchronously wf
+    override __.RunLocally(wf : Cloud<'T>) = imem.RunSynchronously wf
 
     [<TestFixtureTearDown>]
     member __.``Clean up leftover buckets``() =
@@ -76,10 +82,3 @@ type ``Local S3 FileStore Tests`` () =
 
         finally
             store.DeleteFile file |> run
-
-
-    override __.FileStore = store
-    override __.Serializer = serializer :> _
-    override __.IsCaseSensitive = true
-    override __.Run(wf : Cloud<'T>) = imem.RunSynchronously wf
-    override __.RunLocally(wf : Cloud<'T>) = imem.RunSynchronously wf

@@ -20,7 +20,7 @@ open MBrace.AWS.Tests
 
 [<TestFixture>]
 type ``Local DynamoDB Atom Tests`` () =
-    inherit ``CloudAtom Tests``(parallelismFactor = 100)
+    inherit ``CloudAtom Tests``(parallelismFactor = 5)
 
     static do init()
 
@@ -40,4 +40,4 @@ type ``Local DynamoDB Atom Tests`` () =
     override __.Run(wf : Cloud<'T>) = imem.RunSynchronously wf
     override __.RunLocally(wf : Cloud<'T>) = imem.RunSynchronously wf
     override __.IsSupportedNamedLookup = true
-    override __.Repeats = 10
+    override __.Repeats = 2

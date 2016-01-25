@@ -1,5 +1,6 @@
 ﻿#I "../../bin"
 #r "FsPickler.dll"
+#r "FsPickler.Json.dll"
 #r "AWSSDK.Core.dll"
 #r "AWSSDK.S3.dll"
 #r "AWSSDK.DynamoDBv2.dll"
@@ -36,30 +37,18 @@ clearBuckets() |> run
 
 /////////////////////
 
-open Amazon.S3
-open Amazon.S3.Model
 open System
-open System.Net
 
-let s3Client = account.S3Client
+open Amazon.DynamoDBv2
+open Amazon.DynamoDBv2.Model
 
-let rec ensureBucketCreated (bucketName : string) =
-    let r = s3Client.ListBuckets()
-    if r.Buckets |> Seq.exists(fun b -> b.BucketName = bucketName) |> not then
-        let success =
-            try let _ = s3Client.PutBucket(bucketName) in true
-            with :? AmazonS3Exception as e when e.StatusCode = HttpStatusCode.Conflict -> false
+ProcessConfiguration.InitAsClient()
 
-        if not success then ensureBucketCreated bucketName
+let atomP = DynamoDBAtomProvider.Create(account, tablePrefix = "testmbrace") :> ICloudAtomProvider
+
+let atom = atomP.CreateAtom("testmbrace", Guid.NewGuid().ToString(), 42) |> run
 
 
-let test () =
-    let bucketName = "mbrace" + Guid.NewGuid().ToString("N")
-    [|1 .. 100|] |> Array.Parallel.iter (fun _ -> ensureBucketCreated bucketName)
+atom.Update(fun i -> i  + 1)
 
-    let resp = s3Client.InitiateMultipartUpload(new InitiateMultipartUploadRequest(BucketName = bucketName, Key = "test"))
-    let resp2 = s3Client.UploadPart(new UploadPartRequest(BucketName = resp.BucketName, Key = resp.Key, PartNumber = 1, UploadId = resp.UploadId, InputStream = new System.IO.MemoryStream([|1uy .. 255uy|])))
-    let resp3 = s3Client.CompleteMultipartUpload(new CompleteMultipartUploadRequest(BucketName = resp.BucketName, Key = resp.Key, UploadId = resp.UploadId, PartETags = new ResizeArray<_>([new PartETag(1, resp2.ETag)])))
-    ()
-
-test ()
+atom.Value
