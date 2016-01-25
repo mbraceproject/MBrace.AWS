@@ -1,6 +1,7 @@
 ﻿namespace MBrace.AWS.Store
 
 open System
+open System.Text.RegularExpressions
 open System.Runtime.Serialization
 
 open Amazon.SQS
@@ -13,9 +14,22 @@ open MBrace.Runtime.Utils.PrettyPrinters
 open MBrace.AWS.Runtime
 open MBrace.AWS.Runtime.Utilities
 
+[<AutoOpen>]
+module private SQSQueueImpl =
+
+    let mkRandomQueueName prefix = sprintf "%s-%s" prefix <| Guid.NewGuid().ToString("N")
+    let mkRandomQueueNameRegex prefix = new Regex(sprintf "%s-[0-9a-z]{32}" prefix, RegexOptions.Compiled)
+
+    let queueNameRegex = new Regex("https://sqs\.([^\./]+)\.amazonaws\.com/([^/]+)/([^/]+)", RegexOptions.Compiled)
+    let getQueueName (id : string) =
+        let m = queueNameRegex.Match id
+        if m.Success then m.Groups.[3].Value
+        else id
+
+
 /// CloudQueue implementation on top of Amazon SQS
 [<Sealed; DataContract>]
-type SQSQueue<'T> internal (queueUri, account : AwsAccount) =
+type SQSCloudQueue<'T> internal (queueUri, account : AwsAccount) =
     [<DataMember(Name = "Account")>]
     let account = account
 
@@ -73,7 +87,7 @@ type SQSQueue<'T> internal (queueUri, account : AwsAccount) =
         member x.Dispose() = Sqs.deleteQueue account queueUri
 
 [<Sealed; DataContract>]
-type SQSQueueProvider private (account : AwsAccount, queuePrefix : string) =
+type SQSCloudQueueProvider private (account : AwsAccount, queuePrefix : string) =
     [<DataMember(Name = "Account")>]
     let account = account
 
@@ -82,14 +96,37 @@ type SQSQueueProvider private (account : AwsAccount, queuePrefix : string) =
 
     static member Create(account : AwsAccount, ?queuePrefix : string) = 
         let queuePrefix = defaultArg queuePrefix "mbrace"
-        new SQSQueueProvider(account, queuePrefix)
+        new SQSCloudQueueProvider(account, queuePrefix)
+
+
+    /// <summary>
+    ///     Clears all randomly named SQS queues that match the given prefix.
+    /// </summary>
+    /// <param name="prefix">Prefix to clear. Defaults to the queue prefix of the current store instance.</param>
+    member this.ClearQueuesAsync(?prefix : string) = async {
+        let queuePrefix = defaultArg prefix queuePrefix
+        let! ct = Async.CancellationToken
+        let! queues = account.SQSClient.ListQueuesAsync(queuePrefix, ct) |> Async.AwaitTaskCorrect
+        do! queues.QueueUrls
+            |> Seq.map (fun url -> account.SQSClient.DeleteQueueAsync(url, ct) |> Async.AwaitTaskCorrect)
+            |> Async.Parallel
+            |> Async.Ignore
+    }
 
     interface ICloudQueueProvider with
-        member x.CreateQueue(queueId : string) = async {
-            return failwith "not implemeted yet"
+        member x.Name = "SQS CloudQueue Provider"
+        member x.Id = account.ToString()
+        member x.CreateQueue<'T>(queueId : string) = async {
+            let queueId = getQueueName queueId
+            let! ct = Async.CancellationToken
+            let! response = account.SQSClient.CreateQueueAsync(queueId, ct) |> Async.AwaitTaskCorrect
+            return new SQSCloudQueue<'T>(response.QueueUrl, account) :> CloudQueue<'T>
         }
 
-        member x.GetQueueById(queueId : string) = failwith "Not implemented yet"
-        member x.GetRandomQueueName() = failwith "Not implemented yet"
-        member x.Id = failwith "Not implemented yet"
-        member x.Name = failwith "Not implemented yet"
+        member x.GetQueueById(queueId : string) = async {
+            let queueId = getQueueName queueId
+            let! ct = Async.CancellationToken
+            let! response = account.SQSClient.GetQueueUrlAsync(queueId, ct) |> Async.AwaitTaskCorrect
+            return new SQSCloudQueue<'T>(response.QueueUrl, account) :> CloudQueue<'T>
+        }
+        member x.GetRandomQueueName() = mkRandomQueueName queuePrefix

@@ -61,13 +61,13 @@ module Sqs =
     }
 
     let private dequeueInternal (account : AwsAccount) queueUri (timeout : int option) = async {
-        let timeout = defaultArg timeout SqsConstants.maxWaitTime
+        let timeout = defaultArg timeout SqsConstants.maxWaitTime |> min SqsConstants.maxWaitTime
         let req = ReceiveMessageRequest(QueueUrl = queueUri)
         req.MaxNumberOfMessages <- 1
         
         // always make use of long polling for efficiency
         // but never wait for more than max allowed (20 seconds)
-        req.WaitTimeSeconds <- min SqsConstants.maxWaitTime timeout
+        req.WaitTimeSeconds <- int <| TimeSpan.FromMilliseconds(float timeout).TotalSeconds
 
         let! ct  = Async.CancellationToken
         let! res = account.SQSClient.ReceiveMessageAsync(req, ct)

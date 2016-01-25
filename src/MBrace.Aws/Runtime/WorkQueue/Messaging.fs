@@ -199,7 +199,7 @@ module private QueueUtils =
 [<Sealed; AutoSerializable(false)>]
 type internal Queue (clusterId : ClusterId, queueUri, logger : ISystemLogger) = 
     let account = clusterId.SQSAccount
-    let queue   = SQSQueue<WorkItemMessage>(queueUri, account) :> CloudQueue<WorkItemMessage>
+    let queue   = SQSCloudQueue<WorkItemMessage>(queueUri, account) :> CloudQueue<WorkItemMessage>
 
     let send msg = queue.EnqueueAsync msg |> Async.StartAsTask :> Task
     let sendBatch msgs = queue.EnqueueBatchAsync msgs |> Async.StartAsTask :> Task

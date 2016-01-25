@@ -52,3 +52,12 @@ let atom = atomP.CreateAtom("testmbrace", Guid.NewGuid().ToString(), 42) |> run
 atom.Update(fun i -> i  + 1)
 
 atom.Value
+
+
+let queueP = SQSQueueProvider.Create(account, queuePrefix = "testmbrace") :> ICloudQueueProvider
+
+
+let q = queueP.CreateQueue<int> "test" |> run
+
+
+q.Id

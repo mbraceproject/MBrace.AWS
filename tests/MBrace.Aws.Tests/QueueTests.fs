@@ -20,14 +20,14 @@ open MBrace.AWS.Tests
 
 [<TestFixture>]
 type ``Local SQS Queue Tests`` () =
-    inherit ``CloudQueue Tests``(parallelismFactor = 100)
+    inherit ``CloudQueue Tests``(parallelismFactor = 10)
 
     static do init()
 
     let account = getAWSTestAccount()
 
     let queuePrefix = sprintf "testmbrace-%s" <| System.Guid.NewGuid().ToString("N")
-    let sqsQueueProvider = SQSQueueProvider.Create(account, queuePrefix = queuePrefix)
+    let sqsQueueProvider = SQSCloudQueueProvider.Create(account, queuePrefix = queuePrefix)
     let serializer = new FsPicklerBinarySerializer(useVagabond = false)
     let imem = ThreadPoolRuntime.Create(queueProvider = sqsQueueProvider, serializer = serializer, memoryEmulation = MemoryEmulation.Shared)
 
@@ -35,8 +35,7 @@ type ``Local SQS Queue Tests`` () =
 
     [<TestFixtureTearDown>]
     member __.``Clean up leftover buckets``() =
-        ()
-//        ddbAtomProvider.ClearTablesAsync() |> run
+        sqsQueueProvider.ClearQueuesAsync() |> run
 
     override __.Run(wf : Cloud<'T>) = imem.RunSynchronously wf
     override __.RunLocally(wf : Cloud<'T>) = imem.RunSynchronously wf
