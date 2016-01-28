@@ -29,7 +29,7 @@ type ``Local SQS Queue Tests`` () =
     let queuePrefix = sprintf "testmbrace-%s" <| System.Guid.NewGuid().ToString("N")
     let sqsQueueProvider = SQSCloudQueueProvider.Create(account, queuePrefix = queuePrefix)
     let serializer = new FsPicklerBinarySerializer(useVagabond = false)
-    let imem = ThreadPoolRuntime.Create(queueProvider = sqsQueueProvider, serializer = serializer, memoryEmulation = MemoryEmulation.Shared)
+    let imem = ThreadPoolRuntime.Create(queueProvider = sqsQueueProvider, serializer = serializer, memoryEmulation = MemoryEmulation.Copied)
 
     let run x = Async.RunSync x
 

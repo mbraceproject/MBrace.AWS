@@ -7,8 +7,8 @@ nuget NUnit.Runners
 nuget NuGet.CommandLine
 nuget FAKE
 nuget SourceLink.Fake
-nuget MBrace.Core ~> 1.0.10
-nuget MBrace.Runtime ~> 1.0.10
+nuget MBrace.Core ~> 1.0.19
+nuget MBrace.Runtime ~> 1.0.19
 nuget MBrace.Tests
 
 nuget AWSSDK.S3 ~> 3.0

@@ -29,7 +29,7 @@ type ``Local DynamoDB Atom Tests`` () =
     let tablePrefix = sprintf "testmbrace-%s" <| System.Guid.NewGuid().ToString("N")
     let ddbAtomProvider = DynamoDBAtomProvider.Create(account, tablePrefix = tablePrefix)
     let serializer = new FsPicklerBinarySerializer(useVagabond = false)
-    let imem = ThreadPoolRuntime.Create(atomProvider = ddbAtomProvider, serializer = serializer, memoryEmulation = MemoryEmulation.Shared)
+    let imem = ThreadPoolRuntime.Create(atomProvider = ddbAtomProvider, serializer = serializer, memoryEmulation = MemoryEmulation.Copied)
 
     let run x = Async.RunSync x
 

@@ -22,13 +22,15 @@ open MBrace.AWS.Tests
 type ``Local S3 FileStore Tests`` () =
     inherit ``CloudFileStore Tests``(parallelismFactor = 20)
 
+    static do init()
+
     let account = getAWSTestAccount()
 
     let bucketPrefix = sprintf "testmbrace%04x" <| System.Random().Next(int System.UInt16.MaxValue)
     let s3store = S3FileStore.Create(account, bucketPrefix = bucketPrefix)
     let store = s3store :> ICloudFileStore
     let serializer = new FsPicklerBinarySerializer(useVagabond = false)
-    let imem = ThreadPoolRuntime.Create(fileStore = store, serializer = serializer, memoryEmulation = MemoryEmulation.Shared)
+    let imem = ThreadPoolRuntime.Create(fileStore = store, serializer = serializer, memoryEmulation = MemoryEmulation.Copied)
 
     let run x = Async.RunSync x
 

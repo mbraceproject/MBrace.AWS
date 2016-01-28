@@ -86,7 +86,7 @@ type BlobValue<'T> internal (account : AwsAccount, bucketName : string, key : st
 
         use stream = new MemoryStream()
         ProcessConfiguration.BinarySerializer.Serialize<'T>(stream, value)
-        do! stream.FlushAsync()
+        do! stream.FlushAsync() |> Async.AwaitTaskCorrect
 
         req.InputStream <- stream
         let! ct = Async.CancellationToken

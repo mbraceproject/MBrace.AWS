@@ -21,7 +21,7 @@ type internal MessagingClient =
              localWorkerId : IWorkerId, 
              dequeue       : unit -> Task<(WorkItemMessage * WorkItemMessageAttributes) option>) 
             : Async<ICloudWorkItemLeaseToken option> = async { 
-        let! res = dequeue()
+        let! res = dequeue() |> Async.AwaitTaskCorrect
         match res with
         | None -> return None
         | Some (message, attributes) ->
@@ -117,7 +117,8 @@ type internal MessagingClient =
                 TargetWorker = workItem.TargetWorker |> Option.bind (fun x -> Some x.Id)
                 BatchIndex   = None
             }
-        do! send msg
+
+        do! send msg |> Async.AwaitTaskCorrect
 
         logger.Logf LogLevel.Debug "workItem:%O : enqueue completed, size %s" workItem.Id (getHumanReadableByteSize size)
     }
@@ -165,7 +166,7 @@ type internal MessagingClient =
             }
 
         let messages = jobs |> Array.mapi mkWorkItemMessage
-        do! send messages
+        do! send messages |> Async.AwaitTaskCorrect
         logger.LogInfof 
             "Enqueued batched jobs of %d items for task %s, total size %s." 
             jobs.Length 
@@ -289,7 +290,7 @@ type internal Topic (clusterId : ClusterId, logger : ISystemLogger) =
     let getQueueUriOrCreate (msg : WorkItemMessage) = async {
         // since this internal class is only called by the WorkItemQueue
         // we can safely assume that TargetWorker is Some in this case
-        let (Some workerId) = msg.TargetWorker
+        let (Some workerId) = msg.TargetWorker 
         let queueName = getQueueName topic workerId
         let! queueUri = Sqs.tryGetQueueUri account queueName
         match queueUri with
