@@ -47,7 +47,7 @@ module Utils =
         | null | "" -> None
         | creds -> 
             let toks = creds.Split(',')
-            let creds = new BasicAWSCredentials(toks.[0], toks.[1]) :> AWSCredentials
+            let creds = new BasicAWSCredentials(toks.[0], toks.[1]) :> Amazon.Runtime.AWSCredentials
             Some creds
 
     let getAWSTestAccount () =

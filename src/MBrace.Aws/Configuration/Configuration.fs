@@ -29,6 +29,8 @@ type AWSRegion (region : RegionEndpoint) =
             | :? AWSRegion as r -> compare name r.SystemName
             | _ -> invalidArg "y" "invalid comparand"
 
+    override __.ToString() = name
+
     /// The Asia Pacific (Tokyo) endpoint.
     static member APNortheast1 = mk RegionEndpoint.APNortheast1
     /// The Asia Pacific (Seoul) endpoint.

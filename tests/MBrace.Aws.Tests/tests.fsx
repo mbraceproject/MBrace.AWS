@@ -19,10 +19,11 @@ open Amazon.DynamoDBv2
 
 open MBrace.Core
 open MBrace.Core.Internals
+open MBrace.AWS
 open MBrace.AWS.Runtime
 open MBrace.AWS.Store
 
-let account = AwsAccount.Create("Default", RegionEndpoint.EUCentral1)
+let account = AWSAccount.Create("Default", RegionEndpoint.EUCentral1)
 let store = S3FileStore.Create(account) :> ICloudFileStore
 
 let run x = Async.RunSynchronously x
@@ -41,3 +42,8 @@ open System
 
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
+
+
+let config = Configuration.FromCredentialsStore(AWSRegion.EUCentral1, "eirikmbrace")
+
+config
