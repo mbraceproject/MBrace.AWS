@@ -34,13 +34,13 @@ module private S3FileStoreImpl =
         if String.length prefix > 31 then invalidArg "bucketprefix" "must be at most 31 characters"
         Validate.bucketName prefix
 
-    let getObjMetadata (account : AwsAccount) (path : S3Path) = async {
+    let getObjMetadata (account : AWSAccount) (path : S3Path) = async {
         let req = GetObjectMetadataRequest(BucketName = path.Bucket , Key = path.Key)
         let! ct = Async.CancellationToken
         return! account.S3Client.GetObjectMetadataAsync(req, ct) |> Async.AwaitTaskCorrect
     }
 
-    let enumerateDir (account : AwsAccount) (dirPath : S3Path) map = async {
+    let enumerateDir (account : AWSAccount) (dirPath : S3Path) map = async {
         let results = ResizeArray<string>()
         let rec aux nextMarker = async {
             let req = ListObjectsRequest(
@@ -63,7 +63,7 @@ module private S3FileStoreImpl =
 
 ///  MBrace File Store implementation that uses Amazon S3 as backend.
 [<Sealed; DataContract>]
-type S3FileStore private (account : AwsAccount, defaultBucket : string, bucketPrefix : string) =
+type S3FileStore private (account : AWSAccount, defaultBucket : string, bucketPrefix : string) =
 
     [<DataMember(Name = "S3Account")>]
     let account = account
@@ -110,7 +110,7 @@ type S3FileStore private (account : AwsAccount, defaultBucket : string, bucketPr
     /// <param name="account">AwsAccount to be used.</param>
     /// <param name="defaultBucket">Default S3 Bucket to be used. Will auto-generate name if not specified.</param>
     /// <param name="bucketPrefix">Prefix for randomly generated S3 buckets. Defaults to "mbrace".</param>
-    static member Create(account : AwsAccount, ?defaultBucket : string, ?bucketPrefix : string) =
+    static member Create(account : AWSAccount, ?defaultBucket : string, ?bucketPrefix : string) =
         let bucketPrefix = defaultArg bucketPrefix "mbrace"
         do validateBucketPrefix bucketPrefix
         let defaultBucket = match defaultBucket with Some b -> b | None -> getRandomBucketName bucketPrefix

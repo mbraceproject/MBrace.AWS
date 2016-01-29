@@ -74,7 +74,7 @@ module private DynamoDBAtomUtils =
 
 /// CloudAtom implementation on top of Amazon DynamoDB
 [<AutoSerializable(true) ; Sealed; DataContract>]
-type DynamoDBAtom<'T> internal (tableName : string, account : AwsAccount, hashKey : string) =
+type DynamoDBAtom<'T> internal (tableName : string, account : AWSAccount, hashKey : string) =
 
     [<DataMember(Name = "AWSAccount")>]
     let account = account
@@ -166,7 +166,7 @@ type DynamoDBAtom<'T> internal (tableName : string, account : AwsAccount, hashKe
 
 /// CloudAtom provider implementation on top of Amazon DynamoDB.
 [<Sealed; DataContract>]
-type DynamoDBAtomProvider private (account : AwsAccount, defaultTable : string, tablePrefix : string, provisionedThroughput : int64) =
+type DynamoDBAtomProvider private (account : AWSAccount, defaultTable : string, tablePrefix : string, provisionedThroughput : int64) =
     
     [<DataMember(Name = "Account")>]
     let account = account
@@ -211,7 +211,7 @@ type DynamoDBAtomProvider private (account : AwsAccount, defaultTable : string, 
     /// <param name="account">AWS account to be used by the provider.</param>
     /// <param name="defaultTable">Default table container.</param>
     /// <param name="provisionedThroughput">DynamoDB provision throughput. Defaults to 20.</param>
-    static member Create (account : AwsAccount, ?defaultTable : string, ?tablePrefix : string, ?provisionedThroughput : int64) =
+    static member Create (account : AWSAccount, ?defaultTable : string, ?tablePrefix : string, ?provisionedThroughput : int64) =
         let tablePrefix =
             match tablePrefix with
             | None -> "cloudAtom"

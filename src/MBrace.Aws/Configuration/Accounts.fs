@@ -14,7 +14,7 @@ open Amazon.DynamoDBv2.DataModel
 open MBrace.Runtime.Utils
 
 [<AutoSerializable(false); NoEquality; NoComparison>]
-type private AwsAccountData = 
+type private AWSAccountData = 
     {
         ProfileName     : string
         Region          : RegionEndpoint
@@ -26,8 +26,8 @@ type private AwsAccountData =
 
 /// Defines a serializable AWS account descriptor which does not leak credentials
 [<Sealed; DataContract; StructuredFormatDisplay("{StructuredFormatDisplay}")>]
-type AwsAccount private (accountData : AwsAccountData) =
-    static let localRegistry = new ConcurrentDictionary<string * string, AwsAccountData>()
+type AWSAccount private (accountData : AWSAccountData) =
+    static let localRegistry = new ConcurrentDictionary<string * string, AWSAccountData>()
     static let mkKey (profileName : string) (region : RegionEndpoint) = profileName, region.SystemName
 
     static let initAccountData (profileName : string) (region : RegionEndpoint) (credentials : AWSCredentials) =
@@ -85,12 +85,12 @@ type AwsAccount private (accountData : AwsAccountData) =
     interface IComparable with
         member __.CompareTo(other:obj) =
             match other with
-            | :? AwsAccount as aa -> compare2 profileName regionName aa.ProfileName aa.RegionName
+            | :? AWSAccount as aa -> compare2 profileName regionName aa.ProfileName aa.RegionName
             | _ -> invalidArg "other" "invalid comparand."
 
     override __.Equals(other:obj) =
         match other with
-        | :? AwsAccount as aa -> profileName = aa.ProfileName && regionName = aa.RegionName
+        | :? AWSAccount as aa -> profileName = aa.ProfileName && regionName = aa.RegionName
         | _ -> false
 
     override __.GetHashCode() = hash2 profileName regionName
@@ -115,4 +115,4 @@ type AwsAccount private (accountData : AwsAccountData) =
             initAccountData profileName region credentials
 
         let accountData = localRegistry.GetOrAdd(mkKey profileName region, initAccountData)
-        new AwsAccount(accountData)
+        new AWSAccount(accountData)

@@ -1,18 +1,23 @@
 ﻿namespace MBrace.AWS.Runtime
 
+open Nessos.FsPickler
 open MBrace.Runtime
+
+open MBrace.AWS
 
 /// Serializable state/configuration record uniquely identifying an MBrace.AWS cluster
 [<AutoSerializable(true); StructuralEquality; StructuralComparison>]
 [<StructuredFormatDisplay("{Id}")>]
 type ClusterId =
-    {
+    {   
+        Region : AWSRegion
+
         /// Runtime version string
         Version : string
 
-        S3Account       : AwsAccount
-        DynamoDBAccount : AwsAccount
-        SQSAccount      : AwsAccount
+        S3Account       : AWSAccount
+        DynamoDBAccount : AWSAccount
+        SQSAccount      : AWSAccount
                
         WorkItemQueue   : string // SQS Name
         WorkItemTopic   : string // SNS Topic
@@ -27,11 +32,10 @@ type ClusterId =
         OptimizeClosureSerialization : bool
     }
 
-    member __.Id = 
-        sprintf "{ S3 = \"%s\"; SQS = \"%s\"; DynamoDB = \"%s\" }" 
-                "foo"   // TODO
-                "bar"   // TODO
-                "zoo"   // TODO
+    member this.Id = 
+        let hash = FsPickler.ComputeHash this
+        let enc = System.Convert.ToBase64String hash.Hash
+        sprintf "AWS runtime @ %s hashId:%s" this.Region.SystemName enc
 
     interface IRuntimeId with 
         member this.Id = this.Id

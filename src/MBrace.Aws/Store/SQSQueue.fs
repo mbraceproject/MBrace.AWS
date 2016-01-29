@@ -29,7 +29,7 @@ module private SQSQueueImpl =
 
 /// CloudQueue implementation on top of Amazon SQS
 [<Sealed; DataContract>]
-type SQSCloudQueue<'T> internal (queueUri, account : AwsAccount) =
+type SQSCloudQueue<'T> internal (queueUri, account : AWSAccount) =
     [<DataMember(Name = "Account")>]
     let account = account
 
@@ -87,14 +87,14 @@ type SQSCloudQueue<'T> internal (queueUri, account : AwsAccount) =
         member x.Dispose() = Sqs.deleteQueue account queueUri
 
 [<Sealed; DataContract>]
-type SQSCloudQueueProvider private (account : AwsAccount, queuePrefix : string) =
+type SQSCloudQueueProvider private (account : AWSAccount, queuePrefix : string) =
     [<DataMember(Name = "Account")>]
     let account = account
 
     [<DataMember(Name = "QueuePrefix")>]
     let queuePrefix = queuePrefix
 
-    static member Create(account : AwsAccount, ?queuePrefix : string) = 
+    static member Create(account : AWSAccount, ?queuePrefix : string) = 
         let queuePrefix = defaultArg queuePrefix "mbrace"
         new SQSCloudQueueProvider(account, queuePrefix)
 

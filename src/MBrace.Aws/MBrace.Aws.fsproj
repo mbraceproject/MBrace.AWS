@@ -64,6 +64,7 @@
     <Compile Include="Configuration\ProcessConfiguration.fs" />
     <Compile Include="Configuration\Accounts.fs" />
     <Compile Include="Configuration\Validation.fs" />
+    <Compile Include="Configuration\Configuration.fs" />
     <Compile Include="Utilities\Utils.fs" />
     <Compile Include="Utilities\S3Utils.fs" />
     <Compile Include="Utilities\BlobValue.fs" />

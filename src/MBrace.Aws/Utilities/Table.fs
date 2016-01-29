@@ -64,7 +64,7 @@ module internal Table =
 
     /// Creates a new table and wait till its status is confirmed as Active
     let createIfNotExists 
-            (account : AwsAccount) 
+            (account : AWSAccount) 
             tableName
             (tableConfig : TableConfig option)
             (maxRetries  : int option) = async {
@@ -117,7 +117,7 @@ module internal Table =
     }
 
     let private putInternal 
-            (account  : AwsAccount) 
+            (account  : AWSAccount) 
             tableName 
             (entity   : IDynamoDBDocument)
             (opConfig : UpdateItemOperationConfig option) = async { 
@@ -139,7 +139,7 @@ module internal Table =
         putInternal account tableName entity None
 
     let putBatch 
-            (account : AwsAccount) 
+            (account : AWSAccount) 
             tableName 
             (entities : 'a seq when 'a :> IDynamoDBDocument) = async {
         let table = Table.LoadTable(account.DynamoDBClient, tableName)
@@ -153,7 +153,7 @@ module internal Table =
     }
 
     let delete 
-            (account : AwsAccount) 
+            (account : AWSAccount) 
             tableName 
             (entity : IDynamoDBDocument) = async {
         let table = Table.LoadTable(account.DynamoDBClient, tableName)
@@ -164,7 +164,7 @@ module internal Table =
     }
 
     let deleteBatch
-            (account : AwsAccount) 
+            (account : AWSAccount) 
             tableName 
             (entities : 'a seq when 'a :> IDynamoDBDocument) = async {
         let table = Table.LoadTable(account.DynamoDBClient, tableName)
@@ -178,7 +178,7 @@ module internal Table =
     }
 
     let inline query< ^a when ^a : (static member FromDynamoDBDocument : Document -> ^a) > 
-            (account : AwsAccount) 
+            (account : AWSAccount) 
             tableName 
             (hashKey : string) = async {
         let results = ResizeArray<_>()
@@ -210,7 +210,7 @@ module internal Table =
     }
 
     let private readInternal 
-            (account : AwsAccount) 
+            (account : AWSAccount) 
             tableName 
             (hashKey : string) 
             (rangeKey : string) = async {
@@ -225,7 +225,7 @@ module internal Table =
     }
 
     let inline read< ^a when ^a : (static member FromDynamoDBDocument : Document -> ^a) > 
-            (account : AwsAccount) 
+            (account : AWSAccount) 
             tableName 
             (hashKey : string) 
             (rangeKey : string) = async {
@@ -236,7 +236,7 @@ module internal Table =
     }
 
     let inline increment 
-            (account : AwsAccount) 
+            (account : AWSAccount) 
             tableName 
             hashKey
             rangeKey
@@ -260,7 +260,7 @@ module internal Table =
 
     let inline transact< ^a when ^a : (static member FromDynamoDBDocument : Document -> ^a)
                             and  ^a :> IDynamoDBDocument >
-            (account  : AwsAccount) 
+            (account  : AWSAccount) 
             tableName 
             (hashKey  : string) 
             (rangeKey : string)
