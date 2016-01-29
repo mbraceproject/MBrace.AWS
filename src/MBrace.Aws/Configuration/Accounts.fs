@@ -5,54 +5,62 @@ open System.Collections.Concurrent
 open System.Runtime.Serialization
 
 open Amazon
+open Amazon.Util
 open Amazon.Runtime
 open Amazon.S3
 open Amazon.SQS
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.DataModel
+open Amazon.SimpleNotificationService
 
 open MBrace.Runtime.Utils
 
 [<AutoSerializable(false); NoEquality; NoComparison>]
 type private AWSAccountData = 
     {
-        ProfileName     : string
         Region          : RegionEndpoint
         Credentials     : ImmutableCredentials
         S3Client        : AmazonS3Client
         DynamoDBClient  : AmazonDynamoDBClient
         SQSClient       : AmazonSQSClient
+        SNSClient       : AmazonSimpleNotificationServiceClient
     }
 
 /// Defines a serializable AWS account descriptor which does not leak credentials
 [<Sealed; DataContract; StructuredFormatDisplay("{StructuredFormatDisplay}")>]
 type AWSAccount private (accountData : AWSAccountData) =
     static let localRegistry = new ConcurrentDictionary<string * string, AWSAccountData>()
-    static let mkKey (profileName : string) (region : RegionEndpoint) = profileName, region.SystemName
+    static let mkKey (accessKey : string) (region : RegionEndpoint) = accessKey, region.SystemName
 
-    static let initAccountData (profileName : string) (region : RegionEndpoint) (credentials : AWSCredentials) =
+    static let initAccountData (region : RegionEndpoint) (credentials : AWSCredentials) =
         {
-            ProfileName = profileName
             Region = region
             Credentials = credentials.GetCredentials()
             S3Client = new AmazonS3Client(credentials, region)
             DynamoDBClient = new AmazonDynamoDBClient(credentials, region)
             SQSClient = new AmazonSQSClient(credentials, region)
+            SNSClient = new AmazonSimpleNotificationServiceClient(credentials, region)
         }
 
-    static let recoverAccountData (profileName : string) (region : RegionEndpoint) =
-        let k = mkKey profileName region
+    static let recoverAccountData (accessKey : string) (region : RegionEndpoint) =
+        let k = mkKey accessKey region
         let ok, found = localRegistry.TryGetValue k
         if ok then found 
         else
             let initFromProfileManager _ =
-                let credentials = Amazon.Util.ProfileManager.GetAWSCredentials profileName
-                initAccountData profileName region credentials
+                let storedCreds =
+                    ProfileManager.ListProfileNames() 
+                    |> Seq.map ProfileManager.GetAWSCredentials
+                    |> Seq.tryPick (fun creds -> if creds.GetCredentials().AccessKey = accessKey then Some creds else None)
+
+                match storedCreds with
+                | None -> invalidOp <| sprintf "Could not locate stored profile with access key '%s'" accessKey
+                | Some credentials -> initAccountData region credentials
 
             localRegistry.GetOrAdd(k, initFromProfileManager)
 
-    [<DataMember(Name = "ProfileName")>]
-    let profileName = accountData.ProfileName
+    [<DataMember(Name = "AccessKey")>]
+    let profileName = accountData.Credentials.AccessKey
     [<DataMember(Name = "RegionName")>]
     let regionName = accountData.Region.SystemName
     [<IgnoreDataMember>]
@@ -81,6 +89,8 @@ type AWSAccount private (accountData : AWSAccountData) =
     member __.SQSClient = getAccountData().SQSClient :> IAmazonSQS
     /// Amazon DynamoDB Client instance for account
     member __.DynamoDBClient = getAccountData().DynamoDBClient :> IAmazonDynamoDB
+    /// Amazon SNS Client instance for account
+    member __.SNSClient = getAccountData().SNSClient :> IAmazonSimpleNotificationService
 
     interface IComparable with
         member __.CompareTo(other:obj) =
@@ -99,20 +109,22 @@ type AWSAccount private (accountData : AWSAccountData) =
     override __.ToString() = __.StructuredFormatDisplay
 
     /// <summary>
-    ///     Creates a new AWS credentials with provided profile name and region endpoint.
-    ///     If credentials object is not supplied, it will be recovered from the local profile manager.
+    ///     Creates a new AWS credentials with provided credentials and region endpoint.
     /// </summary>
-    /// <param name="profileName">Profile identifier.</param>
+    /// <param name="credentials">AWS credentials for account.</param>
     /// <param name="region">Region endpoint.</param>
-    /// <param name="credentials">AWS credentials for profile. Defaults to credentials recovered from local profile manager.</param>
-    static member Create(profileName : string, region : RegionEndpoint, ?credentials : AWSCredentials) =
-        let initAccountData _ =
-            let credentials =
-                match credentials with
-                | Some c -> c
-                | None -> Amazon.Util.ProfileManager.GetAWSCredentials profileName
+    static member Create(credentials : AWSCredentials, region : RegionEndpoint) =
+        let initAccountData _ = initAccountData region credentials
 
-            initAccountData profileName region credentials
-
-        let accountData = localRegistry.GetOrAdd(mkKey profileName region, initAccountData)
+        let accountData = localRegistry.GetOrAdd(mkKey (credentials.GetCredentials().AccessKey) region, initAccountData)
         new AWSAccount(accountData)
+
+    /// <summary>
+    ///     Creates a new AWS credentials with provided profile name and region endpoint.
+    ///     Credentials will be recovered from the local profile manager.
+    /// </summary>
+    /// <param name="profileName">Profile name to recover credentials from,</param>
+    /// <param name="region">Region endpoint.</param>
+    static member Create(profileName : string, region : RegionEndpoint) =
+        let credentials = ProfileManager.GetAWSCredentials profileName
+        AWSAccount.Create(credentials, region)

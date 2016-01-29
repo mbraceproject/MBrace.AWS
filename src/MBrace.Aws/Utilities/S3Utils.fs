@@ -9,6 +9,7 @@ open System.Text.RegularExpressions
 
 open MBrace.Core.Internals
 open MBrace.Runtime.Utils
+open MBrace.Runtime.Utils.Retry
 open MBrace.AWS.Runtime
 
 open Amazon.S3
@@ -274,6 +275,16 @@ module S3Utils =
         override __.Flush() = ()
         override __.Close() = if acquireClose() then stream.Close()
 
+
+    let private mkBucketRetryPolicy maxRetries interval =
+        let interval = defaultArg interval 3000 |> float |> TimeSpan.FromMilliseconds
+        Policy(fun retries exn -> 
+            if maxRetries |> Option.exists (fun mr -> retries > mr) then None else
+            match exn with
+            | :? AmazonS3Exception as e when e.StatusCode = HttpStatusCode.Conflict -> Some interval
+            | :? AmazonS3Exception as e when e.StatusCode = HttpStatusCode.NotFound && e.Message.Contains "bucket" -> Some interval
+            | _ -> None)
+
     type IAmazonS3 with
 
         /// <summary>
@@ -299,4 +310,29 @@ module S3Utils =
         member s3.GetObjectSeekableReadStreamAsync(bucketName : string, key : string, ?timeout : TimeSpan, ?etag : string) : Async<S3SeekableReadStream> = async {
             let! response = S3SeekableReadStream.GetRangedStream s3 bucketName key None etag timeout
             return new S3SeekableReadStream(s3, bucketName, key, response.ContentLength, response.ResponseStream, timeout, response.ETag)
+        }
+
+        /// CreatesIfNotExistAsync that protects from 409 conflict errors with supplied retry policy
+        member s3.CreateBucketIfNotExistsSafe(bucketName : string, ?retryInterval : int, ?maxRetries : int) = async {
+            let policy = mkBucketRetryPolicy maxRetries retryInterval
+
+            do! retryAsync policy <| async {
+                let! ct = Async.CancellationToken
+                let! listed = s3.ListBucketsAsync(ct) |> Async.AwaitTaskCorrect
+                let buckOpt = listed.Buckets |> Seq.tryFind (fun b -> b.BucketName = bucketName)
+                if Option.isNone buckOpt then
+                    let! ct = Async.CancellationToken
+                    let! _result = s3.PutBucketAsync(bucketName, ct) |> Async.AwaitTaskCorrect
+                    ()
+
+                if buckOpt |> Option.forall (fun b -> (DateTime.UtcNow - b.CreationDate).Duration() < TimeSpan.FromMinutes 1.) then
+                    // addresses an issue where S3 erroneously reports that bucket does not exist even if it has been created
+                    // the workflow below will typically trigger this error, forcing a retry of the operation after a delay
+                    let! ct = Async.CancellationToken
+                    let! r1 = s3.InitiateMultipartUploadAsync(InitiateMultipartUploadRequest(BucketName = bucketName, Key = Guid.NewGuid().ToString("N")), ct) |> Async.AwaitTaskCorrect
+                    let! _r2 = s3.UploadPartAsync(UploadPartRequest(BucketName = r1.BucketName, Key = r1.Key, PartNumber = 1, UploadId = r1.UploadId, InputStream = new MemoryStream([||])), ct) |> Async.AwaitTaskCorrect
+                    let! _r3 = s3.AbortMultipartUploadAsync(AbortMultipartUploadRequest(BucketName = r1.BucketName, Key = r1.Key, UploadId = r1.UploadId), ct) |> Async.AwaitTaskCorrect
+    //                let! _r3 = account.S3Client.CompleteMultipartUploadAsync(CompleteMultipartUploadRequest(BucketName = r1.BucketName, Key = r1.Key, UploadId = r1.UploadId, PartETags = ResizeArray [new PartETag(1, _r2.ETag)]), ct) |> Async.AwaitTaskCorrect
+                    ()
+            }
         }

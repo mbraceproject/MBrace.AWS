@@ -41,6 +41,7 @@ type AWSRegion (region : RegionEndpoint) =
     static member APSoutheast2 = mk RegionEndpoint.APSoutheast2
     /// The China (Beijing) endpoint.
     static member CNNorth1 = mk RegionEndpoint.CNNorth1
+    /// The EU Central (Frankfurt) endpoint.
     static member EUCentral1 = mk RegionEndpoint.EUCentral1
     /// The South America (Sao Paulo) endpoint.
     static member SAEast1 = mk RegionEndpoint.SAEast1
@@ -79,6 +80,8 @@ type Configuration(region : AWSRegion, clusterId : string, credentials : AWSCred
     do Validate.hostname clusterId
     let mkName name = sprintf "%s.%s" name clusterId
 
+    let mutable version = typeof<Configuration>.Assembly.GetName().Version
+
     // Default Service Bus Configuration
     let mutable workItemQueue        = mkName "MBraceWorkItemQueue"
     let mutable workItemTopic        = mkName "MBraceWorkItemTopic"
@@ -92,17 +95,22 @@ type Configuration(region : AWSRegion, clusterId : string, credentials : AWSCred
     let mutable runtimeTable        = mkName "MBraceRuntimeData"
     let mutable runtimeLogsTable    = mkName "MBraceRuntimeLogs"
 
+    /// Runtime version this configuration is targeting. Default to current assembly version.
+    member __.Version
+        with get () = version.ToString()
+        and set v = version <- Version.Parse v
+
     /// AWS S3 Account credentials
     member val S3Credentials = credentials with get, set
+    member val S3Region = region with get, set
 
     /// AWS DynamoDB Account credentials
     member val DynamoDBCredentials = credentials with get, set
+    member val DynamoDBRegion = region with get, set
 
     /// AWS SQS Account credentials
     member val SQSCredentials = credentials with get, set
-
-    /// AWS Region
-    member val Region = region with get, set
+    member val SQSRegion = region with get, set
 
     /// Specifies wether the cluster should optimize closure serialization. Defaults to true.
     member val OptimizeClosureSerialization = true with get, set

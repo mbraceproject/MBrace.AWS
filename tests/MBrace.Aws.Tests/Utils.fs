@@ -52,5 +52,6 @@ module Utils =
 
     let getAWSTestAccount () =
         let region = getTestRegion()
-        let profile = getAWSProfile()
-        AWSAccount.Create(profile, region, ?credentials = tryGetAWSCredentials())
+        match tryGetAWSCredentials() with
+        | Some creds -> AWSAccount.Create(creds, region)
+        | None -> AWSAccount.Create(getAWSProfile(), region)

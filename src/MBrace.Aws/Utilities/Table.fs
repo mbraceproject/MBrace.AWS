@@ -10,6 +10,7 @@ open Amazon.DynamoDBv2.DocumentModel
 open Amazon.DynamoDBv2.Model
 
 open MBrace.Core.Internals
+open MBrace.Runtime.Utils.Retry
 open MBrace.AWS.Runtime
 
 [<AllowNullLiteral>]
@@ -39,6 +40,43 @@ module DynamoDBEntryExtensions =
 
         member this.AsDateTimeOffset() =
             DateTimeOffset.Parse <| this.AsPrimitive().AsString()
+
+
+    let mkTableConflictRetryPolicy maxRetries interval =
+        let interval = defaultArg interval 3000 |> float |> TimeSpan.FromMilliseconds
+        Policy(fun retries exn ->
+            if maxRetries |> Option.exists (fun mr -> retries < mr) then None
+            elif StoreException.Conflict exn then Some interval
+            else None)
+
+    type IAmazonDynamoDB with
+        member ddb.CreateTableIfNotExistsSafe(tableName : string, ?retryInterval : int, ?maxRetries : int) =
+            retryAsync (mkTableConflictRetryPolicy maxRetries retryInterval) <| async {
+
+                let! ct = Async.CancellationToken
+                let! listedTables = ddb.ListTablesAsync(ct) |> Async.AwaitTaskCorrect
+                if listedTables.TableNames |> Seq.exists(fun tn -> tn = tableName) |> not then
+                    let ctr = new CreateTableRequest(TableName = tableName)
+                    ctr.KeySchema.Add <| KeySchemaElement("HashKey", KeyType.HASH)
+                    ctr.KeySchema.Add <| KeySchemaElement("RangeKey", KeyType.RANGE)
+                    ctr.AttributeDefinitions.Add <| AttributeDefinition("HashKey", ScalarAttributeType.S)
+                    ctr.AttributeDefinitions.Add <| AttributeDefinition("RangeKey", ScalarAttributeType.S)
+                    ctr.ProvisionedThroughput <- new ProvisionedThroughput(10L, 10L)
+
+                    let! _resp = ddb.CreateTableAsync(ctr, ct) |> Async.AwaitTaskCorrect
+                    ()
+
+                let rec awaitReady retries = async {
+                    if retries = 0 then return failwithf "Failed to create table '%s'" tableName
+                    let! descr = ddb.DescribeTableAsync(tableName, ct) |> Async.AwaitTaskCorrect
+                    if descr.Table.TableStatus <> TableStatus.ACTIVE then
+                        do! Async.Sleep 1000
+                        return! awaitReady (retries - 1)
+                }
+
+                do! awaitReady 20
+            }
+
 
 [<AutoOpen>]
 module private DynamoDBUtils =

@@ -14,5 +14,6 @@ nuget MBrace.Tests
 nuget AWSSDK.S3 ~> 3.0
 nuget AWSSDK.DynamoDBv2 ~> 3.0
 nuget AWSSDK.SQS ~> 3.0
+nuget AWSSDK.SimpleNotificationService ~> 3.0
 
 github fsharp/FAKE modules/Octokit/Octokit.fsx
