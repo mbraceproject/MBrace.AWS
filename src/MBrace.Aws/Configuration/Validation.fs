@@ -8,6 +8,12 @@ module Validate =
 
     let inline private validate (r : Regex) (input : string) = r.IsMatch input
 
+    let private hostNameRegex = Regex("^[a-z0-9]+$", RegexOptions.Compiled)
+    let hostname (hostname : string) =
+        if not <| validate hostNameRegex hostname then 
+            sprintf "'%s' is not a valid DNS hostname." hostname
+            |> invalidArg "hostname"
+
     // S3 Bucket name restrictions, see:
     // http://docs.aws.amazon.com/AmazonS3/latest/dev/BucketRestrictions.html
     let private bucketNameRegex = Regex("^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)*$", RegexOptions.Compiled)

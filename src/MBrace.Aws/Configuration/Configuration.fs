@@ -73,20 +73,22 @@ with
 
 /// Azure Configuration Builder. Used to specify MBrace.AWS cluster storage configuration.
 [<AutoSerializable(true); Sealed; NoEquality; NoComparison>]
-type Configuration(region : AWSRegion, credentials : AWSCredentials) =
+type Configuration(region : AWSRegion, clusterId : string, credentials : AWSCredentials) =
+    do Validate.hostname clusterId
+    let mkName name = sprintf "%s.%s" name clusterId
 
     // Default Service Bus Configuration
-    let mutable workItemQueue        = "MBraceWorkItemQueue"
-    let mutable workItemTopic        = "MBraceWorkItemTopic"
+    let mutable workItemQueue        = mkName "MBraceWorkItemQueue"
+    let mutable workItemTopic        = mkName "MBraceWorkItemTopic"
 
     // Default Blob Storage Containers
-    let mutable runtimeBucket    = "mbraceruntimedata"
-    let mutable userDataBucket   = "mbraceuserdata"
+    let mutable runtimeBucket    = mkName "mbraceruntimedata"
+    let mutable userDataBucket   = mkName "mbraceuserdata"
 
     // Default Table Storage tables
-    let mutable userDataTable       = "MBraceUserData"
-    let mutable runtimeTable        = "MBraceRuntimeData"
-    let mutable runtimeLogsTable    = "MBraceRuntimeLogs"
+    let mutable userDataTable       = mkName "MBraceUserData"
+    let mutable runtimeTable        = mkName "MBraceRuntimeData"
+    let mutable runtimeLogsTable    = mkName "MBraceRuntimeLogs"
 
     /// AWS S3 Account credentials
     member val S3Credentials = credentials with get, set
@@ -99,15 +101,6 @@ type Configuration(region : AWSRegion, credentials : AWSCredentials) =
 
     /// AWS Region
     member val Region = region with get, set
-
-    /// Append version to given configuration e.g. $RuntimeQueue$Version. Defaults to true.
-    member val UseVersionSuffix    = true with get, set
-
-    /// Runtime identifier, used for runtime isolation when using the same storage/servicebus accounts. Defaults to 0.
-    member val SuffixId             = 0us with get, set
-
-    /// Append runtime id to given configuration e.g. $RuntimeQueue$Version$Id. Defaults to false.
-    member val UseSuffixId          = false with get, set
 
     /// Specifies wether the cluster should optimize closure serialization. Defaults to true.
     member val OptimizeClosureSerialization = true with get, set
@@ -148,6 +141,6 @@ type Configuration(region : AWSRegion, credentials : AWSCredentials) =
         and set udt = Validate.tableName udt ; userDataTable <- udt
 
     /// Create a configuration object by reading credentials from the local store
-    static member FromCredentialsStore(region : AWSRegion, ?profileName : string) =
+    static member FromCredentialsStore(region : AWSRegion, clusterId : string, ?profileName : string) =
         let credentials = AWSCredentials.FromCredentialStore(?profileName = profileName)
-        new Configuration(region, credentials)
+        new Configuration(region, clusterId, credentials)
