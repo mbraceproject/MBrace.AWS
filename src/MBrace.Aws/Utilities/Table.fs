@@ -1,5 +1,7 @@
 ﻿namespace MBrace.AWS.Runtime.Utilities
 
+#nowarn "1215"
+
 open System
 open System.Collections.Generic
 
@@ -13,30 +15,39 @@ open MBrace.Core.Internals
 open MBrace.Runtime.Utils.Retry
 open MBrace.AWS.Runtime
 
+[<AutoOpen>]
+module internal TableConfig =
+    
+    [<Literal>]
+    let HashKey = "HashKey"
+
+    [<Literal>]
+    let RangeKey = "RangeKey"
+
 [<AllowNullLiteral>]
 type IDynamoDBTableEntity =
     abstract member HashKey  : string
     abstract member RangeKey : string
 
-[<AllowNullLiteral; AbstractClass>]
-type DynamoDBTableEntity (hashKey, rangeKey) =
-    member val HashKey  : string = hashKey with get
-    member val RangeKey : string = rangeKey with get
+[<AllowNullLiteral>]
+type IDynamoDBDocument =
+    abstract member ToDynamoDBDocument : unit -> Document
+
+[<AllowNullLiteral; AbstractClass; AutoSerializable(false)>]
+type DynamoDBTableEntity (hashKey : string, rangeKey : string) =
+    member __.HashKey  = hashKey
+    member __.RangeKey = rangeKey
 
     interface IDynamoDBTableEntity with
         member __.HashKey  = hashKey
         member __.RangeKey = rangeKey
 
-[<AllowNullLiteral>]
-type IDynamoDBDocument =
-    abstract member ToDynamoDBDocument : unit -> Document
 
 [<AutoOpen>]
 module DynamoDBEntryExtensions =
     type DynamoDBEntry with
-        static member op_Implicit (dtOffset : DateTimeOffset) : DynamoDBEntry =
-            let entry = new Primitive(dtOffset.ToString())
-            entry :> DynamoDBEntry
+        static member op_implicit (dtOffset : DateTimeOffset) : DynamoDBEntry =
+            new Primitive(string dtOffset) :> _
 
         member this.AsDateTimeOffset() =
             DateTimeOffset.Parse <| this.AsPrimitive().AsString()
@@ -57,10 +68,10 @@ module DynamoDBEntryExtensions =
                 let! listedTables = ddb.ListTablesAsync(ct) |> Async.AwaitTaskCorrect
                 if listedTables.TableNames |> Seq.exists(fun tn -> tn = tableName) |> not then
                     let ctr = new CreateTableRequest(TableName = tableName)
-                    ctr.KeySchema.Add <| KeySchemaElement("HashKey", KeyType.HASH)
-                    ctr.KeySchema.Add <| KeySchemaElement("RangeKey", KeyType.RANGE)
-                    ctr.AttributeDefinitions.Add <| AttributeDefinition("HashKey", ScalarAttributeType.S)
-                    ctr.AttributeDefinitions.Add <| AttributeDefinition("RangeKey", ScalarAttributeType.S)
+                    ctr.KeySchema.Add <| KeySchemaElement(HashKey, KeyType.HASH)
+                    ctr.KeySchema.Add <| KeySchemaElement(RangeKey, KeyType.RANGE)
+                    ctr.AttributeDefinitions.Add <| AttributeDefinition(HashKey, ScalarAttributeType.S)
+                    ctr.AttributeDefinitions.Add <| AttributeDefinition(RangeKey, ScalarAttributeType.S)
                     ctr.ProvisionedThroughput <- new ProvisionedThroughput(10L, 10L)
 
                     let! _resp = ddb.CreateTableAsync(ctr, ct) |> Async.AwaitTaskCorrect
@@ -96,8 +107,8 @@ module internal Table =
             {
                 ReadThroughput  = 10L
                 WriteThroughput = 10L
-                HashKey         = "HashKey"
-                RangeKey        = "RangeKey"
+                HashKey         = HashKey
+                RangeKey        = RangeKey
             }
 
     /// Creates a new table and wait till its status is confirmed as Active
@@ -156,7 +167,7 @@ module internal Table =
 
     let private putInternal 
             (account  : AWSAccount) 
-            tableName 
+            (tableName : string)
             (entity   : IDynamoDBDocument)
             (opConfig : UpdateItemOperationConfig option) = async { 
         let table = Table.LoadTable(account.DynamoDBClient, tableName)
@@ -178,8 +189,8 @@ module internal Table =
 
     let putBatch 
             (account : AWSAccount) 
-            tableName 
-            (entities : 'a seq when 'a :> IDynamoDBDocument) = async {
+            (tableName : string)
+            (entities : seq<#IDynamoDBDocument>) = async {
         let table = Table.LoadTable(account.DynamoDBClient, tableName)
         let batch = table.CreateBatchWrite()
         let docs  = entities |> Seq.map (fun x -> x.ToDynamoDBDocument()) 
@@ -190,9 +201,22 @@ module internal Table =
             |> Async.AwaitTaskCorrect
     }
 
+    let update
+        (account : AWSAccount)
+        (tableName : string)
+        (config : UpdateItemOperationConfig)
+        (entity : IDynamoDBDocument) = async {
+
+        let! ct = Async.CancellationToken
+        let table = Table.LoadTable(account.DynamoDBClient, tableName)
+        let ddb = entity.ToDynamoDBDocument()
+        let! _result = table.UpdateItemAsync(ddb, config, ct) |> Async.AwaitTaskCorrect
+        ()
+    }
+
     let delete 
             (account : AWSAccount) 
-            tableName 
+            (tableName : string)
             (entity : IDynamoDBDocument) = async {
         let table = Table.LoadTable(account.DynamoDBClient, tableName)
         let! ct   = Async.CancellationToken
@@ -203,7 +227,7 @@ module internal Table =
 
     let deleteBatch
             (account : AWSAccount) 
-            tableName 
+            (tableName : string)
             (entities : 'a seq when 'a :> IDynamoDBDocument) = async {
         let table = Table.LoadTable(account.DynamoDBClient, tableName)
         let batch = table.CreateBatchWrite()
@@ -227,7 +251,7 @@ module internal Table =
                 let eqCond = new Condition()
                 eqCond.ComparisonOperator <- ComparisonOperator.EQ
                 eqCond.AttributeValueList.Add(new AttributeValue(hashKey))
-                req.KeyConditions.Add("HashKey", eqCond)
+                req.KeyConditions.Add(HashKey, eqCond)
                 req.ExclusiveStartKey <- lastKey
 
                 let! ct  = Async.CancellationToken
@@ -249,12 +273,12 @@ module internal Table =
 
     let private readInternal 
             (account : AWSAccount) 
-            tableName 
+            (tableName : string)
             (hashKey : string) 
             (rangeKey : string) = async {
         let req = GetItemRequest(TableName = tableName)
-        req.Key.Add("HashKey",  new AttributeValue(hashKey))
-        req.Key.Add("RangeKey", new AttributeValue(rangeKey))
+        req.Key.Add(HashKey,  new AttributeValue(hashKey))
+        req.Key.Add(RangeKey, new AttributeValue(rangeKey))
 
         let! ct  = Async.CancellationToken
         let! res = account.DynamoDBClient.GetItemAsync(req, ct)
@@ -264,7 +288,7 @@ module internal Table =
 
     let inline read< ^a when ^a : (static member FromDynamoDBDocument : Document -> ^a) > 
             (account : AWSAccount) 
-            tableName 
+            (tableName : string)
             (hashKey : string) 
             (rangeKey : string) = async {
         let! res = readInternal account tableName hashKey rangeKey
@@ -281,8 +305,8 @@ module internal Table =
             fieldToIncr = async {
         // see http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.Modifying.html#Expressions.Modifying.UpdateExpressions
         let req  = UpdateItemRequest(TableName = tableName)
-        req.Key.Add("HashKey",  attributeValue hashKey)
-        req.Key.Add("RangeKey", attributeValue rangeKey)
+        req.Key.Add(HashKey,  attributeValue hashKey)
+        req.Key.Add(RangeKey, attributeValue rangeKey)
         req.ExpressionAttributeNames.Add("#F", fieldToIncr)
         req.ExpressionAttributeValues.Add(":val", attributeValue "1")
         req.UpdateExpression <- "SET #F = #F+:val"
@@ -299,7 +323,7 @@ module internal Table =
     let inline transact< ^a when ^a : (static member FromDynamoDBDocument : Document -> ^a)
                             and  ^a :> IDynamoDBDocument >
             (account  : AWSAccount) 
-            tableName 
+            (tableName : string)
             (hashKey  : string) 
             (rangeKey : string)
             (conditionalField : ^a -> string * string option) // used to perform conditional update

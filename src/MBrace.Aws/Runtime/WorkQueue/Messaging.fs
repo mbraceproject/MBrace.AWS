@@ -290,7 +290,7 @@ type internal Topic (clusterId : ClusterId, logger : ISystemLogger) =
     let getQueueUriOrCreate (msg : WorkItemMessage) = async {
         // since this internal class is only called by the WorkItemQueue
         // we can safely assume that TargetWorker is Some in this case
-        let (Some workerId) = msg.TargetWorker 
+        let workerId = Option.get msg.TargetWorker
         let queueName = getQueueName topic workerId
         let! queueUri = Sqs.tryGetQueueUri account queueName
         match queueUri with

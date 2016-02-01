@@ -124,10 +124,10 @@ type CloudProcessRecord(taskId) =
 
             this.Status    |> doIfNotNull (fun x -> doc.["Status"] <- DynamoDBEntry.op_Implicit x)
             this.Completed |> doIfNotNull (fun x -> doc.["Completed"] <- DynamoDBEntry.op_Implicit x)
-            this.EnqueuedTime   |> doIfNotNull (fun x -> doc.["EnqueuedTime"] <- DynamoDBEntry.op_Implicit x)
-            this.DequeuedTime   |> doIfNotNull (fun x -> doc.["DequeuedTime"] <- DynamoDBEntry.op_Implicit x)
-            this.StartTime      |> doIfNotNull (fun x -> doc.["StartTime"] <- DynamoDBEntry.op_Implicit x)
-            this.CompletionTime |> doIfNotNull (fun x -> doc.["CompletionTime"] <- DynamoDBEntry.op_Implicit x)
+            this.EnqueuedTime   |> doIfNotNull (fun x -> doc.["EnqueuedTime"] <- DynamoDBEntry.op_implicit x)
+            this.DequeuedTime   |> doIfNotNull (fun x -> doc.["DequeuedTime"] <- DynamoDBEntry.op_implicit x)
+            this.StartTime      |> doIfNotNull (fun x -> doc.["StartTime"] <- DynamoDBEntry.op_implicit x)
+            this.CompletionTime |> doIfNotNull (fun x -> doc.["CompletionTime"] <- DynamoDBEntry.op_implicit x)
 
             doc
 

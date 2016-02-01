@@ -135,8 +135,8 @@ type WorkerRecord(workerId : string) =
             this.HeartbeatInterval  |> doIfNotNull (fun x -> doc.["HeartbeatInterval"] <- DynamoDBEntry.op_Implicit x)
             this.HeartbeatThreshold |> doIfNotNull (fun x -> doc.["HeartbeatThreshold"] <- DynamoDBEntry.op_Implicit x)
 
-            this.InitializationTime |> doIfNotNull (fun x -> doc.["InitializationTime"] <- DynamoDBEntry.op_Implicit x)
-            this.LastHeartbeat |> doIfNotNull (fun x -> doc.["LastHeartbeat"] <- DynamoDBEntry.op_Implicit x)
+            this.InitializationTime |> doIfNotNull (fun x -> doc.["InitializationTime"] <- DynamoDBEntry.op_implicit x)
+            this.LastHeartbeat |> doIfNotNull (fun x -> doc.["LastHeartbeat"] <- DynamoDBEntry.op_implicit x)
             
             this.MaxClockSpeed |> doIfNotNull (fun x -> doc.["MaxClockSpeed"] <- DynamoDBEntry.op_Implicit x)
             this.CPU           |> doIfNotNull (fun x -> doc.["CPU"] <- DynamoDBEntry.op_Implicit x)

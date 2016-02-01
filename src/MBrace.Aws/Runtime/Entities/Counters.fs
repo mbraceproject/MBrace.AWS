@@ -16,14 +16,13 @@ open Amazon.DynamoDBv2.DocumentModel
 // NOTE : All types that inherit TableEntity must provide a default public ctor.
 type CounterEntity(id : string, value : int64) = 
     inherit DynamoDBTableEntity(id, CounterEntity.DefaultRangeKey)
-    member val Counter = value with get, set
-
-    new () = new CounterEntity(null, 0L)
+    
+    member __.Counter = value
 
     static member DefaultRangeKey = "CounterEntity"
 
     static member FromDynamoDBDocument (doc : Document) = 
-        let hashKey = doc.["HashKey"].AsString()
+        let hashKey = doc.[HashKey].AsString()
         let value   = doc.["Counter"].AsLong()
 
         new CounterEntity(hashKey, value)
@@ -32,8 +31,8 @@ type CounterEntity(id : string, value : int64) =
         member this.ToDynamoDBDocument () =
             let doc = new Document()
 
-            doc.["HashKey"]  <- DynamoDBEntry.op_Implicit(this.HashKey)
-            doc.["RangeKey"] <- DynamoDBEntry.op_Implicit(this.RangeKey)
+            doc.[HashKey]  <- DynamoDBEntry.op_Implicit(this.HashKey)
+            doc.[RangeKey] <- DynamoDBEntry.op_Implicit(this.RangeKey)
             doc.["Counter"]  <- DynamoDBEntry.op_Implicit(this.Counter)
 
             doc

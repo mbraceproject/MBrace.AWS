@@ -17,7 +17,7 @@ open MBrace.AWS.Store
 type ClusterManager =
     {
         ClusterId               : ClusterId
-//        Configuration           : Configuration
+        Configuration           : Configuration
         Serializer              : FsPicklerSerializer
         Logger                  : ISystemLogger
         Resources               : ResourceRegistry
