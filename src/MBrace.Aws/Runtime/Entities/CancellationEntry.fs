@@ -38,12 +38,12 @@ type CancellationTokenSourceEntity(uuid : string, isCancellationRequested : bool
             doc.[RangeKey] <- DynamoDBEntry.op_Implicit(this.RangeKey)
             doc.["IsCancellationRequested"]  <- DynamoDBEntry.op_Implicit(this.IsCancellationRequested)
             doc.["Children"] <- DynamoDBEntry.op_Implicit(new ResizeArray<_>(this.Children))
-            doc.[ETag] <- DynamoDBEntry.op_Implicit(match etag with None -> guid().ToString() | Some e -> e)
+            Table.writeETag doc this.ETag
             doc
 
     static member FromDynamoDBDocument (doc : Document) = 
         let uuid = doc.[RangeKey].AsString()
-        let etag = doc.[ETag].AsString()
+        let etag = Table.readETag doc
         let isCancellationRequested = doc.["IsCancellationRequested"].AsBoolean()
         let children = doc.["Children"].AsListOfString() |> Seq.toList
 

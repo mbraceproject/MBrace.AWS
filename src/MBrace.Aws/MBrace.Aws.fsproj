@@ -78,6 +78,7 @@
     <Compile Include="Runtime\Persist.fs" />
     <Compile Include="Runtime\Entities\Counters.fs" />
     <Compile Include="Runtime\Entities\CancellationEntry.fs" />
+    <Compile Include="Runtime\Entities\ResultAggregator.fs" />
     <Compile Include="Runtime\Entities\Logging.fs" />
     <Compile Include="Runtime\Entities\WorkerId.fs" />
     <Compile Include="Runtime\Entities\WorkItem.fs" />

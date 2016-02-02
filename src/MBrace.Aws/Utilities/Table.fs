@@ -49,7 +49,7 @@ type DynamoDBTableEntity (hashKey : string, rangeKey : string) =
 [<AutoOpen>]
 module DynamoDBEntryExtensions =
     type DynamoDBEntry with
-        static member op_implicit (dtOffset : DateTimeOffset) : DynamoDBEntry =
+        static member op_Implicit (dtOffset : DateTimeOffset) : DynamoDBEntry =
             new Primitive(string dtOffset) :> _
 
         member this.AsDateTimeOffset() =
@@ -113,6 +113,11 @@ module internal Table =
                 HashKey         = HashKey
                 RangeKey        = RangeKey
             }
+
+    let writeETag (document : Document) (etag : string option) = 
+        document.[ETag] <- DynamoDBEntry.op_Implicit(match etag with None -> guid() | Some e -> e)
+
+    let readETag (document : Document) = document.[ETag].AsString()
 
     /// Creates a new table and wait till its status is confirmed as Active
     let createIfNotExists 
