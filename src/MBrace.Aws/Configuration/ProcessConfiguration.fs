@@ -78,6 +78,9 @@ type ProcessConfiguration private () =
     /// Checks whether process configuration is initialized
     static member IsInitialized = !isInitialized
 
+    /// True if is unix system
+    static member IsUnix = Environment.OSVersion.Platform = PlatformID.Unix
+
     /// Default FsPicklerSerializer instance.
     static member BinarySerializer = 
         checkInitialized()

@@ -90,6 +90,10 @@
     <Compile Include="Runtime\WorkQueue\TopicMonitor.fs" />
     <Compile Include="Runtime\WorkQueue\WorkItemQueue.fs" />
     <Compile Include="Runtime\ClusterManager.fs" />
+    <Compile Include="Runtime\Subscription.fs" />
+    <Compile Include="Runtime\Service.fs" />
+    <Compile Include="Runtime\StandaloneWorker.fs" />
+    <Compile Include="Runtime\Client.fs" />
     <None Include="paket.references" />
     <None Include="paket.template" />
   </ItemGroup>
