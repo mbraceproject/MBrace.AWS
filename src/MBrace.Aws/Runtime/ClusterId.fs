@@ -41,10 +41,14 @@ type ClusterId =
         OptimizeClosureSerialization : bool
     }
 
-    member this.Id = 
+with
+    member this.Hash = 
         let hash = FsPickler.ComputeHash this
-        let enc = System.Convert.ToBase64String hash.Hash
-        sprintf "AWS runtime [hashId:%s]" enc
+        System.Convert.ToBase64String hash.Hash
+
+
+    member this.Id = 
+        sprintf "AWS runtime [hashId:%s]" this.Hash
 
     interface IRuntimeId with 
         member this.Id = this.Id

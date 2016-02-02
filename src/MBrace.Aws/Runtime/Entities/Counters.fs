@@ -71,7 +71,7 @@ type internal TableCounter (clusterId : ClusterId, hashKey : string) =
         }
 
 [<Sealed>]
-type TableCounterFactory private (clusterId : ClusterId) =
+type DynamoDBCounterFactory private (clusterId : ClusterId) =
     interface ICloudCounterFactory with
         member x.CreateCounter(initialValue: int64) = async {
             let record = new CounterEntity(guid(), initialValue)
@@ -80,4 +80,4 @@ type TableCounterFactory private (clusterId : ClusterId) =
         }
 
     static member Create(clusterId : ClusterId) = 
-        new TableCounterFactory(clusterId)
+        new DynamoDBCounterFactory(clusterId)
