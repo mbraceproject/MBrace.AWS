@@ -4,6 +4,7 @@ open System
 open System.Collections.Generic
 open System.Runtime.Serialization
 
+open MBrace.Core.Internals
 open MBrace.Runtime
 open MBrace.AWS.Runtime
 open MBrace.AWS.Runtime.Utilities
@@ -15,7 +16,7 @@ open Amazon.DynamoDBv2.DocumentModel
 // an entity that can be canceled and which supports child entities.
 // Used to implement CancellationTokens in MBrace
 
-type CancellationTokenSourceEntity(uuid : string, isCancellationRequested : bool, children : string list) =
+type CancellationTokenSourceEntity(uuid : string, isCancellationRequested : bool, children : string list, ?etag : string) =
     inherit DynamoDBTableEntity(CancellationTokenSourceEntity.DefaultHashKey, uuid)
 
     do if children.Length > CancellationTokenSourceEntity.MaxChildren then 
@@ -24,6 +25,7 @@ type CancellationTokenSourceEntity(uuid : string, isCancellationRequested : bool
     member __.Id = uuid
     member __.IsCancellationRequested = isCancellationRequested
     member __.Children = children
+    member __.ETag = etag
 
     static member DefaultHashKey = "cancellationToken"
     static member MaxChildren = 4096
@@ -32,19 +34,20 @@ type CancellationTokenSourceEntity(uuid : string, isCancellationRequested : bool
         member this.ToDynamoDBDocument () =
             let doc = new Document()
 
-            doc.[HashKey]  <- DynamoDBEntry.op_Implicit(this.HashKey)
+            doc.[HashKey] <- DynamoDBEntry.op_Implicit(this.HashKey)
             doc.[RangeKey] <- DynamoDBEntry.op_Implicit(this.RangeKey)
             doc.["IsCancellationRequested"]  <- DynamoDBEntry.op_Implicit(this.IsCancellationRequested)
             doc.["Children"] <- DynamoDBEntry.op_Implicit(new ResizeArray<_>(this.Children))
-
+            doc.[ETag] <- DynamoDBEntry.op_Implicit(match etag with None -> guid().ToString() | Some e -> e)
             doc
 
     static member FromDynamoDBDocument (doc : Document) = 
         let uuid = doc.[RangeKey].AsString()
+        let etag = doc.[ETag].AsString()
         let isCancellationRequested = doc.["IsCancellationRequested"].AsBoolean()
         let children = doc.["Children"].AsListOfString() |> Seq.toList
 
-        new CancellationTokenSourceEntity(uuid, isCancellationRequested, children)
+        new CancellationTokenSourceEntity(uuid, isCancellationRequested, children, etag)
 
 
 [<Sealed; DataContract>]
@@ -103,18 +106,27 @@ type DynamoDBCancellationTokenFactory private (clusterId : ClusterId) =
 
                 if parents |> Array.exists (fun p -> p.IsCancellationRequested) then
                     return None
-                else
-                    return raise <| new NotImplementedException("need conditional updates")
-//                    insert record
-//                    for parent in parents do
-//                        let newParent = new CancellationTokenSourceEntity(parent.RangeKey, false, uuid :: parent.Children)
-//                        newParent.ETag <- parent.ETag
-//                        tbo.Merge(newParent)
-//                    try
-//                        do! Table.batch clusterId.StorageAccount clusterId.RuntimeTable tbo
-//                        return Some(TableCancellationEntry(clusterId, uuid) :> ICancellationEntry)
-//                    with ex when StoreException.PreconditionFailed ex ->
-//                        return! loop ()
+                else 
+                    let updateParent (parent : CancellationTokenSourceEntity) = async {
+                        let newParent = new CancellationTokenSourceEntity(parent.RangeKey, false, uuid :: parent.Children, ?etag = parent.ETag)
+                        do! Table.update clusterId.DynamoDBAccount clusterId.RuntimeTable newParent
+                    }
+                    
+                    try
+                        let! t = Table.put clusterId.DynamoDBAccount clusterId.RuntimeTable record |> Async.StartChild
+                        do!
+                            parents
+                            |> Seq.filter (fun p -> not <| List.exists ((=) uuid) p.Children)
+                            |> Seq.map updateParent
+                            |> Async.Parallel
+                            |> Async.Ignore
+
+                        let! _ = t
+
+                        return Some(DynamoDBCancellationEntry(clusterId, uuid) :> ICancellationEntry)
+
+                    with ex when StoreException.PreconditionFailed ex ->
+                        return! loop ()
             }
 
             return! loop ()

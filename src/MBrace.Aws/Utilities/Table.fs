@@ -24,6 +24,9 @@ module internal TableConfig =
     [<Literal>]
     let RangeKey = "RangeKey"
 
+    [<Literal>]
+    let ETag = "ETag"
+
 [<AllowNullLiteral>]
 type IDynamoDBTableEntity =
     abstract member HashKey  : string
@@ -201,15 +204,23 @@ module internal Table =
             |> Async.AwaitTaskCorrect
     }
 
-    let update
+    let inline update< ^a when ^a : (member ETag : string option) and ^a :> IDynamoDBDocument >
         (account : AWSAccount)
         (tableName : string)
-        (config : UpdateItemOperationConfig)
-        (entity : IDynamoDBDocument) = async {
+        (entity : ^a) = async {
 
         let! ct = Async.CancellationToken
         let table = Table.LoadTable(account.DynamoDBClient, tableName)
         let ddb = entity.ToDynamoDBDocument()
+        let config = new UpdateItemOperationConfig()
+        config.ReturnValues <- ReturnValues.None
+
+        match (^a : (member ETag : string option) entity) with
+        | Some etag -> 
+            config.ConditionalExpression.ExpressionStatement <- sprintf "%s = :etag" ETag
+            config.ConditionalExpression.ExpressionAttributeValues.[":etag"] <- DynamoDBEntry.op_Implicit etag
+        | None -> ()
+
         let! _result = table.UpdateItemAsync(ddb, config, ct) |> Async.AwaitTaskCorrect
         ()
     }
@@ -228,7 +239,7 @@ module internal Table =
     let deleteBatch
             (account : AWSAccount) 
             (tableName : string)
-            (entities : 'a seq when 'a :> IDynamoDBDocument) = async {
+            (entities : seq<#IDynamoDBDocument>) = async {
         let table = Table.LoadTable(account.DynamoDBClient, tableName)
         let batch = table.CreateBatchWrite()
         let docs  = entities |> Seq.map (fun x -> x.ToDynamoDBDocument()) 
