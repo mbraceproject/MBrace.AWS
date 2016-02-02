@@ -78,22 +78,22 @@ with
 [<AutoSerializable(true); Sealed; NoEquality; NoComparison>]
 type Configuration(region : AWSRegion, clusterId : string, credentials : AWSCredentials) =
     do Validate.hostname clusterId
-    let mkName name = sprintf "%s.%s" name clusterId
+    let mkName sep name = sprintf "%s%s%s" name sep clusterId
 
     let mutable version = typeof<Configuration>.Assembly.GetName().Version
 
     // Default Service Bus Configuration
-    let mutable workItemQueue        = mkName "MBraceWorkItemQueue"
-    let mutable workItemTopic        = mkName "MBraceWorkItemTopic"
+    let mutable workItemQueue        = mkName "-" "MBraceWorkItemQueue"
+    let mutable workItemTopic        = mkName "-" "MBraceWorkItemTopic"
 
     // Default Blob Storage Containers
-    let mutable runtimeBucket    = mkName "mbraceruntimedata"
-    let mutable userDataBucket   = mkName "mbraceuserdata"
+    let mutable runtimeBucket    = mkName "." "mbraceruntimedata"
+    let mutable userDataBucket   = mkName "." "mbraceuserdata"
 
     // Default Table Storage tables
-    let mutable userDataTable       = mkName "MBraceUserData"
-    let mutable runtimeTable        = mkName "MBraceRuntimeData"
-    let mutable runtimeLogsTable    = mkName "MBraceRuntimeLogs"
+    let mutable userDataTable       = mkName "." "MBraceUserData"
+    let mutable runtimeTable        = mkName "." "MBraceRuntimeData"
+    let mutable runtimeLogsTable    = mkName "." "MBraceRuntimeLogs"
 
     /// Runtime version this configuration is targeting. Default to current assembly version.
     member __.Version

@@ -31,6 +31,8 @@ type WorkerId internal (workerId : string) =
 [<AllowNullLiteral>]
 type WorkerRecord(workerId : string) =
     inherit DynamoDBTableEntity(WorkerRecord.DefaultHashKey, workerId)
+
+    static let currentProc = System.Diagnostics.Process.GetCurrentProcess()
     
     member val Id                 = workerId with get, set
     member val Hostname           = Unchecked.defaultof<string> with get, set
@@ -51,7 +53,16 @@ type WorkerRecord(workerId : string) =
     member val HeartbeatThreshold = Nullable<int64>() with get, set
     member val Version            = Unchecked.defaultof<string> with get, set
     member val Status             = Unchecked.defaultof<string> with get, set
-    member val ETag               = Unchecked.defaultof<string> with get, set
+    member val ETag               = None with get, set
+
+    static member CreateCurrentWorkerRecord(workerId : string) =
+        let record = new WorkerRecord(workerId)
+        record.ProcessName <- currentProc.ProcessName
+        record.Hostname <- WorkerRef.CurrentHostname
+        record.ProcessId <- Nullable(currentProc.Id)
+        record.Version <- ProcessConfiguration.Version.ToString()
+        record.Status <- ""
+        record
 
     member this.GetCounters () : PerformanceInfo =
         { 
@@ -87,7 +98,7 @@ type WorkerRecord(workerId : string) =
 
         record.Hostname    <- Table.readStringOrDefault doc "Hostname"
         record.ProcessName <- Table.readStringOrDefault doc "ProcessName"
-        record.ETag        <- Table.readStringOrDefault doc "ETag"
+        record.ETag        <- Some <| Table.readETag doc 
         record.Version     <- Table.readStringOrDefault doc "Version"
         record.Status      <- Table.readStringOrDefault doc "Status"
 
@@ -122,8 +133,9 @@ type WorkerRecord(workerId : string) =
             doc.["HostName"] <- DynamoDBEntry.op_Implicit(this.Hostname)
             doc.["Version"]  <- DynamoDBEntry.op_Implicit(this.Version)
             doc.["Status"]   <- DynamoDBEntry.op_Implicit(this.Status)
-            doc.["ETag"]     <- DynamoDBEntry.op_Implicit(this.ETag)
             doc.["ProcessName"] <- DynamoDBEntry.op_Implicit(this.ProcessName)
+
+            Table.writeETag doc this.ETag
 
             this.ProcessId    |> doIfNotNull (fun x -> doc.["ProcessId"] <- DynamoDBEntry.op_Implicit x)
             this.MaxWorkItems |> doIfNotNull (fun x -> doc.["MaxWorkItems"] <- DynamoDBEntry.op_Implicit x)

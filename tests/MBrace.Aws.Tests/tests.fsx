@@ -27,3 +27,5 @@ AWSWorker.LocalExecutable <- __SOURCE_DIRECTORY__ + "/../../bin/MBrace.AWS.Stand
 let config = Configuration.FromCredentialsStore(AWSRegion.EUCentral1, "eirikmbrace")
 
 let cluster = AWSCluster.InitOnCurrentMachine(config, workerCount = 1)
+
+cluster.Run(cloud { return 42 })

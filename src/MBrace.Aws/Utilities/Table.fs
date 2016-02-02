@@ -137,8 +137,7 @@ module internal Table =
         let req = CreateTableRequest(TableName = tableName)
         req.KeySchema.Add(new KeySchemaElement(tableConfig.HashKey, KeyType.HASH))
         req.KeySchema.Add(new KeySchemaElement(tableConfig.RangeKey, KeyType.RANGE))
-        req.ProvisionedThroughput.ReadCapacityUnits  <- tableConfig.ReadThroughput
-        req.ProvisionedThroughput.WriteCapacityUnits <- tableConfig.WriteThroughput
+        req.ProvisionedThroughput <- new ProvisionedThroughput(tableConfig.ReadThroughput, tableConfig.WriteThroughput)
 
         let create = async {
             let! ct  = Async.CancellationToken

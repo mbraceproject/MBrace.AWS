@@ -118,10 +118,10 @@ type WorkerManager private (clusterId : ClusterId, logger : ISystemLogger) =
             logger.LogInfof "Changing worker %O status to %A" workerId status
 
             let record = new WorkerRecord(workerId.Id)
-            record.ETag <- "*"
+            record.ETag <- None
             record.Status <- pickle status
 
-            do! Table.put 
+            do! Table.update
                     clusterId.DynamoDBAccount
                     clusterId.RuntimeTable
                     record
@@ -168,11 +168,11 @@ type WorkerManager private (clusterId : ClusterId, logger : ISystemLogger) =
         member __.SubmitPerformanceMetrics
                 (workerId : IWorkerId, 
                  perf     : Utils.PerformanceMonitor.PerformanceInfo) = async {
-            let record = new WorkerRecord(workerId.Id)
-            record.ETag <- "*"
+            let record = WorkerRecord.CreateCurrentWorkerRecord(workerId.Id)
             record.UpdateCounters(perf)
+            record.ETag <- None
 
-            do! Table.put 
+            do! Table.update
                     clusterId.DynamoDBAccount 
                     clusterId.RuntimeTable 
                     record
@@ -184,7 +184,7 @@ type WorkerManager private (clusterId : ClusterId, logger : ISystemLogger) =
             logger.LogInfof "Subscribing worker %O" clusterId
 
             let joined = DateTimeOffset.UtcNow
-            let record = new WorkerRecord(workerId.Id)
+            let record = WorkerRecord.CreateCurrentWorkerRecord(workerId.Id)
             record.Hostname    <- info.Hostname
             record.ProcessName <- Diagnostics.Process.GetCurrentProcess().ProcessName
             record.ProcessId   <- nullable info.ProcessId

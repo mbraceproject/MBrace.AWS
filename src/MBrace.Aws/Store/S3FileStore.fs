@@ -115,7 +115,7 @@ type S3FileStore private (account : AWSAccount, defaultBucket : string, bucketPr
         do validateBucketPrefix bucketPrefix
         let defaultBucket = match defaultBucket with Some b -> b | None -> getRandomBucketName bucketPrefix
         let s3p = S3Path.Parse(S3Path.Combine("/", defaultBucket))
-        if not s3p.IsBucket then invalidArg "defaultBucket" <| sprintf "supplied path '%s' is not a valid S3 bucket." defaultBucket
+//        if not s3p.IsBucket then invalidArg "defaultBucket" <| sprintf "supplied path '%s' is not a valid S3 bucket." defaultBucket
         new S3FileStore(account, s3p.FullPath, bucketPrefix)
 
     /// Bucket prefix used in random bucket generation
