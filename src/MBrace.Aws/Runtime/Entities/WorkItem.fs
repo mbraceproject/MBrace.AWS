@@ -158,11 +158,11 @@ type WorkItemRecord(processId : string, workItemId : string) =
             this.Completed |> doIfNotNull (fun x -> doc.["Completed"] <- DynamoDBEntry.op_Implicit x)
             this.FaultInfo |> doIfNotNull (fun x -> doc.["FaultInfo"] <- DynamoDBEntry.op_Implicit x)
 
-            this.EnqueueTime |> doIfNotNull (fun x -> doc.["EnqueueTime"] <- DynamoDBEntry.op_implicit x)
-            this.DequeueTime |> doIfNotNull (fun x -> doc.["DequeueTime"] <- DynamoDBEntry.op_implicit x)
-            this.StartTime   |> doIfNotNull (fun x -> doc.["StartTime"] <- DynamoDBEntry.op_implicit x)
-            this.CompletionTime |> doIfNotNull (fun x -> doc.["CompletionTime"] <- DynamoDBEntry.op_implicit x)
-            this.RenewLockTime  |> doIfNotNull (fun x -> doc.["RenewLockTime"] <- DynamoDBEntry.op_implicit x)
+            this.EnqueueTime |> doIfNotNull (fun x -> doc.["EnqueueTime"] <- DynamoDBEntry.op_Implicit x)
+            this.DequeueTime |> doIfNotNull (fun x -> doc.["DequeueTime"] <- DynamoDBEntry.op_Implicit x)
+            this.StartTime   |> doIfNotNull (fun x -> doc.["StartTime"] <- DynamoDBEntry.op_Implicit x)
+            this.CompletionTime |> doIfNotNull (fun x -> doc.["CompletionTime"] <- DynamoDBEntry.op_Implicit x)
+            this.RenewLockTime  |> doIfNotNull (fun x -> doc.["RenewLockTime"] <- DynamoDBEntry.op_Implicit x)
             this.DeliveryCount  |> doIfNotNull (fun x -> doc.["DeliveryCount"] <- DynamoDBEntry.op_Implicit x)
 
             doc

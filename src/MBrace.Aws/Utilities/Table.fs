@@ -48,12 +48,18 @@ type DynamoDBTableEntity (hashKey : string, rangeKey : string) =
 
 [<AutoOpen>]
 module DynamoDBEntryExtensions =
+
+    type DateTimeOffset with
+        member dto.ToISO8601String() =
+            dto.ToUniversalTime().ToString(Amazon.Util.AWSSDKUtils.ISO8601DateFormat)
+
     type DynamoDBEntry with
         static member op_Implicit (dtOffset : DateTimeOffset) : DynamoDBEntry =
-            new Primitive(string dtOffset) :> _
+            new Primitive(dtOffset.ToISO8601String()) :> _
 
         member this.AsDateTimeOffset() =
-            DateTimeOffset.Parse <| this.AsPrimitive().AsString()
+            let iso = this.AsPrimitive().AsString()
+            DateTimeOffset.Parse(iso)
 
 
     let mkTableConflictRetryPolicy maxRetries interval =
@@ -255,36 +261,43 @@ module internal Table =
             |> Async.AwaitTaskCorrect
     }
 
+    let inline queryDocs (account : AWSAccount) (mkRequest : unit -> QueryRequest) (mapper : Document -> 'a)  = async {
+        let results = ResizeArray<_>()
+        let rec loop lastKey = async {
+            let qr = mkRequest()
+            qr.ExclusiveStartKey <- lastKey
+
+            let! ct  = Async.CancellationToken
+            let! res = account.DynamoDBClient.QueryAsync(qr, ct)
+                        |> Async.AwaitTaskCorrect
+
+            res.Items 
+            |> Seq.map (Document.FromAttributeMap >> mapper)
+            |> results.AddRange
+
+            if res.LastEvaluatedKey.Count > 0 then
+                do! loop res.LastEvaluatedKey
+        }
+
+        do! loop (Dictionary<string, AttributeValue>())
+
+        return results :> ICollection<_>
+    }
+
     let inline query< ^a when ^a : (static member FromDynamoDBDocument : Document -> ^a) > 
             (account : AWSAccount) 
             tableName 
             (hashKey : string) = async {
-        let results = ResizeArray<_>()
 
-        let rec loop lastKey =
-            async {
-                let req = QueryRequest(TableName = tableName)
-                let eqCond = new Condition()
-                eqCond.ComparisonOperator <- ComparisonOperator.EQ
-                eqCond.AttributeValueList.Add(new AttributeValue(hashKey))
-                req.KeyConditions.Add(HashKey, eqCond)
-                req.ExclusiveStartKey <- lastKey
+        let mkRequest() =
+            let req = QueryRequest(TableName = tableName)
+            let eqCond = new Condition()
+            eqCond.ComparisonOperator <- ComparisonOperator.EQ
+            eqCond.AttributeValueList.Add(new AttributeValue(hashKey))
+            req.KeyConditions.Add(HashKey, eqCond)
+            req
 
-                let! ct  = Async.CancellationToken
-                let! res = account.DynamoDBClient.QueryAsync(req, ct)
-                           |> Async.AwaitTaskCorrect
-
-                res.Items 
-                |> Seq.map Document.FromAttributeMap 
-                |> Seq.map (fun d -> (^a : (static member FromDynamoDBDocument : Document -> ^a) d))
-                |> results.AddRange
-
-                if res.LastEvaluatedKey.Count > 0 then
-                    do! loop res.LastEvaluatedKey
-            }
-        do! loop (Dictionary<string, AttributeValue>())
-
-        return results :> ICollection<_>
+        return! queryDocs account mkRequest (fun d -> (^a : (static member FromDynamoDBDocument : Document -> ^a) d))
     }
 
     let private readInternal 
