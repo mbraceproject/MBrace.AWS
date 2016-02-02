@@ -23,27 +23,7 @@ open MBrace.AWS
 open MBrace.AWS.Runtime
 open MBrace.AWS.Store
 
-let account = AWSAccount.Create("Default", RegionEndpoint.EUCentral1)
-let store = S3FileStore.Create(account) :> ICloudFileStore
-
-let run x = Async.RunSynchronously x
-
-let clearBuckets() = async {
-    let! buckets = store.EnumerateDirectories "/"
-    let! _ = buckets |> Seq.filter (fun b -> b.StartsWith "/mbrace") |> Seq.map (fun b -> store.DeleteDirectory(b,true)) |> Async.Parallel
-    return ()
-}
-
-clearBuckets() |> run
-
-/////////////////////
-
-open System
-
-open Amazon.DynamoDBv2
-open Amazon.DynamoDBv2.Model
-
-
+AWSWorker.LocalExecutable <- __SOURCE_DIRECTORY__ + "/../../bin/MBrace.AWS.StandaloneWorker.exe"
 let config = Configuration.FromCredentialsStore(AWSRegion.EUCentral1, "eirikmbrace")
 
-config
+let cluster = AWSCluster.InitOnCurrentMachine(config, workerCount = 1)

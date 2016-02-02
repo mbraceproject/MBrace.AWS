@@ -63,7 +63,7 @@ type JsonDotNetSerializer = MBrace.Runtime.JsonDotNetSerializer
 //    /// <param name="serializer">Serializer for use with store. Defaults to FsPickler binary serializer.</param>
 //    static member FromCredentials(accountName : string, accountKey : string, [<O;D(null:obj)>]?serializer:ISerializer) : CloudFileSystem =
 //        let account = AWSAccount.Create(new Amazon.Runtime.BasicAWSCredentials(accountName, accountKey), Region.)
-//        AzureBlobStorage.FromConnectionString(account.ConnectionString, ?serializer = serializer)
+//        AWSBlobStorage.FromConnectionString(account.ConnectionString, ?serializer = serializer)
 
 /// Local AWS Standalone worker management methods
 [<AutoSerializable(false); AbstractClass; Sealed>]
@@ -136,7 +136,7 @@ type AWSWorker private () =
 ///     Windows AWS Cluster management client. Provides methods for management, execution and debugging of MBrace processes in AWS.
 /// </summary>
 [<AutoSerializable(false); NoEquality; NoComparison>]
-type AzureCluster private (manager : ClusterManager, faultPolicy : FaultPolicy option) =
+type AWSCluster private (manager : ClusterManager, faultPolicy : FaultPolicy option) =
     inherit MBraceClient(manager, match faultPolicy with None -> FaultPolicy.NoRetry | Some fp -> fp)
     static do ProcessConfiguration.InitAsClient()
     let hashId = manager.ClusterId.Hash
@@ -269,7 +269,7 @@ type AzureCluster private (manager : ClusterManager, faultPolicy : FaultPolicy o
     /// <param name="faultPolicy">The default fault policy to be used by the cluster. Defaults to NoRetry.</param>
     /// <param name="logger">Custom logger to attach in client.</param>
     /// <param name="logLevel">Logger verbosity level. Defaults to LogLevel.Info.</param>
-    static member ConnectAsync (config : Configuration, [<O;D(null:obj)>]?clientId : string, [<O;D(null:obj)>]?faultPolicy : FaultPolicy, [<O;D(null:obj)>]?logger : ISystemLogger, [<O;D(null:obj)>]?logLevel : LogLevel) : Async<AzureCluster> = async {
+    static member ConnectAsync (config : Configuration, [<O;D(null:obj)>]?clientId : string, [<O;D(null:obj)>]?faultPolicy : FaultPolicy, [<O;D(null:obj)>]?logger : ISystemLogger, [<O;D(null:obj)>]?logLevel : LogLevel) : Async<AWSCluster> = async {
         let logLevel = defaultArg logLevel LogLevel.Info
         let hostProc = Diagnostics.Process.GetCurrentProcess()
         let clientId = defaultArg clientId <| sprintf "%s-%s-%05d" (System.Net.Dns.GetHostName()) hostProc.ProcessName hostProc.Id
@@ -277,7 +277,7 @@ type AzureCluster private (manager : ClusterManager, faultPolicy : FaultPolicy o
         let! storageLogger = manager.SystemLoggerManager.CreateLogWriter(clientId)
         let _ = manager.LocalLoggerManager.AttachLogger(storageLogger)
         manager.LocalLoggerManager.LogLevel <- logLevel
-        return new AzureCluster(manager, faultPolicy)
+        return new AWSCluster(manager, faultPolicy)
     }
 
     /// <summary>
@@ -289,8 +289,8 @@ type AzureCluster private (manager : ClusterManager, faultPolicy : FaultPolicy o
     /// <param name="faultPolicy">The default fault policy to be used by the cluster. Defaults to NoRetry.</param>
     /// <param name="logger">Custom logger to attach in client.</param>
     /// <param name="logLevel">Logger verbosity level.</param>
-    static member Connect (config : Configuration, [<O;D(null:obj)>]?clientId : string, [<O;D(null:obj)>]?faultPolicy : FaultPolicy, [<O;D(null:obj)>]?logger : ISystemLogger, [<O;D(null:obj)>]?logLevel : LogLevel) : AzureCluster =
-        AzureCluster.ConnectAsync(config, ?clientId = clientId, ?faultPolicy = faultPolicy, ?logger = logger, ?logLevel = logLevel)
+    static member Connect (config : Configuration, [<O;D(null:obj)>]?clientId : string, [<O;D(null:obj)>]?faultPolicy : FaultPolicy, [<O;D(null:obj)>]?logger : ISystemLogger, [<O;D(null:obj)>]?logLevel : LogLevel) : AWSCluster =
+        AWSCluster.ConnectAsync(config, ?clientId = clientId, ?faultPolicy = faultPolicy, ?logger = logger, ?logLevel = logLevel)
         |> Async.RunSync
 
 //    /// <summary>
@@ -303,8 +303,8 @@ type AzureCluster private (manager : ClusterManager, faultPolicy : FaultPolicy o
 //    /// <param name="faultPolicy">The default fault policy to be used by the cluster. Defaults to NoRetry.</param>
 //    /// <param name="logger">Custom logger to attach in client.</param>
 //    /// <param name="logLevel">Logger verbosity level.</param>
-//    static member Connect(storageConnectionString : string, serviceBusConnectionString : string, [<O;D(null:obj)>]?clientId : string, [<O;D(null:obj)>]?faultPolicy : FaultPolicy, [<O;D(null:obj)>]?logger : ISystemLogger, [<O;D(null:obj)>]?logLevel : LogLevel) : AzureCluster = 
-//        AzureCluster.Connect(new Configuration(storageConnectionString, serviceBusConnectionString), ?clientId = clientId, ?faultPolicy = faultPolicy, ?logger = logger, ?logLevel = logLevel)
+//    static member Connect(storageConnectionString : string, serviceBusConnectionString : string, [<O;D(null:obj)>]?clientId : string, [<O;D(null:obj)>]?faultPolicy : FaultPolicy, [<O;D(null:obj)>]?logger : ISystemLogger, [<O;D(null:obj)>]?logLevel : LogLevel) : AWSCluster = 
+//        AWSCluster.Connect(new Configuration(storageConnectionString, serviceBusConnectionString), ?clientId = clientId, ?faultPolicy = faultPolicy, ?logger = logger, ?logLevel = logLevel)
 
     /// <summary>
     ///     Initialize a new local runtime instance with supplied worker count and return a handle.
@@ -320,8 +320,8 @@ type AzureCluster private (manager : ClusterManager, faultPolicy : FaultPolicy o
     /// <param name="heartbeatThreshold">Maximum heartbeat threshold after which a worker is to be declared dead.</param>
     /// <param name="background">Run as background instead of windowed process. Defaults to false.</param>
     static member InitOnCurrentMachine(config : Configuration, workerCount : int, [<O;D(null:obj)>]?clientId : string, [<O;D(null:obj)>]?faultPolicy : FaultPolicy, [<O;D(null:obj)>]?maxWorkItems : int, [<O;D(null:obj)>]?logger : ISystemLogger, 
-                                            [<O;D(null:obj)>]?quiet : bool, [<O;D(null:obj)>]?logLevel : LogLevel, [<O;D(null:obj)>]?heartbeatInterval : TimeSpan, [<O;D(null:obj)>]?heartbeatThreshold : TimeSpan, [<O;D(null:obj)>]?background : bool) : AzureCluster =
+                                            [<O;D(null:obj)>]?quiet : bool, [<O;D(null:obj)>]?logLevel : LogLevel, [<O;D(null:obj)>]?heartbeatInterval : TimeSpan, [<O;D(null:obj)>]?heartbeatThreshold : TimeSpan, [<O;D(null:obj)>]?background : bool) : AWSCluster =
         let _ = AWSWorker.SpawnMultiple(workerCount, config, ?maxWorkItems = maxWorkItems, ?logLevel = logLevel, ?background = background,
                                                 ?quiet = quiet, ?heartbeatInterval = heartbeatInterval, ?heartbeatThreshold = heartbeatThreshold)
 
-        AzureCluster.Connect(config, ?clientId = clientId, ?faultPolicy = faultPolicy, ?logger = logger, ?logLevel = logLevel)
+        AWSCluster.Connect(config, ?clientId = clientId, ?faultPolicy = faultPolicy, ?logger = logger, ?logLevel = logLevel)
