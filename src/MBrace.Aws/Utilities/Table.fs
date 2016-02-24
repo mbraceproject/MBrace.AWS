@@ -11,6 +11,8 @@ open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.DocumentModel
 open Amazon.DynamoDBv2.Model
 
+open FSharp.DynamoDB
+
 open MBrace.Core.Internals
 open MBrace.Runtime.Utils.Retry
 open MBrace.AWS.Runtime
@@ -44,6 +46,21 @@ type DynamoDBTableEntity (hashKey : string, rangeKey : string) =
     interface IDynamoDBTableEntity with
         member __.HashKey  = hashKey
         member __.RangeKey = rangeKey
+
+
+type FsPicklerBinaryAttribute() =
+    inherit PropertySerializerAttribute<byte[]> ()
+    override __.Serialize value = 
+        ProcessConfiguration.BinarySerializer.Pickle value
+    override __.Deserialize pickle =
+        ProcessConfiguration.BinarySerializer.UnPickle<'T> pickle
+
+type FsPicklerJsonAttribute() =
+    inherit PropertySerializerAttribute<string> ()
+    override __.Serialize value = 
+        ProcessConfiguration.JsonSerializer.PickleToString value
+    override __.Deserialize pickle =
+        ProcessConfiguration.JsonSerializer.UnPickleOfString<'T> pickle
 
 
 [<AutoOpen>]

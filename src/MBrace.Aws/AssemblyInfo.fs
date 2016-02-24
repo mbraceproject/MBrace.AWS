@@ -1,7 +1,7 @@
 ﻿namespace System
 open System.Reflection
 
-[<assembly: AssemblyTitleAttribute("MBrace.AWS")>]
+[<assembly: AssemblyTitleAttribute("MBrace.Aws")>]
 [<assembly: AssemblyProductAttribute("MBrace.AWS")>]
 [<assembly: AssemblyDescriptionAttribute("AWS backend for MBrace")>]
 [<assembly: AssemblyVersionAttribute("0.0.1")>]

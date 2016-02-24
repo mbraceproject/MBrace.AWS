@@ -8,6 +8,7 @@ open System.Text.RegularExpressions
 
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
+open FSharp.DynamoDB
 
 open MBrace.Core
 open MBrace.Core.Internals
@@ -18,21 +19,29 @@ open MBrace.AWS.Runtime.Utilities
 [<AutoOpen>]
 module private DynamoDBAtomUtils =
 
+    type AtomEntry =
+        {
+            [<HashKey>]
+            HashKey : string
+
+            [<RangeKey>]
+            RangeKey : string
+
+            ETag : string
+
+            TimeStamp : DateTimeOffset
+
+            Revision : int64
+
+            Data : byte[]
+        }
+
     // max item size is 400KB including attribute length, etc.
     // allow 1KB for all that leaves 399KB for actual payload
     let maxPayload = 399L * 1024L
 
-    [<Literal>]
-    let HashKey = "HashKey"
-
-    [<Literal>]
-    let ETag = "ETag"
-
-    [<Literal>]
-    let LastModified = "LastModified"
-
-    [<Literal>]
-    let Blob = "Blob"
+    let [<Literal>] rangeKey = "CloudAtom"
+    let mkKey (id : string) = TableKey.Combined(id, rangeKey)
 
     let getRandomTableName (prefix : string) =
         sprintf "%s-%s" prefix <| Guid.NewGuid().ToString("N")
@@ -56,22 +65,6 @@ module private DynamoDBAtomUtils =
 
     let infiniteConditionalRetryPolicy = mkConditionalRetryPolicy None
 
-    let attrValueString (x : string) = new AttributeValue(x)
-    let attrValueBytes (bytes : byte[]) = 
-        let attrValue = new AttributeValue()
-        attrValue.B <- new MemoryStream(bytes)
-        attrValue
-
-    let expectedAttrValueString (x : string) =
-        new ExpectedAttributeValue(attrValueString x)
-    let expectedNotExists () =
-        new ExpectedAttributeValue(false)
-
-    let updateAttrValueString (x : string) =
-        new AttributeValueUpdate(attrValueString x, AttributeAction.PUT)
-    let updateAttrValueBytes (bytes : byte[]) =
-        new AttributeValueUpdate(attrValueBytes bytes, AttributeAction.PUT)
-
 /// CloudAtom implementation on top of Amazon DynamoDB
 [<AutoSerializable(true) ; Sealed; DataContract>]
 type DynamoDBAtom<'T> internal (tableName : string, account : AWSAccount, hashKey : string) =
@@ -85,28 +78,20 @@ type DynamoDBAtom<'T> internal (tableName : string, account : AWSAccount, hashKe
     [<DataMember(Name = "HashKey")>]
     let hashKey = hashKey
 
-    let getItemAsync () = async {
-        let req = GetItemRequest(TableName = tableName)
-        req.Key.Add(HashKey, attrValueString hashKey)
-
-        return! account.DynamoDBClient.GetItemAsync(req)
-                |> Async.AwaitTaskCorrect
-    }
+    [<IgnoreDataMember>]
+    let mutable tableContext = None
+    let getContext() =
+        match tableContext with
+        | Some tc -> tc
+        | None ->
+            let ct = TableContext.Create<AtomEntry>(account.DynamoDBClient, tableName, createIfNotExists = false)
+            tableContext <- Some ct
+            ct
 
     let getValueAsync () = async {
-        let! res = getItemAsync()
-        let blob = res.Item.[Blob].B
-        return ProcessConfiguration.BinarySerializer.Deserialize<'T>(blob)
+        let! item = getContext().GetItemAsync(mkKey hashKey)
+        return ProcessConfiguration.BinarySerializer.UnPickle<'T>(item.Data)
     }
-
-    let updateReq oldTag (newBlob : byte[]) = 
-        let req = UpdateItemRequest(TableName = tableName)
-        req.Key.Add(HashKey, attrValueString hashKey)
-        req.AttributeUpdates.Add(ETag, updateAttrValueString (mkTag()))
-        req.AttributeUpdates.Add(Blob, updateAttrValueBytes newBlob)
-        req.AttributeUpdates.Add(LastModified, updateAttrValueString (mkTimeStamp()))
-        oldTag |> Option.iter (fun t -> req.Expected.Add(ETag, expectedAttrValueString t))
-        req
 
     interface CloudAtom<'T> with
         member __.Container = tableName
@@ -117,49 +102,45 @@ type DynamoDBAtom<'T> internal (tableName : string, account : AWSAccount, hashKe
         member __.Value = getValueAsync() |> Async.RunSync
 
         member __.Dispose (): Async<unit> = async {
-            let req = DeleteItemRequest(TableName = tableName)
-            req.Key.Add(HashKey, attrValueString hashKey)
-            do! account.DynamoDBClient.DeleteItemAsync(req)
-                |> Async.AwaitTaskCorrect
-                |> Async.Ignore
+            do! getContext().DeleteItemAsync(mkKey hashKey)
         }
 
         member __.ForceAsync (newValue : 'T) = async {
-            let req = 
-                newValue
-                |> ProcessConfiguration.BinarySerializer.Pickle 
-                |> updateReq None
+            let bytes = ProcessConfiguration.BinarySerializer.Pickle newValue
 
-            do! account.DynamoDBClient.UpdateItemAsync(req)
-                |> Async.AwaitTaskCorrect
-                |> Async.Ignore
+            let! _ = getContext().UpdateItemAsync(mkKey hashKey,
+                            <@ fun r -> 
+                                { r with Data = bytes
+                                         Revision = r.Revision + 1L
+                                         TimeStamp = DateTimeOffset.Now
+                                         ETag = guid() } @>)
+            return ()
         }
 
-        member __.TransactAsync (transaction, maxRetries) = async {
+        member __.TransactAsync (transaction : 'T -> 'R * 'T, maxRetries) = async {
             let serializer = ProcessConfiguration.BinarySerializer
             let policy = 
                 match maxRetries with
                 | None -> infiniteConditionalRetryPolicy
                 | Some _ -> mkConditionalRetryPolicy maxRetries
 
+            let key = mkKey hashKey
+
             return! retryAsync policy <| 
                 async {
-                    let! oldItem = getItemAsync()
-                    let oldTag = oldItem.Item.[ETag].S
-                    let oldBlob  = oldItem.Item.[Blob].B
-                    let oldValue = serializer.Deserialize<'T>(oldBlob)
+                    let! oldEntry = getContext().GetItemAsync(key)
+                    let oldValue = serializer.UnPickle<'T>(oldEntry.Data)
                     let returnValue, newValue = transaction oldValue
-                    let newBinary = serializer.Pickle newValue
-                    
-                    let req = updateReq (Some oldTag) newBinary
+                    let newBlob = serializer.Pickle<'T>(newValue)
+                    let newEntry = 
+                        { oldEntry with 
+                            Data = newBlob
+                            TimeStamp = DateTimeOffset.Now
+                            Revision = oldEntry.Revision + 1L
+                            ETag = guid()
+                        }
 
-                    let! result =
-                        account.DynamoDBClient.UpdateItemAsync(req)
-                        |> Async.AwaitTaskCorrect
-
-                    if result.HttpStatusCode <> HttpStatusCode.OK then
-                        return invalidOp <| sprintf "Request has failed with %O." result.HttpStatusCode
-
+                    let! _ = getContext().PutItemAsync(newEntry, <@ fun r -> r.ETag = oldEntry.ETag @>)
                     return returnValue
                 }
         }
@@ -179,30 +160,6 @@ type DynamoDBAtomProvider private (account : AWSAccount, defaultTable : string, 
 
     [<DataMember(Name = "ProvisionedThroughput")>]
     let provisionedThroughput = provisionedThroughput
-
-    let ensureTableExists (tableName : string) =
-        retryAsync createTableFaultPolicy <| async {
-            let! ct = Async.CancellationToken
-            let! listedTables = account.DynamoDBClient.ListTablesAsync(ct) |> Async.AwaitTaskCorrect
-            if listedTables.TableNames |> Seq.exists(fun tn -> tn = tableName) |> not then
-                let ctr = new CreateTableRequest(TableName = tableName)
-                ctr.KeySchema.Add <| KeySchemaElement(HashKey, KeyType.HASH)
-                ctr.AttributeDefinitions.Add <| AttributeDefinition(HashKey, ScalarAttributeType.S)
-                ctr.ProvisionedThroughput <- new ProvisionedThroughput(provisionedThroughput, provisionedThroughput)
-
-                let! _resp = account.DynamoDBClient.CreateTableAsync(ctr, ct) |> Async.AwaitTaskCorrect
-                ()
-
-            let rec awaitReady retries = async {
-                if retries = 0 then return failwithf "Failed to create table '%s'" tableName
-                let! descr = account.DynamoDBClient.DescribeTableAsync(tableName, ct) |> Async.AwaitTaskCorrect
-                if descr.Table.TableStatus <> TableStatus.ACTIVE then
-                    do! Async.Sleep 1000
-                    return! awaitReady (retries - 1)
-            }
-
-            do! awaitReady 20
-        }
 
     /// <summary>
     /// Creates an AWS DynamoDB-based atom provider that
@@ -261,21 +218,14 @@ type DynamoDBAtomProvider private (account : AWSAccount, defaultTable : string, 
 
         member __.CreateAtom<'T>(tableName, atomId, initValue) = async {
             Validate.tableName tableName
-            do! ensureTableExists tableName
+            let! table = TableContext.CreateAsync<AtomEntry>(account.DynamoDBClient, tableName, createIfNotExists = true)
             let binary = ProcessConfiguration.BinarySerializer.Pickle initValue
 
-            let req = PutItemRequest(TableName = tableName)
-            req.Item.Add(HashKey,      attrValueString atomId)
-            req.Item.Add(ETag,          attrValueString <| mkTag())
-            req.Item.Add(LastModified, attrValueString <| mkTimeStamp())
-            req.Item.Add(Blob,         attrValueBytes binary)
+            let entry = 
+                { HashKey = atomId ; RangeKey = rangeKey ; ETag = guid() ; 
+                  TimeStamp = DateTimeOffset.Now ; Revision = 0L ; Data = binary }
 
-            // atomically add a new Atom only if one doesn't exist with the same ID
-            req.Expected.Add(HashKey, expectedNotExists())
-            
-            do! account.DynamoDBClient.PutItemAsync(req)
-                |> Async.AwaitTaskCorrect
-                |> Async.Ignore
+            let! _ = table.PutItemAsync(entry)
 
             return new DynamoDBAtom<'T>(tableName, account, atomId) :> CloudAtom<'T>
         }

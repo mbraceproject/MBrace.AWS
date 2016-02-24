@@ -15,5 +15,6 @@ nuget AWSSDK.S3 ~> 3.0
 nuget AWSSDK.DynamoDBv2 ~> 3.0
 nuget AWSSDK.SQS ~> 3.0
 nuget AWSSDK.SimpleNotificationService ~> 3.0
+nuget FSharp.DynamoDB prerelease
 
 github fsharp/FAKE modules/Octokit/Octokit.fsx
