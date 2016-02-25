@@ -19,37 +19,35 @@ open MBrace.AWS.Runtime.Utilities
 [<AutoOpen>]
 module private DynamoDBAtomUtils =
 
+    [<RangeKeyConstant("RangeKey", "CloudAtom")>]
     type AtomEntry =
         {
             [<HashKey>]
             HashKey : string
 
-            [<RangeKey>]
-            RangeKey : string
+            Data : MemoryStream
 
             ETag : string
 
             TimeStamp : DateTimeOffset
 
             Revision : int64
-
-            Data : byte[]
         }
 
     // max item size is 400KB including attribute length, etc.
     // allow 1KB for all that leaves 399KB for actual payload
     let maxPayload = 399L * 1024L
 
-    let [<Literal>] rangeKey = "CloudAtom"
-    let mkKey (id : string) = TableKey.Combined(id, rangeKey)
-
     let getRandomTableName (prefix : string) =
         sprintf "%s-%s" prefix <| Guid.NewGuid().ToString("N")
 
     let mkRandomTableRegex prefix = new Regex(sprintf "%s-[0-9a-z]{32}" prefix, RegexOptions.Compiled)
 
-    let mkTag () = Guid.NewGuid().ToString()
-    let mkTimeStamp () = DateTime.UtcNow.ToString(System.Globalization.CultureInfo.InvariantCulture)
+    let serialize (value : 'T) =
+        let m = new MemoryStream()
+        ProcessConfiguration.BinarySerializer.Serialize(m, value, leaveOpen = true)
+        m.Position <- 0L
+        m
 
     let createTableFaultPolicy =
         Policy(fun retries exn ->
@@ -84,13 +82,13 @@ type DynamoDBAtom<'T> internal (tableName : string, account : AWSAccount, hashKe
         match tableContext with
         | Some tc -> tc
         | None ->
-            let ct = TableContext.Create<AtomEntry>(account.DynamoDBClient, tableName, createIfNotExists = false)
+            let ct = TableContext.Create<AtomEntry>(account.DynamoDBClient, tableName)
             tableContext <- Some ct
             ct
 
     let getValueAsync () = async {
-        let! item = getContext().GetItemAsync(mkKey hashKey)
-        return ProcessConfiguration.BinarySerializer.UnPickle<'T>(item.Data)
+        let! item = getContext().GetItemAsync(TableKey.Hash hashKey)
+        return ProcessConfiguration.BinarySerializer.Deserialize<'T>(item.Data)
     }
 
     interface CloudAtom<'T> with
@@ -102,15 +100,15 @@ type DynamoDBAtom<'T> internal (tableName : string, account : AWSAccount, hashKe
         member __.Value = getValueAsync() |> Async.RunSync
 
         member __.Dispose (): Async<unit> = async {
-            do! getContext().DeleteItemAsync(mkKey hashKey)
+            do! getContext().DeleteItemAsync(TableKey.Hash hashKey)
         }
 
         member __.ForceAsync (newValue : 'T) = async {
-            let bytes = ProcessConfiguration.BinarySerializer.Pickle newValue
+            let m = serialize newValue
 
-            let! _ = getContext().UpdateItemAsync(mkKey hashKey,
+            let! _ = getContext().UpdateItemAsync(TableKey.Hash hashKey,
                             <@ fun r -> 
-                                { r with Data = bytes
+                                { r with Data = m
                                          Revision = r.Revision + 1L
                                          TimeStamp = DateTimeOffset.Now
                                          ETag = guid() } @>)
@@ -124,17 +122,18 @@ type DynamoDBAtom<'T> internal (tableName : string, account : AWSAccount, hashKe
                 | None -> infiniteConditionalRetryPolicy
                 | Some _ -> mkConditionalRetryPolicy maxRetries
 
-            let key = mkKey hashKey
+            let key = TableKey.Hash hashKey
 
             return! retryAsync policy <| 
                 async {
                     let! oldEntry = getContext().GetItemAsync(key)
-                    let oldValue = serializer.UnPickle<'T>(oldEntry.Data)
+                    let oldValue = serializer.Deserialize<'T>(oldEntry.Data)
                     let returnValue, newValue = transaction oldValue
-                    let newBlob = serializer.Pickle<'T>(newValue)
+                    let m = serialize newValue
+
                     let newEntry = 
                         { oldEntry with 
-                            Data = newBlob
+                            Data = m
                             TimeStamp = DateTimeOffset.Now
                             Revision = oldEntry.Revision + 1L
                             ETag = guid()
@@ -218,12 +217,14 @@ type DynamoDBAtomProvider private (account : AWSAccount, defaultTable : string, 
 
         member __.CreateAtom<'T>(tableName, atomId, initValue) = async {
             Validate.tableName tableName
-            let! table = TableContext.CreateAsync<AtomEntry>(account.DynamoDBClient, tableName, createIfNotExists = true)
-            let binary = ProcessConfiguration.BinarySerializer.Pickle initValue
+            let table = TableContext.Create<AtomEntry>(account.DynamoDBClient, tableName)
+            do! table.CreateIfNotExistsAsync()
+
+            let m = serialize initValue
 
             let entry = 
-                { HashKey = atomId ; RangeKey = rangeKey ; ETag = guid() ; 
-                  TimeStamp = DateTimeOffset.Now ; Revision = 0L ; Data = binary }
+                { HashKey = atomId ; ETag = guid() ; Data = m ;
+                    TimeStamp = DateTimeOffset.Now ; Revision = 0L ; }
 
             let! _ = table.PutItemAsync(entry)
 
