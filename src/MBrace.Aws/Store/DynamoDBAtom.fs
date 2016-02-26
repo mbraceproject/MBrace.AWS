@@ -34,6 +34,20 @@ module private DynamoDBAtomUtils =
             Revision : int64
         }
 
+    let atomEntry = RecordTemplate.Define<AtomEntry> ()
+
+    let withEtag = atomEntry.PrecomputeConditionalExpr <@ fun etag ae -> ae.ETag = etag @>
+
+    let updateEntry = 
+        atomEntry.PrecomputeUpdateExpr                             
+                    <@ fun (data:MemoryStream) time etag r -> 
+                            { r with 
+                                Data = data
+                                Revision = r.Revision + 1L
+                                TimeStamp = time
+                                ETag = etag } @>
+
+
     // max item size is 400KB including attribute length, etc.
     // allow 1KB for all that leaves 399KB for actual payload
     let maxPayload = 399L * 1024L
@@ -105,13 +119,8 @@ type DynamoDBAtom<'T> internal (tableName : string, account : AWSAccount, hashKe
 
         member __.ForceAsync (newValue : 'T) = async {
             let m = serialize newValue
-
-            let! _ = getContext().UpdateItemAsync(TableKey.Hash hashKey,
-                            <@ fun r -> 
-                                { r with Data = m
-                                         Revision = r.Revision + 1L
-                                         TimeStamp = DateTimeOffset.Now
-                                         ETag = guid() } @>)
+            let uExpr = updateEntry m DateTimeOffset.Now (guid())
+            let! _ = getContext().UpdateItemAsync(TableKey.Hash hashKey, uExpr)
             return ()
         }
 
@@ -139,7 +148,7 @@ type DynamoDBAtom<'T> internal (tableName : string, account : AWSAccount, hashKe
                             ETag = guid()
                         }
 
-                    let! _ = getContext().PutItemAsync(newEntry, <@ fun r -> r.ETag = oldEntry.ETag @>)
+                    let! _ = getContext().PutItemAsync(newEntry, withEtag oldEntry.ETag)
                     return returnValue
                 }
         }
