@@ -96,7 +96,7 @@ type DynamoDBAtom<'T> internal (tableName : string, account : AWSAccount, hashKe
         match tableContext with
         | Some tc -> tc
         | None ->
-            let ct = TableContext.Create<AtomEntry>(account.DynamoDBClient, tableName)
+            let ct = TableContext.Create<AtomEntry>(account.DynamoDBClient, tableName, verifyTable = false)
             tableContext <- Some ct
             ct
 
@@ -226,8 +226,7 @@ type DynamoDBAtomProvider private (account : AWSAccount, defaultTable : string, 
 
         member __.CreateAtom<'T>(tableName, atomId, initValue) = async {
             Validate.tableName tableName
-            let table = TableContext.Create<AtomEntry>(account.DynamoDBClient, tableName)
-            do! table.CreateIfNotExistsAsync()
+            let! table = TableContext.CreateAsync<AtomEntry>(account.DynamoDBClient, tableName, createIfNotExists = true)
 
             let m = serialize initValue
 
