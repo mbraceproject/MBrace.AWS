@@ -34,14 +34,7 @@ type internal TableCounter (clusterId : ClusterId, hashKey : string) =
     let [<DataMember(Name = "ClusterId")>] clusterId = clusterId
     let [<DataMember(Name = "HashKey")>] hashKey = hashKey
 
-    let mutable table = None
-    let getTable() =
-        match table with
-        | Some t -> t
-        | None ->
-            let t = clusterId.RuntimeTable.WithRecordType<CounterEntity>()
-            table <- Some t
-            t
+    let getTable() = clusterId.GetRuntimeTable<CounterEntity>()
 
     interface ICloudCounter with
         member x.Dispose() = async {
@@ -62,14 +55,7 @@ type internal TableCounter (clusterId : ClusterId, hashKey : string) =
 [<Sealed>]
 type DynamoDBCounterFactory private (clusterId : ClusterId) =
 
-    let mutable table = None
-    let getTable() =
-        match table with
-        | Some t -> t
-        | None ->
-            let t = clusterId.RuntimeTable.WithRecordType<CounterEntity>()
-            table <- Some t
-            t
+    let getTable() = clusterId.GetRuntimeTable<CounterEntity>()
 
     interface ICloudCounterFactory with
         member x.CreateCounter(initialValue: int64) = async {

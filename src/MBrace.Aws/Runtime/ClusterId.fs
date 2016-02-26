@@ -16,11 +16,21 @@ open MBrace.Runtime
 open MBrace.AWS
 open MBrace.AWS.Runtime.Utilities
 
-type DefaultKeySchema =
-    {
-        [<HashKey>] HashKey : string
-        [<RangeKey>] Rangekey : string
-    }
+[<AutoOpen>]
+module private TableKeySchema =
+
+    type DefaultKeySchema =
+        {
+            [<HashKey>] HashKey : string
+            [<RangeKey>] Rangekey : string
+        }
+
+    let keySchema = RecordTemplate.Define<DefaultKeySchema>().KeySchema
+
+    let verify (ctx : TableContext<'T>) =
+        if ctx.KeySchema <> keySchema then
+            invalidArg (string typeof<'T>) "invalid key schema"
+        ctx
 
 /// Serializable state/configuration record uniquely identifying an MBrace.AWS cluster
 [<AutoSerializable(true); StructuralEquality; StructuralComparison>]
@@ -61,14 +71,17 @@ with
     interface IRuntimeId with 
         member this.Id = this.Id
 
-    member __.RuntimeTable = 
-        __.DynamoDBAccount.GetTableContext<DefaultKeySchema>(__.RuntimeTableName)
+    member __.GetRuntimeTable<'TSchema>() = 
+        __.DynamoDBAccount.GetTableContext<'TSchema>(__.RuntimeTableName)
+        |> verify
 
-    member __.RuntimeLogsTable =
-        __.DynamoDBAccount.GetTableContext<DefaultKeySchema>(__.RuntimeLogsTableName)
+    member __.GetRuntimeLogsTable<'TSchema>() =
+        __.DynamoDBAccount.GetTableContext<'TSchema>(__.RuntimeLogsTableName)
+        |> verify
 
-    member __.UserDataTable =
-        __.DynamoDBAccount.GetTableContext<DefaultKeySchema>(__.UserDataTableName)
+    member __.GetUserDataTable<'TSchema>() =
+        __.DynamoDBAccount.GetTableContext<'TSchema>(__.UserDataTableName)
+        |> verify
 
     member private this.DeleteTable(tableName : string) = async {
         let! ct = Async.CancellationToken
@@ -127,9 +140,9 @@ with
         let createBucket name = this.S3Account.S3Client.CreateBucketIfNotExistsSafe(name, ?maxRetries = maxRetries, ?retryInterval = retryInterval)
         do!
             [|  
-                this.RuntimeTable.VerifyTableAsync(createIfNotExists = true)
-                this.UserDataTable.VerifyTableAsync(createIfNotExists = true)
-                this.RuntimeLogsTable.VerifyTableAsync(createIfNotExists = true)
+                this.GetRuntimeTable<DefaultKeySchema>().VerifyTableAsync(createIfNotExists = true)
+                this.GetUserDataTable<DefaultKeySchema>().VerifyTableAsync(createIfNotExists = true)
+                this.GetRuntimeLogsTable<DefaultKeySchema>().VerifyTableAsync(createIfNotExists = true)
 
                 createBucket this.RuntimeS3BucketName
                 createBucket this.UserDataS3BucketName

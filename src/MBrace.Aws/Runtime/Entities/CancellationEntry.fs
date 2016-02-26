@@ -10,126 +10,92 @@ open MBrace.AWS.Runtime
 open MBrace.AWS.Runtime.Utilities
 open MBrace.AWS
 
-open Amazon.DynamoDBv2.DocumentModel
+open FSharp.DynamoDB
 
 // Implements an DynamoDB based ICloudCancellationEntry:
 // an entity that can be canceled and which supports child entities.
 // Used to implement CancellationTokens in MBrace
 
-type CancellationTokenSourceEntity(uuid : string, isCancellationRequested : bool, children : string list, ?etag : string) =
-    inherit DynamoDBTableEntity(CancellationTokenSourceEntity.DefaultHashKey, uuid)
+[<AutoOpen>]
+module private CancellationEntry =
 
-    do if children.Length > CancellationTokenSourceEntity.MaxChildren then 
-        raise <| ArgumentOutOfRangeException("Number of cancellation entry children exceeds maximum permitted.")
+    [<RangeKeyConstant("RangeKey", "CancellationToken")>]
+    type CancellationEntry =
+        {
+            [<HashKey; CustomName("HashKey")>]
+            Id : string
 
-    member __.Id = uuid
-    member __.IsCancellationRequested = isCancellationRequested
-    member __.Children = children
-    member __.ETag = etag
+            IsCancellationRequested : bool
 
-    static member DefaultHashKey = "cancellationToken"
-    static member MaxChildren = 4096
+            Children : string list
+        }
 
-    interface IDynamoDBDocument with
-        member this.ToDynamoDBDocument () =
-            let doc = new Document()
+    let template = RecordTemplate.Define<CancellationEntry>()
 
-            doc.[HashKey] <- DynamoDBEntry.op_Implicit(this.HashKey)
-            doc.[RangeKey] <- DynamoDBEntry.op_Implicit(this.RangeKey)
-            doc.["IsCancellationRequested"]  <- DynamoDBEntry.op_Implicit(this.IsCancellationRequested)
-            doc.["Children"] <- DynamoDBEntry.op_Implicit(new ResizeArray<_>(this.Children))
-            Table.writeETag doc this.ETag
-            doc
-
-    static member FromDynamoDBDocument (doc : Document) = 
-        let uuid = doc.[RangeKey].AsString()
-        let etag = Table.readETag doc
-        let isCancellationRequested = doc.["IsCancellationRequested"].AsBoolean()
-        let children = doc.["Children"].AsListOfString() |> Seq.toList
-
-        new CancellationTokenSourceEntity(uuid, isCancellationRequested, children, etag)
-
+    let isNotCancelled = template.PrecomputeConditionalExpr <@ fun c -> c.IsCancellationRequested = false @>
+    let cancelOp = template.PrecomputeUpdateExpr <@ fun c -> { c with IsCancellationRequested = true ; Children = [] } @>
+    let addChild = template.PrecomputeUpdateExpr <@ fun ch c -> { c with Children = c.Children @ [ch] } @>
 
 [<Sealed; DataContract>]
 type internal DynamoDBCancellationEntry (clusterId : ClusterId, uuid : string) =
-    let [<DataMember(Name = "ClusterId")>] id = clusterId
+    let [<DataMember(Name = "ClusterId")>] clusterId = clusterId
     let [<DataMember(Name = "UUID")>] uuid = uuid
+
+    let getTable() = clusterId.GetRuntimeTable<CancellationEntry>()
 
     interface ICancellationEntry with        
         member x.UUID: string = uuid
 
         member x.Cancel(): Async<unit> = async {
             let visited = new HashSet<string>()
-            let rec walk rowKey = async {
-                if not <| visited.Contains rowKey then
-                    let! e = Table.read<CancellationTokenSourceEntity> id.DynamoDBAccount id.RuntimeTable CancellationTokenSourceEntity.DefaultHashKey rowKey
+            let rec walk id = async {
+                if not <| visited.Contains id then
+                    let! e = getTable().UpdateItemAsync(TableKey.Hash id, cancelOp, returnLatest = false)
                     if e.IsCancellationRequested then ()
                     else
-                        let _ = visited.Add rowKey
-                        for e' in e.Children do do! walk e'
+                        let _ = visited.Add id
+                        do! e.Children |> Seq.map walk |> Async.Parallel |> Async.Ignore
             }
 
             do! walk uuid
-        
-            do! visited
-                |> Seq.map (fun rowKey -> new CancellationTokenSourceEntity(rowKey, isCancellationRequested = true, children = []))
-                |> Table.putBatch id.DynamoDBAccount id.RuntimeTable
         }
         
         member x.Dispose(): Async<unit> = async {
-            do! Table.delete id.DynamoDBAccount id.RuntimeTable (new CancellationTokenSourceEntity(uuid, false, []))
+            do! getTable().DeleteItemAsync(TableKey.Hash uuid)
         }
         
         member x.IsCancellationRequested: Async<bool> = async {
-            let! record = Table.read<CancellationTokenSourceEntity> id.DynamoDBAccount id.RuntimeTable CancellationTokenSourceEntity.DefaultHashKey uuid
+            let! record = getTable().GetItemAsync(TableKey.Hash uuid)
             return record.IsCancellationRequested
         }
 
-[<Sealed>]
+[<Sealed; AutoSerializable(true)>]
 type DynamoDBCancellationTokenFactory private (clusterId : ClusterId) =
+
+    let getTable() = clusterId.GetRuntimeTable<CancellationEntry>()
+
     interface ICancellationEntryFactory with
         member x.CreateCancellationEntry(): Async<ICancellationEntry> = async {
-            let record = new CancellationTokenSourceEntity(guid(), false, [])
-            let! _record = Table.put clusterId.DynamoDBAccount clusterId.RuntimeTable record
-            return new DynamoDBCancellationEntry(clusterId, record.Id) :> ICancellationEntry
+            let entry = { Id = guid() ; IsCancellationRequested = false ; Children = [] }
+            let! _ = getTable().PutItemAsync(entry)
+            return new DynamoDBCancellationEntry(clusterId, entry.Id) :> ICancellationEntry
         }
         
         member x.TryCreateLinkedCancellationEntry(parents: ICancellationEntry []): Async<ICancellationEntry option> = async {
-            let uuid = guid()
-            let record = new CancellationTokenSourceEntity(uuid, false, [])
-
-            let rec loop () = async {
-                let! parents = 
-                    parents 
-                    |> Seq.map (fun p -> Table.read<CancellationTokenSourceEntity> clusterId.DynamoDBAccount clusterId.RuntimeTable CancellationTokenSourceEntity.DefaultHashKey p.UUID)
-                    |> Async.Parallel
-
-                if parents |> Array.exists (fun p -> p.IsCancellationRequested) then
-                    return None
-                else 
-                    let updateParent (parent : CancellationTokenSourceEntity) = async {
-                        let newParent = new CancellationTokenSourceEntity(parent.RangeKey, false, uuid :: parent.Children, ?etag = parent.ETag)
-                        do! Table.update clusterId.DynamoDBAccount clusterId.RuntimeTable newParent
-                    }
-                    
-                    try
-                        let! t = Table.put clusterId.DynamoDBAccount clusterId.RuntimeTable record |> Async.StartChild
-                        do!
-                            parents
-                            |> Seq.filter (fun p -> not <| List.exists ((=) uuid) p.Children)
-                            |> Seq.map updateParent
-                            |> Async.Parallel
-                            |> Async.Ignore
-
-                        let! _ = t
-
-                        return Some(DynamoDBCancellationEntry(clusterId, uuid) :> ICancellationEntry)
-
-                    with ex when StoreException.PreconditionFailed ex ->
-                        return! loop ()
+            let table = getTable()
+            let entry = { Id = guid() ; IsCancellationRequested = false ; Children = [] }
+            let updateParent (parent : ICancellationEntry) = async {
+                let key = TableKey.Hash parent.UUID
+                let! _ = table.UpdateItemAsync(key, addChild entry.Id, precondition = isNotCancelled)
+                return ()
             }
 
-            return! loop ()
+            let! _ = table.PutItemAsync entry
+            try 
+                do! parents |> Seq.map updateParent |> Async.Parallel |> Async.Ignore
+                return Some(new DynamoDBCancellationEntry(clusterId, entry.Id) :> _)
+
+            with e when StoreException.PreconditionFailed e -> return None
         }
         
     static member Create(clusterId : ClusterId) = 
