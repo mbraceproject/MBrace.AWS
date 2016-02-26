@@ -13,6 +13,8 @@ open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.DataModel
 open Amazon.SimpleNotificationService
 
+open FSharp.DynamoDB
+
 open MBrace.Runtime.Utils
 
 [<AutoSerializable(false); NoEquality; NoComparison>]
@@ -91,6 +93,9 @@ type AWSAccount private (accountData : AWSAccountData) =
     member __.DynamoDBClient = getAccountData().DynamoDBClient :> IAmazonDynamoDB
     /// Amazon SNS Client instance for account
     member __.SNSClient = getAccountData().SNSClient :> IAmazonSimpleNotificationService
+    /// Gets table context using given name and record schema type
+    member __.GetTableContext<'Schema>(tableName : string) =
+        TableContext.Create<'Schema>(__.DynamoDBClient, tableName, verifyTable = false)
 
     interface IComparable with
         member __.CompareTo(other:obj) =

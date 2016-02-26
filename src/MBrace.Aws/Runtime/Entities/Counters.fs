@@ -8,75 +8,75 @@ open MBrace.AWS.Runtime
 open MBrace.AWS.Runtime.Utilities
 open MBrace.AWS
 
-open Amazon.DynamoDBv2.DocumentModel
+open FSharp.DynamoDB
 
-// Defines a distributed counter for use by the MBrace execution engine
-// using DynamoDB
+[<AutoOpen>]
+module private CounterImpl =
 
-// NOTE : All types that inherit TableEntity must provide a default public ctor.
-type CounterEntity(id : string, value : int64) = 
-    inherit DynamoDBTableEntity(id, CounterEntity.DefaultRangeKey)
-    
-    member __.Counter = value
+    [<RangeKeyConstant("RangeKey", "CounterEntity")>]
+    type CounterEntity = 
+        { 
+            [<HashKey; CustomName("HashKey")>]
+            Id : string
 
-    static member DefaultRangeKey = "CounterEntity"
+            Value : int64
+        }
 
-    static member FromDynamoDBDocument (doc : Document) = 
-        let hashKey = doc.[HashKey].AsString()
-        let value   = doc.["Counter"].AsLong()
+    let template = RecordTemplate.Define<CounterEntity>()
 
-        new CounterEntity(hashKey, value)
+    let incrExpr = template.PrecomputeUpdateExpr <@ fun e -> { e with Value = e.Value + 1L } @>
 
-    interface IDynamoDBDocument with
-        member this.ToDynamoDBDocument () =
-            let doc = new Document()
-
-            doc.[HashKey]  <- DynamoDBEntry.op_Implicit(this.HashKey)
-            doc.[RangeKey] <- DynamoDBEntry.op_Implicit(this.RangeKey)
-            doc.["Counter"]  <- DynamoDBEntry.op_Implicit(this.Counter)
-
-            doc
-
+/// Defines a distributed counter for use by the MBrace execution engine
+/// using DynamoDB
 [<DataContract; Sealed>]
 type internal TableCounter (clusterId : ClusterId, hashKey : string) =
-    let [<DataMember(Name = "ClusterId")>] id = clusterId
+
+    let [<DataMember(Name = "ClusterId")>] clusterId = clusterId
     let [<DataMember(Name = "HashKey")>] hashKey = hashKey
+
+    let mutable table = None
+    let getTable() =
+        match table with
+        | Some t -> t
+        | None ->
+            let t = clusterId.RuntimeTable.WithRecordType<CounterEntity>()
+            table <- Some t
+            t
 
     interface ICloudCounter with
         member x.Dispose() = async {
-            let counter = CounterEntity(hashKey, 0L)
-            do! Table.delete 
-                    id.DynamoDBAccount 
-                    id.RuntimeTable 
-                    counter
+            do! getTable().DeleteItemAsync(TableKey.Hash hashKey)
         }
         
         member x.Increment() = async { 
-            return! Table.increment
-                        id.DynamoDBAccount 
-                        id.RuntimeTable 
-                        hashKey 
-                        CounterEntity.DefaultRangeKey
-                        "Counter"
+            let! entity = getTable().UpdateItemAsync(TableKey.Hash hashKey, incrExpr)
+            return entity.Value
         }
 
         member x.Value = async {
-            let! entity = 
-                Table.read<CounterEntity> 
-                    id.DynamoDBAccount 
-                    id.RuntimeTable 
-                    hashKey 
-                    CounterEntity.DefaultRangeKey
-            return entity.Counter
+            let! entity = getTable().GetItemAsync(TableKey.Hash hashKey)
+            return entity.Value
         }
+
 
 [<Sealed>]
 type DynamoDBCounterFactory private (clusterId : ClusterId) =
+
+    let mutable table = None
+    let getTable() =
+        match table with
+        | Some t -> t
+        | None ->
+            let t = clusterId.RuntimeTable.WithRecordType<CounterEntity>()
+            table <- Some t
+            t
+
     interface ICloudCounterFactory with
         member x.CreateCounter(initialValue: int64) = async {
-            let record = new CounterEntity(guid(), initialValue)
-            do! Table.put clusterId.DynamoDBAccount clusterId.RuntimeTable record
-            return new TableCounter(clusterId, record.HashKey) :> ICloudCounter
+            let id = guid()
+            let entry = { Id = id ; Value = initialValue }
+            let! _ = getTable().PutItemAsync(entry)
+            return new TableCounter(clusterId, id) :> ICloudCounter
         }
 
     static member Create(clusterId : ClusterId) = 

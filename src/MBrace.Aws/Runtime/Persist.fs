@@ -13,7 +13,7 @@ open MBrace.AWS.Runtime.Utilities
 type S3Persist private () =
 
     static let mkBlobValue (clusterId : ClusterId) (fileName : string) =
-        BlobValue.Define<'T>(clusterId.S3Account, clusterId.RuntimeS3Bucket, fileName)
+        BlobValue.Define<'T>(clusterId.S3Account, clusterId.RuntimeS3BucketName, fileName)
     
     /// <summary>
     ///     Persists object to S3 with supplied configuration parameters.
