@@ -15,11 +15,18 @@ open MBrace.Runtime.Utils.PrettyPrinters
 open MBrace.AWS
 open MBrace.AWS.Runtime.Utilities
 
-open Amazon.DynamoDBv2
-open Amazon.DynamoDBv2.Model
-open Amazon.DynamoDBv2.DocumentModel
+open FSharp.DynamoDB
 
-module private Logger =
+[<AutoOpen>]
+module LoggerExtensions =
+    type ISystemLogger with
+        member this.LogInfof fmt    = Printf.ksprintf (fun s -> this.LogInfo s) fmt
+        member this.LogErrorf fmt   = Printf.ksprintf (fun s -> this.LogError s) fmt
+        member this.LogWarningf fmt = Printf.ksprintf (fun s -> this.LogWarning s) fmt
+
+[<AutoOpen>]
+module private LoggerImpl =
+
     let mkSystemLogHashKey (loggerId : string) = 
         sprintf "systemlog:%s" loggerId
 
@@ -41,240 +48,169 @@ module private Logger =
             Int64.TryParse(id', &id)
         | _ -> false
 
-[<AutoOpen>]
-module LoggerExtensions =
-    type ISystemLogger with
-        member this.LogInfof fmt    = Printf.ksprintf (fun s -> this.LogInfo s) fmt
-        member this.LogErrorf fmt   = Printf.ksprintf (fun s -> this.LogError s) fmt
-        member this.LogWarningf fmt = Printf.ksprintf (fun s -> this.LogWarning s) fmt
+    type IDynamoLogEntry =
+        abstract LogTime : DateTimeOffset
+        abstract RangeKey : string
 
-/// System log record that has to eventually be stored in DynamoDB
-type SystemLogRecord
-        (hashKey  : string, 
-         rangeKey : string, 
-         message  : string, 
-         logTime  : DateTimeOffset, 
-         level    : int, 
-         loggerId : string) =
-    inherit DynamoDBTableEntity(hashKey, rangeKey)
-    
-    member __.Level    = level
-    member __.Message  = message
-    member __.LogTime  = logTime
-    member __.LoggerId = loggerId
+    type SystemLogRecord =
+        {
+            [<HashKey>]
+            HashKey : string
+            [<RangeKey>]
+            RangeKey : string
 
-    interface IDynamoDBDocument with
-        member __.ToDynamoDBDocument() =
-            let doc = new Document()
-            doc.[HashKey] <- DynamoDBEntry.op_Implicit hashKey
-            doc.[RangeKey] <- DynamoDBEntry.op_Implicit rangeKey
-            doc.["Message"] <- DynamoDBEntry.op_Implicit message
-            doc.["LogTime"] <- DynamoDBEntry.op_Implicit logTime
-            doc.["LogLevel"] <- DynamoDBEntry.op_Implicit level
-            doc.["LoggerId"] <- DynamoDBEntry.op_Implicit loggerId
+            LoggerId : string
+            Message : string
+            LogTime : DateTimeOffset
+            LogLevel : LogLevel
+        }
+    with
+        interface IDynamoLogEntry with
+            member __.LogTime = __.LogTime
+            member __.RangeKey = __.RangeKey
 
-            doc
+        /// Converts LogEntry table entity to MBrace.Runtime.SystemLogEntry
+        member this.ToLogEntry() =
+            new SystemLogEntry(
+                this.LogLevel, 
+                this.Message, 
+                this.LogTime, 
+                this.LoggerId)
 
-    static member FromDynamoDBDocument(doc : Document) =
-            let hashKey = doc.[HashKey].AsString()
-            let rangeKey = doc.[RangeKey].AsString()
-            let message = doc.["Message"].AsString()
-            let logTime = doc.["LogTime"].AsDateTimeOffset()
-            let logLevel = doc.["LogLevel"].AsInt()
-            let loggerId = doc.["LoggerId"].AsString()
-            new SystemLogRecord(hashKey, rangeKey, message, logTime, logLevel, loggerId)
+        /// <summary>
+        ///     Creates a table system log record using provided info and 
+        ///     MBrace.Runtime.SystemLogEntry 
+        /// </summary>
+        /// <param name="worker">Table partition key.</param>
+        /// <param name="entry">Input log entry.</param>
+        static member FromLogEntry(loggerId : string, entry : SystemLogEntry) =
+            {
+                HashKey = mkSystemLogHashKey loggerId
+                RangeKey = guid()
+                Message = entry.Message
+                LogTime = entry.DateTime
+                LogLevel = entry.LogLevel
+                LoggerId = loggerId
+            }
 
-    /// Converts LogEntry table entity to MBrace.Runtime.SystemLogEntry
-    member this.ToLogEntry() =
-        new SystemLogEntry(
-            enum this.Level, 
-            this.Message, 
-            this.LogTime, 
-            this.LoggerId)
+    type CloudLogRecord =
+        {
+            [<HashKey>]
+            HashKey : string
+            [<RangeKey>]
+            RangeKey : string
 
-    /// <summary>
-    ///     Creates a table system log record using provided info and 
-    ///     MBrace.Runtime.SystemLogEntry 
-    /// </summary>
-    /// <param name="worker">Table partition key.</param>
-    /// <param name="entry">Input log entry.</param>
-    static member FromLogEntry(loggerId : string, entry : SystemLogEntry) =
-        new SystemLogRecord(
-            Logger.mkSystemLogHashKey loggerId, 
-            null, 
-            entry.Message, 
-            entry.DateTime, 
-            int entry.LogLevel, 
-            loggerId)
+            Message : string
+            LogTime : DateTimeOffset
+            WorkerId : string
+            ProcessId : string
+            WorkItemId : Guid
+        }
+    with
+        interface IDynamoLogEntry with
+            member __.LogTime = __.LogTime
+            member __.RangeKey = __.RangeKey
 
-/// Cloud process log record
-type CloudLogRecord
-        (hashKey    : string, 
-         rangeKey   : string, 
-         message    : string, 
-         logTime    : DateTimeOffset, 
-         workerId   : string, 
-         procId     : string, 
-         workItemId : Guid) =
-    inherit DynamoDBTableEntity(hashKey, rangeKey)
-    
-    member __.Message    = message
-    member __.LogTime    = logTime
-    member __.WorkerId   = workerId
-    member __.ProcessId  = procId
-    member __.WorkItemId = workItemId
+        /// Converts LogEntry table entity to MBrace.Runtime.SystemLogEntry
+        member this.ToLogEntry() =
+            new CloudLogEntry(
+                this.ProcessId, 
+                this.WorkerId, 
+                this.WorkItemId, 
+                this.LogTime, 
+                this.Message)
 
-    /// Converts LogEntry table entity to MBrace.Runtime.SystemLogEntry
-    member this.ToLogEntry() =
-        new CloudLogEntry(
-            this.ProcessId, 
-            this.WorkerId, 
-            this.WorkItemId, 
-            this.LogTime, 
-            this.Message)
+        /// <summary>
+        ///     Creates a table cloud log record using supplied CloudProcess 
+        ///     metadata and message.s
+        /// </summary>
+        /// <param name="workItem">Work item generating the log entry.</param>
+        /// <param name="workerId">Worker identifier generating the log entry.</param>
+        /// <param name="message">User log message.</param>
+        static member Create(workItem : CloudWorkItem, worker : IWorkerId, message : string) =
+            {
+                HashKey = mkCloudLogHashKey workItem.Process.Id
+                RangeKey = guid()
+                Message = message
+                LogTime = DateTimeOffset.Now
+                WorkerId = worker.Id
+                ProcessId = workItem.Process.Id
+                WorkItemId = workItem.Id
+            }
 
-    interface IDynamoDBDocument with
-        member __.ToDynamoDBDocument() =
-            let doc = new Document()
-            doc.[HashKey] <- DynamoDBEntry.op_Implicit hashKey
-            doc.[RangeKey] <- DynamoDBEntry.op_Implicit rangeKey
-            doc.["Message"] <- DynamoDBEntry.op_Implicit message
-            doc.["LogTime"] <- DynamoDBEntry.op_Implicit logTime
-            doc.["WorkerId"] <- DynamoDBEntry.op_Implicit workerId
-            doc.["ProcId"] <- DynamoDBEntry.op_Implicit procId
-            doc.["WorkItemId"] <- DynamoDBEntry.op_Implicit workItemId
-            doc
+    [<AutoSerializable(false)>]
+    type TableLoggerMessage<'Entry> =
+        | Flush of AsyncReplyChannel<unit>
+        | Log   of 'Entry
 
-    static member FromDynamoDBDocument(doc : Document) =
-            let hashKey = doc.[HashKey].AsString()
-            let rangeKey = doc.[RangeKey].AsString()
-            let message = doc.["Message"].AsString()
-            let logTime = doc.["LogTime"].AsDateTimeOffset()
-            let workerId = doc.["WorkerId"].AsString()
-            let loggerId = doc.["ProcId"].AsString()
-            let workItemId = doc.["WorkItemId"].AsGuid()
-            new CloudLogRecord(hashKey, rangeKey, message, logTime, workerId, loggerId, workItemId)
+    /// Local agent that writes batches of log entries to table store
+    [<AutoSerializable(false)>]
+    type DynamoDBLogWriter<'Entry> (table : TableContext<'Entry>, timespan : TimeSpan) =
+        let queue = new Queue<'Entry> ()
 
-    /// <summary>
-    ///     Creates a table cloud log record using supplied CloudProcess 
-    ///     metadata and message.s
-    /// </summary>
-    /// <param name="workItem">Work item generating the log entry.</param>
-    /// <param name="workerId">Worker identifier generating the log entry.</param>
-    /// <param name="message">User log message.</param>
-    static member Create
-            (workItem : CloudWorkItem, 
-             worker   : IWorkerId, 
-             message  : string) =
-        let hashKey = Logger.mkCloudLogHashKey workItem.Process.Id
-        new CloudLogRecord(
-            hashKey, 
-            null, 
-            message, 
-            DateTimeOffset.Now, 
-            worker.Id, 
-            workItem.Process.Id, 
-            workItem.Id)
-
-[<AutoSerializable(false)>]
-type private TableLoggerMessage<'Entry when 'Entry :> DynamoDBTableEntity> =
-    | Flush of AsyncReplyChannel<unit>
-    | Log   of 'Entry
-
-/// Local agent that writes batches of log entries to table store
-[<AutoSerializable(false)>]
-type private DynamoDBLogWriter<'Entry when 'Entry :> DynamoDBTableEntity
-                                      and  'Entry :> IDynamoDBDocument> 
-        private (account      : AWSAccount,
-                 tableName    : string, 
-                 timespan     : TimeSpan, 
-                 logThreshold : int) =
-    let queue = new Queue<'Entry> ()
-
-    let flush () = async {
-        if queue.Count > 0 then
-            let entries = queue |> Seq.toArray
-            queue.Clear()
-
-            do! Table.putBatch 
-                    account
-                    tableName 
-                    entries
-                |> Async.Catch
-                |> Async.Ignore
-    }
-
-    let rec loop 
-            (lastWrite : DateTime) 
-            (inbox : MailboxProcessor<TableLoggerMessage<'Entry>>) = 
-        async {
-            let! msg = inbox.TryReceive(100)
-            match msg with
-            | None when DateTime.Now - lastWrite >= timespan || queue.Count >= logThreshold ->
-                do! flush ()
-                return! loop DateTime.Now inbox
-            | Some(Flush(channel)) ->
-                do! flush ()
-                channel.Reply()
-                return! loop DateTime.Now inbox
-            | Some(Log(log)) ->
-                queue.Enqueue log
-                return! loop lastWrite inbox
-            | _ ->
-                return! loop lastWrite inbox
+        let flush () = async {
+            if queue.Count > 0 then
+                do! table.BatchPutItemsAsync queue |> Async.Catch |> Async.Ignore
+                queue.Clear()
         }
 
-    let cts   = new CancellationTokenSource()
-    let agent = MailboxProcessor.Start(
-                    loop DateTime.Now, 
-                    cancellationToken = cts.Token)
+        let rec loop
+                (lastWrite : DateTime) 
+                (inbox : MailboxProcessor<TableLoggerMessage<'Entry>>) = 
+            async {
+                let! msg = inbox.TryReceive(100)
+                match msg with
+                | None when DateTime.Now - lastWrite >= timespan || queue.Count >= 25 ->
+                    do! flush ()
+                    return! loop DateTime.Now inbox
+                | Some(Flush(channel)) ->
+                    do! flush ()
+                    channel.Reply()
+                    return! loop DateTime.Now inbox
+                | Some(Log(log)) ->
+                    queue.Enqueue log
+                    return! loop lastWrite inbox
+                | _ ->
+                    return! loop lastWrite inbox
+            }
 
-    /// Appends a new entry to the write queue.
-    member __.LogEntry(entry : 'Entry) = agent.Post (Log entry)
+        let cts   = new CancellationTokenSource()
+        let agent = MailboxProcessor.Start(
+                        loop DateTime.Now, 
+                        cancellationToken = cts.Token)
 
-    interface IDisposable with
-        member __.Dispose () = 
-            agent.PostAndReply Flush
-            cts.Cancel ()
+        /// Appends a new entry to the write queue.
+        member __.LogEntry(entry : 'Entry) = agent.Post (Log entry)
 
-    /// <summary>
-    ///     Creates a local log writer instance with timespan, and 
-    ///     log threshold parameters
-    /// </summary>
-    /// <param name="tableName">Cloud table to persist logs.</param>
-    /// <param name="timespan">
-    ///     Timespan after which any log should be persisted.
-    /// </param>
-    /// <param name="logThreshold">
-    ///     Minimum number of logs to force instance flushing of log entries.
-    /// </param>
-    static member Create
-            (account     : AWSAccount,
-             tableName     : string, 
-             ?timespan     : TimeSpan, 
-             ?logThreshold : int) = 
-        async {
-            let timespan     = defaultArg timespan (TimeSpan.FromMilliseconds 500.)
-            let logThreshold = defaultArg logThreshold 100
-            do! Table.createIfNotExists 
-                    account
-                    tableName
-                    None
-                    None
-            return new DynamoDBLogWriter<'Entry>(
-                    account, tableName, timespan, logThreshold)
+        interface IDisposable with
+            member __.Dispose () = 
+                agent.PostAndReply Flush
+                cts.Cancel ()
+
+        /// <summary>
+        ///     Creates a local log writer instance with timespan, and 
+        ///     log threshold parameters
+        /// </summary>
+        /// <param name="tableName">Cloud table to persist logs.</param>
+        /// <param name="timespan">
+        ///     Timespan after which any log should be persisted.
+        /// </param>
+        static member Create(table : TableContext<'Entry>, ?timespan : TimeSpan) = async {
+            let timespan = defaultArg timespan (TimeSpan.FromMilliseconds 500.)
+            do! table.VerifyTableAsync(createIfNotExists = true)
+            return new DynamoDBLogWriter<'Entry>(table, timespan)
         }
 
 
 /// Defines a local polling agent for subscribing table log events
 [<AutoSerializable(false)>]
-type private DynamoDBLogPoller<'Entry when 'Entry :> DynamoDBTableEntity> private (fetch : DateTimeOffset option -> Async<ICollection<'Entry>>, getLogDate : 'Entry -> DateTimeOffset, interval : TimeSpan) =
+type private DynamoDBLogPoller<'Entry when 'Entry :> IDynamoLogEntry> private (fetch : DateTimeOffset option -> Async<ICollection<'Entry>>, interval : TimeSpan) =
     let event = new Event<'Entry> ()
     let loggerInfo = new Dictionary<string, int64> ()
     let isNewLogEntry (e : 'Entry) =
         let mutable uuid = null
         let mutable id = 0L
-        if Logger.tryParseRangeKey &uuid &id e.RangeKey then
+        if tryParseRangeKey &uuid &id e.RangeKey then
             let mutable lastId = 0L
             let ok = loggerInfo.TryGetValue(uuid, &lastId)
             if ok && id <= lastId then false
@@ -297,10 +233,10 @@ type private DynamoDBLogPoller<'Entry when 'Entry :> DynamoDBTableEntity> privat
             let mutable isEmpty = true
             let mutable minDate = DateTimeOffset()
             do 
-                for l in logs |> Seq.sortBy (fun l -> getLogDate l, l.RangeKey) |> Seq.filter isNewLogEntry do
+                for l in logs |> Seq.sortBy (fun l -> l.LogTime, l.RangeKey) |> Seq.filter isNewLogEntry do
                     isEmpty <- false
                     try event.Trigger l with _ -> ()
-                    if minDate < getLogDate l then minDate <- getLogDate l
+                    if minDate < l.LogTime then minDate <- l.LogTime
 
             if isEmpty then
                 return! pollLoop threshold
@@ -318,22 +254,38 @@ type private DynamoDBLogPoller<'Entry when 'Entry :> DynamoDBTableEntity> privat
     interface IDisposable with
         member __.Dispose() = cts.Cancel()
 
-    static member Create(fetch : DateTimeOffset option -> Async<ICollection<'Entry>>, getLogDate : 'Entry -> DateTimeOffset, ?interval) =
+    static member Create(fetch : DateTimeOffset option -> Async<ICollection<'Entry>>, ?interval) =
         let interval = defaultArg interval (TimeSpan.FromMilliseconds 500.)
-        new DynamoDBLogPoller<'Entry>(fetch, getLogDate, interval)
+        new DynamoDBLogPoller<'Entry>(fetch, interval)
 
 
 /// Management object for table storage based log files
 [<AutoSerializable(false)>]
 type DynamoDBSystemLogManager (clusterId : ClusterId) =
-    let table = Table.LoadTable(clusterId.DynamoDBAccount.DynamoDBClient, clusterId.RuntimeLogsTable)
+    static let template = template<SystemLogRecord>
+    static let logScanCondition =
+        template.PrecomputeConditionalExpr <@ fun (r:SystemLogRecord) -> r.HashKey.StartsWith "systemlog:" @>
+
+    static let loggerQueryCondition =
+        template.PrecomputeConditionalExpr <@ fun hk (r:SystemLogRecord) -> r.HashKey = hk @>
+
+    static let firstLogDateFilterCondition =
+        template.PrecomputeConditionalExpr <@ fun date (r:SystemLogRecord) -> date <= r.LogTime @>
+
+    static let lastLogDateFilterCondition =
+        template.PrecomputeConditionalExpr <@ fun date (r:SystemLogRecord) -> r.LogTime <= date @>
+
+    static let betweenLogDatesFilterCondition =
+        template.PrecomputeConditionalExpr <@ fun l u (r:SystemLogRecord) -> BETWEEN r.LogTime l u @>
+    
+    let table = clusterId.GetRuntimeLogsTable<SystemLogRecord>()
 
     /// <summary>
     ///     Creates a local log writer using provided logger id.
     /// </summary>
     /// <param name="loggerId">Logger identifier.</param>
     member __.CreateLogWriter(loggerId : string) = async {
-        let! writer = DynamoDBLogWriter<SystemLogRecord>.Create(clusterId.DynamoDBAccount, clusterId.RuntimeLogsTable)
+        let! writer = DynamoDBLogWriter<SystemLogRecord>.Create(table)
         return {
             new IRemoteSystemLogger with
                 member __.LogEntry(e : SystemLogEntry) =
@@ -351,39 +303,26 @@ type DynamoDBSystemLogManager (clusterId : ClusterId) =
     /// <param name="loggerId">Constrain to specific logger identifier.</param>
     /// <param name="fromDate">Log entries start date.</param>
     /// <param name="toDate">Log entries finish date.</param>
-    member __.GetLogs(?loggerId : string, ?fromDate : DateTimeOffset, ?toDate : DateTimeOffset) : Async<ICollection<SystemLogRecord>> = async {
-        let mkRequest() =
-            let queryRequest = QueryRequest(TableName = clusterId.RuntimeLogsTable)
-
-            loggerId |> Option.iter (fun id ->
-                let eqCond = new Condition()
-                eqCond.ComparisonOperator <- ComparisonOperator.EQ
-                eqCond.AttributeValueList.Add(new AttributeValue(Logger.mkSystemLogHashKey id))
-                queryRequest.KeyConditions.Add(HashKey, eqCond))
-
+    member __.GetLogs(?loggerId : string, ?fromDate : DateTimeOffset, ?toDate : DateTimeOffset) : Async<SystemLogRecord[]> = async {
+        let filterCondition =
             match fromDate, toDate with
-            | None, None -> ()
-            | Some fd, None ->
-                let cond = new Condition()
-                cond.ComparisonOperator <- ComparisonOperator.GE
-                cond.AttributeValueList.Add(new AttributeValue(fd.ToISO8601String()))
-                queryRequest.QueryFilter.["LogTime"] <- cond
+            | None, None -> None
+            | Some l, None -> firstLogDateFilterCondition l |> Some
+            | None, Some u -> lastLogDateFilterCondition u |> Some
+            | Some l, Some u -> betweenLogDatesFilterCondition l u |> Some
 
-            | None, Some td ->
-                let cond = new Condition()
-                cond.ComparisonOperator <- ComparisonOperator.LE
-                cond.AttributeValueList.Add(new AttributeValue(td.ToISO8601String()))
-                queryRequest.QueryFilter.["LogTime"] <- cond
+        match loggerId with
+        | Some id ->
+            let hkey = mkSystemLogHashKey id
+            return! table.QueryAsync(loggerQueryCondition hkey, ?filterCondition = filterCondition)
 
-            | Some fd, Some td ->
-                let cond = new Condition()
-                cond.ComparisonOperator <- ComparisonOperator.BETWEEN
-                cond.AttributeValueList.AddRange [|AttributeValue(fd.ToISO8601String()); AttributeValue(td.ToISO8601String())|]
-                queryRequest.QueryFilter.["LogTime"] <- cond
+        | None ->
+            let fc =
+                match filterCondition with
+                | None -> logScanCondition
+                | Some fc -> ConditionExpression.And(logScanCondition, fc)
 
-            queryRequest
-
-        return! Table.queryDocs clusterId.DynamoDBAccount mkRequest SystemLogRecord.FromDynamoDBDocument
+            return! table.ScanAsync(fc)
     }
 
     /// <summary>
