@@ -17,9 +17,9 @@ open FSharp.DynamoDB
 // Used to implement CancellationTokens in MBrace
 
 [<AutoOpen>]
-module private CancellationEntry =
+module private CancellationEntryImpl =
 
-    [<RangeKeyConstant("RangeKey", "CancellationToken")>]
+    [<ConstantRangeKey("RangeKey", "CancellationToken")>]
     type CancellationEntry =
         {
             [<HashKey; CustomName("HashKey")>]
@@ -34,7 +34,7 @@ module private CancellationEntry =
 
     let isNotCancelled = template.PrecomputeConditionalExpr <@ fun c -> c.IsCancellationRequested = false @>
     let cancelOp = template.PrecomputeUpdateExpr <@ fun c -> { c with IsCancellationRequested = true ; Children = [] } @>
-    let addChild = template.PrecomputeUpdateExpr <@ fun ch c -> { c with Children = c.Children @ [ch] } @>
+    let addChild = template.PrecomputeUpdateExpr <@ fun ch c -> { c with Children = ch :: c.Children } @>
 
 [<Sealed; DataContract>]
 type internal DynamoDBCancellationEntry (clusterId : ClusterId, uuid : string) =

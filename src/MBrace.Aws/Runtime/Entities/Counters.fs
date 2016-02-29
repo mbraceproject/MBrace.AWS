@@ -13,7 +13,7 @@ open FSharp.DynamoDB
 [<AutoOpen>]
 module private CounterImpl =
 
-    [<RangeKeyConstant("RangeKey", "CounterEntity")>]
+    [<ConstantRangeKey("RangeKey", "CounterEntity")>]
     type CounterEntity = 
         { 
             [<HashKey; CustomName("HashKey")>]
