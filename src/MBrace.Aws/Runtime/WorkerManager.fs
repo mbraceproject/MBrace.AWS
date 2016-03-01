@@ -2,8 +2,6 @@
 
 open System
 
-open Microsoft.FSharp.Linq.NullableOperators
-
 open MBrace.Core
 open MBrace.Core.Internals
 open MBrace.Runtime
@@ -14,38 +12,39 @@ open MBrace.AWS.Runtime.Utilities
 [<AutoSerializable(false)>]
 type WorkerManager private (clusterId : ClusterId, logger : ISystemLogger) =
 
-    let jsonSerializer = ProcessConfiguration.JsonSerializer
-    let pickle (value : 'T) = jsonSerializer.PickleToString(value)
-    let unpickle value = jsonSerializer.UnPickleOfString<'T>(value)
+//    let jsonSerializer = ProcessConfiguration.JsonSerializer
+//    let pickle (value : 'T) = jsonSerializer.PickleToString(value)
+//    let unpickle value = jsonSerializer.UnPickleOfString<'T>(value)
+    let getTable() = clusterId.GetRuntimeTable<WorkerRecord>()
 
-    let mkWorkerState (record : WorkerRecord) =
+    let mkWorkerState (record : WorkerRecord) : WorkerState =
         let workerInfo =
             { 
                 Hostname  = record.Hostname
-                ProcessId = record.ProcessId.GetValueOrDefault(-1)
-                ProcessorCount   = record.ProcessorCount.GetValueOrDefault(-1)
-                MaxWorkItemCount = record.MaxWorkItems.GetValueOrDefault(-1) 
-                HeartbeatInterval  = record.HeartbeatInterval.Value  |> TimeSpan.FromTicks
-                HeartbeatThreshold = record.HeartbeatThreshold.Value |> TimeSpan.FromTicks
+                ProcessId = record.ProcessId
+                ProcessorCount   = record.ProcessorCount
+                MaxWorkItemCount = record.MaxWorkItems
+                HeartbeatInterval  = record.HeartbeatInterval
+                HeartbeatThreshold = record.HeartbeatThreshold
             }
             
         { 
-            Id   = new WorkerId(record.Id)
+            Id   = new WorkerId(record.WorkerId)
             Info = workerInfo
-            CurrentWorkItemCount = record.ActiveWorkItems.GetValueOrDefault(-1)
-            LastHeartbeat      = record.LastHeartbeat.Value
-            InitializationTime = record.InitializationTime.Value
-            ExecutionStatus    = unpickle record.Status
-            PerformanceMetrics = record.GetCounters()
+            CurrentWorkItemCount = record.ActiveWorkItems
+            LastHeartbeat      = record.LastHeartBeat
+            InitializationTime = record.InitializationTime
+            ExecutionStatus    = record.ExecutionStatus
+            PerformanceMetrics = record.PerformanceInfo |> Option.get
         }
 
     /// Gets all worker records.
     member __.GetAllWorkers() = async { 
-        let! records = 
-            Table.query<WorkerRecord> 
-                clusterId.DynamoDBAccount
-                clusterId.RuntimeTable
-                WorkerRecord.DefaultHashKey
+        let! records = getTable().QueryAsync()
+//            Table.query<WorkerRecord> 
+//                clusterId.DynamoDBAccount
+//                clusterId.RuntimeTable
+//                WorkerRecord.DefaultHashKey
         let state = records |> Seq.map mkWorkerState |> Seq.toArray
         return state
     }
