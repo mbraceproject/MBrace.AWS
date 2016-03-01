@@ -61,7 +61,8 @@ type internal DynamoDBCancellationEntry (clusterId : ClusterId, uuid : string) =
         }
         
         member x.Dispose(): Async<unit> = async {
-            do! getTable().DeleteItemAsync(TableKey.Hash uuid)
+            let! _ = getTable().DeleteItemAsync(TableKey.Hash uuid)
+            return ()
         }
         
         member x.IsCancellationRequested: Async<bool> = async {

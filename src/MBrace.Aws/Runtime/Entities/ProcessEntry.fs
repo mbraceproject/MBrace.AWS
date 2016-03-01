@@ -14,8 +14,6 @@ open MBrace.Runtime
 open MBrace.AWS
 open MBrace.AWS.Runtime.Utilities
 
-type Foo = CloudProcessInfo
-
 [<AutoOpen>]
 module private ProcessEntryImpl =
 

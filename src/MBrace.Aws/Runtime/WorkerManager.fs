@@ -2,6 +2,8 @@
 
 open System
 
+open FSharp.DynamoDB
+
 open MBrace.Core
 open MBrace.Core.Internals
 open MBrace.Runtime
@@ -12,9 +14,7 @@ open MBrace.AWS.Runtime.Utilities
 [<AutoSerializable(false)>]
 type WorkerManager private (clusterId : ClusterId, logger : ISystemLogger) =
 
-//    let jsonSerializer = ProcessConfiguration.JsonSerializer
-//    let pickle (value : 'T) = jsonSerializer.PickleToString(value)
-//    let unpickle value = jsonSerializer.UnPickleOfString<'T>(value)
+    let getKey (w:IWorkerId) = TableKey.Range(w.Id)
     let getTable() = clusterId.GetRuntimeTable<WorkerRecord>()
 
     let mkWorkerState (record : WorkerRecord) : WorkerState =
@@ -40,11 +40,7 @@ type WorkerManager private (clusterId : ClusterId, logger : ISystemLogger) =
 
     /// Gets all worker records.
     member __.GetAllWorkers() = async { 
-        let! records = getTable().QueryAsync()
-//            Table.query<WorkerRecord> 
-//                clusterId.DynamoDBAccount
-//                clusterId.RuntimeTable
-//                WorkerRecord.DefaultHashKey
+        let! records = getTable().QueryAsync workerRecordKeyCondition
         let state = records |> Seq.map mkWorkerState |> Seq.toArray
         return state
     }
@@ -111,98 +107,55 @@ type WorkerManager private (clusterId : ClusterId, logger : ISystemLogger) =
     }
 
     interface IWorkerManager with
-        member __.DeclareWorkerStatus
-                (workerId : IWorkerId, 
-                 status   : WorkerExecutionStatus) = async {
+        member __.DeclareWorkerStatus(workerId : IWorkerId, status : WorkerExecutionStatus) = async {
             logger.LogInfof "Changing worker %O status to %A" workerId status
 
-            let record = new WorkerRecord(workerId.Id)
-            record.ETag <- None
-            record.Status <- pickle status
-
-            do! Table.update
-                    clusterId.DynamoDBAccount
-                    clusterId.RuntimeTable
-                    record
+            let! _ = getTable().UpdateItemAsync(getKey workerId, updateExecutionStatus status)
+            return ()
         }
         
         member __.IncrementWorkItemCount(workerId: IWorkerId) = async {
-            do! Table.transact<WorkerRecord> 
-                    clusterId.DynamoDBAccount 
-                    clusterId.RuntimeTable 
-                    WorkerRecord.DefaultHashKey 
-                    workerId.Id 
-                    (fun e -> 
-                        let expectedValue = 
-                            Option.ofNullable e.ActiveWorkItems 
-                            |> Option.map string
-                        "ActiveWorkItems", expectedValue)
-                    (fun e -> 
-                        let ec = e.CloneDefault()
-                        ec.ActiveWorkItems <- e.ActiveWorkItems ?+ 1
-                        ec)
-                |> Async.Ignore
+            let! _ = getTable().UpdateItemAsync(getKey workerId, incrWorkItemCount)
+            return ()
         }
 
         member __.DecrementWorkItemCount(workerId: IWorkerId): Async<unit> = async {
-            do! Table.transact<WorkerRecord> 
-                    clusterId.DynamoDBAccount 
-                    clusterId.RuntimeTable 
-                    WorkerRecord.DefaultHashKey 
-                    workerId.Id 
-                    (fun e -> 
-                        let expectedValue = 
-                            Option.ofNullable e.ActiveWorkItems 
-                            |> Option.map string
-                        "ActiveWorkItems", expectedValue)
-                    (fun e -> 
-                        let ec = e.CloneDefault()
-                        ec.ActiveWorkItems <- e.ActiveWorkItems ?- 1
-                        ec)
-                |> Async.Ignore
+            let! _ = getTable().UpdateItemAsync(getKey workerId, decrWorkItemCount)
+            return ()
         }
         
         member this.GetAvailableWorkers() = this.GetAvailableWorkers()
         
-        member __.SubmitPerformanceMetrics
-                (workerId : IWorkerId, 
-                 perf     : Utils.PerformanceMonitor.PerformanceInfo) = async {
-            let record = WorkerRecord.CreateCurrentWorkerRecord(workerId.Id)
-            record.UpdateCounters(perf)
-            record.ETag <- None
-
-            do! Table.update
-                    clusterId.DynamoDBAccount 
-                    clusterId.RuntimeTable 
-                    record
+        member __.SubmitPerformanceMetrics(workerId : IWorkerId, perf : Utils.PerformanceMonitor.PerformanceInfo) = async {
+            let! _ = getTable().UpdateItemAsync(getKey workerId, updatePerfMetrics (Some perf))
+            return ()
         }
         
-        member this.SubscribeWorker
-                (workerId : IWorkerId, 
-                 info     : WorkerInfo) = async {
+        member this.SubscribeWorker(workerId : IWorkerId, info : WorkerInfo) = async {
             logger.LogInfof "Subscribing worker %O" clusterId
 
-            let joined = DateTimeOffset.UtcNow
-            let record = WorkerRecord.CreateCurrentWorkerRecord(workerId.Id)
-            record.Hostname    <- info.Hostname
-            record.ProcessName <- Diagnostics.Process.GetCurrentProcess().ProcessName
-            record.ProcessId   <- nullable info.ProcessId
-            record.Status  <- pickle WorkerExecutionStatus.Running
-            record.Version <- ProcessConfiguration.Version.ToString(4)
+            let joined = DateTimeOffset.Now
+            let record =
+                {
+                    WorkerId = workerId.Id
+                    Hostname = info.Hostname
+                    ProcessName = Diagnostics.Process.GetCurrentProcess().ProcessName
+                    ProcessId = info.ProcessId
+                    ExecutionStatus = WorkerExecutionStatus.Running
+                    Version = ProcessConfiguration.Version.ToString(4)
+                    
+                    InitializationTime = joined
+                    LastHeartBeat = joined
 
-            record.InitializationTime <- nullable joined
-            record.LastHeartbeat      <- nullable joined
+                    ActiveWorkItems = 0
+                    MaxWorkItems = info.MaxWorkItemCount
+                    ProcessorCount = info.ProcessorCount
+                    HeartbeatInterval = info.HeartbeatInterval
+                    HeartbeatThreshold = info.HeartbeatThreshold
+                    PerformanceInfo = None
+                }
 
-            record.ActiveWorkItems    <- nullable 0
-            record.MaxWorkItems       <- nullable info.MaxWorkItemCount
-            record.ProcessorCount     <- nullable info.ProcessorCount
-            record.HeartbeatInterval  <- nullable info.HeartbeatInterval.Ticks
-            record.HeartbeatThreshold <- nullable info.HeartbeatThreshold.Ticks
-
-            do! Table.put
-                    clusterId.DynamoDBAccount
-                    clusterId.RuntimeTable 
-                    record //Worker might restart but keep id
+            let! _ = getTable().PutItemAsync(record)
 
             let unsubscriber =
                 { 
@@ -215,16 +168,10 @@ type WorkerManager private (clusterId : ClusterId, logger : ISystemLogger) =
         }
         
         member __.TryGetWorkerState(workerId: IWorkerId) = async {
-            let! record = 
-                Table.read<WorkerRecord> 
-                    clusterId.DynamoDBAccount
-                    clusterId.RuntimeTable 
-                    WorkerRecord.DefaultHashKey
-                    workerId.Id
-            
-            match record with
-            | null -> return None
-            | _    -> return Some(mkWorkerState record)
+            try
+                let! record = getTable().GetItemAsync(getKey workerId)
+                return Some(mkWorkerState record)
+            with :? ResourceNotFoundException -> return None
         }
 
     static member Create(clusterId : ClusterId, logger : ISystemLogger) =

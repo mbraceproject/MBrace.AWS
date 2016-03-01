@@ -55,3 +55,21 @@ type WorkerRecord =
 module internal WorkerRecordUtils =
     
     let private template = template<WorkerRecord>
+
+    let workerRecordKeyCondition = template.ConstantHashKeyCondition |> Option.get
+
+    let updateExecutionStatus =
+        <@ fun s (r:WorkerRecord) -> { r with ExecutionStatus = s } @>
+        |> template.PrecomputeUpdateExpr
+
+    let incrWorkItemCount =
+        <@ fun (r:WorkerRecord) -> { r with ActiveWorkItems = r.ActiveWorkItems + 1 } @>
+        |> template.PrecomputeUpdateExpr
+
+    let decrWorkItemCount =
+        <@ fun (r:WorkerRecord) -> { r with ActiveWorkItems = r.ActiveWorkItems - 1 } @>
+        |> template.PrecomputeUpdateExpr
+
+    let updatePerfMetrics =
+        <@ fun p (r:WorkerRecord) -> { r with PerformanceInfo = p } @>
+        |> template.PrecomputeUpdateExpr
