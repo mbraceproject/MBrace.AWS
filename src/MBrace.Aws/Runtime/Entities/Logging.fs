@@ -27,11 +27,14 @@ module LoggerExtensions =
 [<AutoOpen>]
 module private LoggerImpl =
 
+    let systemLogPrefix = "systemlog:"
+    let cloudlogPrefix = "cloudlog:"
+
     let mkSystemLogHashKey (loggerId : string) = 
-        sprintf "systemlog:%s" loggerId
+        sprintf "%s%s" systemLogPrefix loggerId
 
     let mkCloudLogHashKey (procId : string) = 
-        sprintf "cloudlog:%s" procId
+        sprintf "%s%s" cloudlogPrefix procId
 
     let mkRangeKey (loggerUUID : Guid) (id : int64) = 
         sprintf "%s-%010d" (loggerUUID.ToString("N")) id
@@ -202,69 +205,67 @@ module private LoggerImpl =
         }
 
 
-/// Defines a local polling agent for subscribing table log events
-[<AutoSerializable(false)>]
-type private DynamoDBLogPoller<'Entry when 'Entry :> IDynamoLogEntry> private (fetch : DateTimeOffset option -> Async<ICollection<'Entry>>, interval : TimeSpan) =
-    let event = new Event<'Entry> ()
-    let loggerInfo = new Dictionary<string, int64> ()
-    let isNewLogEntry (e : 'Entry) =
-        let mutable uuid = null
-        let mutable id = 0L
-        if tryParseRangeKey &uuid &id e.RangeKey then
-            let mutable lastId = 0L
-            let ok = loggerInfo.TryGetValue(uuid, &lastId)
-            if ok && id <= lastId then false
+    /// Defines a local polling agent for subscribing table log events
+    [<AutoSerializable(false)>]
+    type DynamoDBLogPoller<'Entry when 'Entry :> IDynamoLogEntry> private (fetch : DateTimeOffset option -> Async<'Entry[]>, interval : TimeSpan) =
+        let event = new Event<'Entry> ()
+        let loggerInfo = new Dictionary<string, int64> ()
+        let isNewLogEntry (e : 'Entry) =
+            let mutable uuid = null
+            let mutable id = 0L
+            if tryParseRangeKey &uuid &id e.RangeKey then
+                let mutable lastId = 0L
+                let ok = loggerInfo.TryGetValue(uuid, &lastId)
+                if ok && id <= lastId then false
+                else
+                    loggerInfo.[uuid] <- id
+                    true
             else
-                loggerInfo.[uuid] <- id
-                true
-        else
-            false
+                false
 
-    let rec pollLoop (threshold : DateTimeOffset option) = async {
-        do! Async.Sleep (int interval.TotalMilliseconds)
-        let! logs = fetch threshold |> Async.Catch
+        let rec pollLoop (threshold : DateTimeOffset option) = async {
+            do! Async.Sleep (int interval.TotalMilliseconds)
+            let! logs = fetch threshold |> Async.Catch
 
-        match logs with
-        | Choice2Of2 _ -> 
-            do! Async.Sleep (3 * int interval.TotalMilliseconds)
-            return! pollLoop threshold
-
-        | Choice1Of2 logs ->
-            let mutable isEmpty = true
-            let mutable minDate = DateTimeOffset()
-            do 
-                for l in logs |> Seq.sortBy (fun l -> l.LogTime, l.RangeKey) |> Seq.filter isNewLogEntry do
-                    isEmpty <- false
-                    try event.Trigger l with _ -> ()
-                    if minDate < l.LogTime then minDate <- l.LogTime
-
-            if isEmpty then
+            match logs with
+            | Choice2Of2 _ -> 
+                do! Async.Sleep (3 * int interval.TotalMilliseconds)
                 return! pollLoop threshold
-            else
-                let threshold = minDate - interval - interval - interval - interval
-                return! pollLoop (Some threshold)
-    }
 
-    let cts = new CancellationTokenSource()
-    let _ = Async.StartAsTask(pollLoop None, cancellationToken = cts.Token)
+            | Choice1Of2 logs ->
+                let mutable isEmpty = true
+                let mutable minDate = DateTimeOffset()
+                do 
+                    for l in logs |> Seq.sortBy (fun l -> l.LogTime, l.RangeKey) |> Seq.filter isNewLogEntry do
+                        isEmpty <- false
+                        try event.Trigger l with _ -> ()
+                        if minDate < l.LogTime then minDate <- l.LogTime
 
-    [<CLIEvent>]
-    member __.Publish = event.Publish
+                if isEmpty then
+                    return! pollLoop threshold
+                else
+                    let threshold = minDate - interval - interval - interval - interval
+                    return! pollLoop (Some threshold)
+        }
 
-    interface IDisposable with
-        member __.Dispose() = cts.Cancel()
+        let cts = new CancellationTokenSource()
+        let _ = Async.StartAsTask(pollLoop None, cancellationToken = cts.Token)
 
-    static member Create(fetch : DateTimeOffset option -> Async<ICollection<'Entry>>, ?interval) =
-        let interval = defaultArg interval (TimeSpan.FromMilliseconds 500.)
-        new DynamoDBLogPoller<'Entry>(fetch, interval)
+        [<CLIEvent>]
+        member __.Publish = event.Publish
+
+        interface IDisposable with
+            member __.Dispose() = cts.Cancel()
+
+        static member Create(fetch : DateTimeOffset option -> Async<'Entry[]>, ?interval) =
+            let interval = defaultArg interval (TimeSpan.FromMilliseconds 500.)
+            new DynamoDBLogPoller<'Entry>(fetch, interval)
 
 
 /// Management object for table storage based log files
 [<AutoSerializable(false)>]
 type DynamoDBSystemLogManager (clusterId : ClusterId) =
     static let template = template<SystemLogRecord>
-    static let logScanCondition =
-        template.PrecomputeConditionalExpr <@ fun (r:SystemLogRecord) -> r.HashKey.StartsWith "systemlog:" @>
 
     static let loggerQueryCondition =
         template.PrecomputeConditionalExpr <@ fun hk (r:SystemLogRecord) -> r.HashKey = hk @>
@@ -303,7 +304,7 @@ type DynamoDBSystemLogManager (clusterId : ClusterId) =
     /// <param name="loggerId">Constrain to specific logger identifier.</param>
     /// <param name="fromDate">Log entries start date.</param>
     /// <param name="toDate">Log entries finish date.</param>
-    member __.GetLogs(?loggerId : string, ?fromDate : DateTimeOffset, ?toDate : DateTimeOffset) : Async<SystemLogRecord[]> = async {
+    member private __.GetLogs(?loggerId : string, ?fromDate : DateTimeOffset, ?toDate : DateTimeOffset) : Async<SystemLogRecord[]> = async {
         let filterCondition =
             match fromDate, toDate with
             | None, None -> None
@@ -317,12 +318,7 @@ type DynamoDBSystemLogManager (clusterId : ClusterId) =
             return! table.QueryAsync(loggerQueryCondition hkey, ?filterCondition = filterCondition)
 
         | None ->
-            let fc =
-                match filterCondition with
-                | None -> logScanCondition
-                | Some fc -> ConditionExpression.And(logScanCondition, fc)
-
-            return! table.ScanAsync(fc)
+            return! table.ScanAsync(?filterCondition = filterCondition)
     }
 
     /// <summary>
@@ -330,31 +326,21 @@ type DynamoDBSystemLogManager (clusterId : ClusterId) =
     /// </summary>
     /// <param name="loggerId">Constraing to specified logger id.</param>
     member __.ClearLogs(?loggerId : string) = async {
-        return failwith "not implemented"
-//        let query = new TableQuery<SystemLogRecord>()
-//        let query =
-//            match loggerId with
-//            | None -> query
-//            | Some id -> query.Where(TableQuery.GenerateFilterCondition("PartitionKey", QueryComparisons.Equal, Logger.mkSystemLogPartitionKey id))
-//
-//        let query = query.Select [| "RangeKey" |]
-//
-//        do! table.CreateIfNotExistsAsyncSafe(maxRetries = 3)
-//        
-//        let! entries = Table.queryAsync table query
-//        return!
-//            entries
-//            |> Seq.groupBy (fun e -> e.PartitionKey)
-//            |> Seq.collect (fun (_,es) -> Seq.chunksOf 100 es)
-//            |> Seq.map (fun chunk ->
-//                async {
-//                    let batchOp = new TableBatchOperation()
-//                    do for e in chunk do batchOp.Delete e
-//                    let! _result = table.ExecuteBatchAsync batchOp |> Async.AwaitTaskCorrect
-//                    return ()
-//                })
-//            |> Async.Parallel
-//            |> Async.Ignore
+        let! entries = async {
+            match loggerId with
+            | None -> return! table.ScanAsync()
+            | Some id -> 
+                let hkey = mkSystemLogHashKey id
+                return! table.QueryAsync(loggerQueryCondition hkey)
+        }
+
+        return!
+            entries
+            |> Seq.map table.Template.ExtractKey
+            |> Seq.chunksOf 25
+            |> Seq.map table.BatchDeleteItemsAsync
+            |> Async.Parallel
+            |> Async.Ignore
     }
 
     /// <summary>
@@ -363,8 +349,7 @@ type DynamoDBSystemLogManager (clusterId : ClusterId) =
     /// <param name="loggerId">Generating logger id constraint.</param>
     member this.GetSystemLogPoller (?loggerId : string) : ILogPoller<SystemLogEntry> =
         let getLogs lastDate = this.GetLogs(?loggerId = loggerId, ?fromDate = lastDate)
-        let getDate (e : SystemLogRecord) = e.LogTime
-        let poller = DynamoDBLogPoller<SystemLogRecord>.Create(getLogs, getDate)
+        let poller = DynamoDBLogPoller<SystemLogRecord>.Create(getLogs)
         let mappedEvent = poller.Publish |> Event.map (fun r -> r.ToLogEntry())
 
         { new ILogPoller<SystemLogEntry> with
@@ -414,7 +399,21 @@ type DynamoDBSystemLogManager (clusterId : ClusterId) =
 /// Management object for writing cloud process logs to the table store
 [<AutoSerializable(false)>]
 type DynamoDBCloudLogManager (clusterId : ClusterId) =
-//    let table = clusterId.StorageAccount.GetTableReference clusterId.UserDataTable
+    static let template = template<CloudLogRecord>
+
+    static let loggerQueryCondition =
+        template.PrecomputeConditionalExpr <@ fun hk (r:CloudLogRecord) -> r.HashKey = hk @>
+
+    static let firstLogDateFilterCondition =
+        template.PrecomputeConditionalExpr <@ fun date (r:CloudLogRecord) -> date <= r.LogTime @>
+
+    static let lastLogDateFilterCondition =
+        template.PrecomputeConditionalExpr <@ fun date (r:CloudLogRecord) -> r.LogTime <= date @>
+
+    static let betweenLogDatesFilterCondition =
+        template.PrecomputeConditionalExpr <@ fun l u (r:CloudLogRecord) -> BETWEEN r.LogTime l u @>
+
+    let table = clusterId.GetUserDataTable<CloudLogRecord>()
 
     /// <summary>
     ///     Fetches all cloud process log entries satisfying given constraints.
@@ -422,32 +421,17 @@ type DynamoDBCloudLogManager (clusterId : ClusterId) =
     /// <param name="processId">Cloud process identifier.</param>
     /// <param name="fromDate">Start date constraint.</param>
     /// <param name="toDate">Stop date constraint.</param>
-    member this.GetLogs (processId : string, ?fromDate : DateTimeOffset, ?toDate : DateTimeOffset) : Async<ICollection<CloudLogRecord>> =
-        async {
-            return raise <| NotImplementedException()
-//            let query = new TableQuery<CloudLogRecord>()
-//            let filters = 
-//                [ Some(TableQuery.GenerateFilterCondition("PartitionKey", QueryComparisons.Equal, Logger.mkCloudLogPartitionKey processId))
-//                  fromDate   |> Option.map (fun t -> TableQuery.GenerateFilterConditionForDate("Timestamp", QueryComparisons.GreaterThanOrEqual, t))
-//                  toDate     |> Option.map (fun t -> TableQuery.GenerateFilterConditionForDate("Timestamp", QueryComparisons.LessThanOrEqual, t)) ]
-//
-//            let filter = 
-//                filters 
-//                |> List.fold (fun state filter -> 
-//                    match state, filter with
-//                    | None, None -> None
-//                    | Some f, None 
-//                    | None, Some f -> Some f
-//                    | Some f1, Some f2 -> Some <| TableQuery.CombineFilters(f1, TableOperators.And, f2) ) None
-//
-//            let query =
-//                match filter with
-//                | None -> query
-//                | Some f -> query.Where(f) 
-//
-//            do! table.CreateIfNotExistsAsyncSafe(maxRetries = 3)
-//            return! Table.queryAsync table query
-        }
+    member private this.GetLogs (processId : string, ?fromDate : DateTimeOffset, ?toDate : DateTimeOffset) = async {
+        let filterCondition =
+            match fromDate, toDate with
+            | None, None -> None
+            | Some l, None -> firstLogDateFilterCondition l |> Some
+            | None, Some u -> lastLogDateFilterCondition u |> Some
+            | Some l, Some u -> betweenLogDatesFilterCondition l u |> Some
+
+        let hashKey = mkCloudLogHashKey processId
+        return! table.QueryAsync(loggerQueryCondition hashKey, ?filterCondition = filterCondition)
+    }
 
     /// <summary>
     ///     Fetches a cloud process log entry observable that asynchonously polls the store for new log entries.
@@ -455,8 +439,7 @@ type DynamoDBCloudLogManager (clusterId : ClusterId) =
     /// <param name="processId">Process identifier.</param>
     member this.GetLogPoller (processId : string) : ILogPoller<CloudLogEntry> =
         let getLogs lastDate = this.GetLogs(processId, ?fromDate = lastDate)
-        let getDate (e : CloudLogRecord) = e.LogTime
-        let poller = DynamoDBLogPoller<CloudLogRecord>.Create(getLogs, getDate)
+        let poller = DynamoDBLogPoller<CloudLogRecord>.Create(getLogs)
         let mappedEvent = poller.Publish |> Event.map (fun r -> r.ToLogEntry())
 
         { new ILogPoller<CloudLogEntry> with
@@ -473,17 +456,16 @@ type DynamoDBCloudLogManager (clusterId : ClusterId) =
 
     interface ICloudLogManager with
         member this.CreateWorkItemLogger(worker: IWorkerId, workItem: CloudWorkItem): Async<ICloudWorkItemLogger> = async {
-            return raise <| NotImplementedException()
-//            let! writer = DynamoDBLogWriter<CloudLogRecord>.Create(table)
-//            return {
-//                new ICloudWorkItemLogger with
-//                    member __.Log(message : string) =
-//                        let record = CloudLogRecord.Create(workItem, worker, message)
-//                        writer.LogEntry record
-//
-//                    member __.Dispose() =
-//                        Disposable.dispose writer
-//            }
+            let! writer = DynamoDBLogWriter<CloudLogRecord>.Create(table)
+            return {
+                new ICloudWorkItemLogger with
+                    member __.Log(message : string) =
+                        let record = CloudLogRecord.Create(workItem, worker, message)
+                        writer.LogEntry record
+
+                    member __.Dispose() =
+                        Disposable.dispose writer
+            }
         }
         
         member this.GetAllCloudLogsByProcess(taskId: string): Async<seq<CloudLogEntry>> = async {

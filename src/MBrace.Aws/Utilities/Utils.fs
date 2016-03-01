@@ -1,6 +1,8 @@
 ﻿namespace MBrace.AWS.Runtime.Utilities
 
 open System
+open System.Collections
+open System.Collections.Generic
 open System.IO
 open System.Net
 open System.Text.RegularExpressions
@@ -114,6 +116,28 @@ module Utils =
             chunks.ToArray()
 
         let last (ts : 'T []) = ts.[ts.Length - 1]
+
+    module Collection =
+        let map (f : 'T -> 'S) (collection : ICollection<'T>) : ICollection<'S> =
+            let mapped = Seq.map f collection
+            { new ICollection<'S> with
+                  member x.Count: int = collection.Count
+                  member x.GetEnumerator(): IEnumerator = 
+                      (mapped :> IEnumerable).GetEnumerator() : IEnumerator
+                  member x.GetEnumerator(): IEnumerator<'S> = 
+                      mapped.GetEnumerator()
+                  member x.IsReadOnly: bool = true
+                  member x.Add(_: 'S): unit = 
+                      raise (System.NotSupportedException())
+                  member x.Remove(item: 'S): bool = 
+                      raise (System.NotSupportedException())
+                  member x.Clear(): unit = 
+                      raise (System.NotSupportedException())
+                  member x.Contains(item: 'S): bool = 
+                      raise (System.NotSupportedException())
+                  member x.CopyTo(array: 'S [], arrayIndex: int): unit = 
+                      raise (System.NotSupportedException())
+            }
 
 
     [<RequireQualifiedAccess>]
