@@ -3,139 +3,114 @@
 open System
 open System.Runtime.Serialization
 
-open Amazon.DynamoDBv2.DocumentModel
+open FSharp.DynamoDB
 
 open Nessos.FsPickler
+open Nessos.Vagabond
 
 open MBrace.Core
+open MBrace.Core.Internals
 open MBrace.Runtime
 open MBrace.AWS
 open MBrace.AWS.Runtime.Utilities
 
-[<AllowNullLiteral>]
-type CloudProcessRecord(taskId) = 
-    inherit DynamoDBTableEntity(CloudProcessRecord.DefaultHashKey, taskId)
+type Foo = CloudProcessInfo
 
-    member val Id   : string = taskId with get, set
-    member val Name : string = null with get, set
+[<AutoOpen>]
+module private ProcessEntryImpl =
 
-    member val Status         = Nullable<int>() with get, set
-    member val EnqueuedTime   = Nullable<DateTimeOffset>() with get, set
-    member val DequeuedTime   = Nullable<DateTimeOffset>() with get, set
-    member val StartTime      = Nullable<DateTimeOffset>() with get, set
-    member val CompletionTime = Nullable<DateTimeOffset>() with get, set
-    member val Completed      = Nullable<bool>() with get, set
-
-    member val CancellationTokenSource : byte [] = null with get, set
-    member val ResultUri : string = null with get, set
-    member val TypeName  : string = null with get, set
-    member val Type         : byte [] = null with get, set
-    member val Dependencies : byte [] = null with get, set
-    member val AdditionalResources : byte [] = null with get, set
-    member val ETag : string = null with get, set
-
-    new () = new CloudProcessRecord(null)
-
-    // TODO: is this needed?
-    //member this.CloneDefault() = new CloudProcessRecord(ETag = this.ETag)
-
-    override this.ToString() = sprintf "task:%A" taskId
-
-    static member DefaultHashKey = "task"
-
-    static member CreateNew(taskId : string, info : CloudProcessInfo) =
-        let serializer = ProcessConfiguration.BinarySerializer
-
-        let record = new CloudProcessRecord(taskId)
-        record.Completed      <- nullable false
-        record.StartTime      <- nullableDefault
-        record.CompletionTime <- nullableDefault
-        record.Dependencies   <- serializer.Pickle info.Dependencies
-        record.EnqueuedTime   <- nullable DateTimeOffset.Now
-        record.Name     <- match info.Name with Some n -> n | None -> null
-        record.Status   <- nullable(int CloudProcessStatus.Created)
-        record.Type     <- info.ReturnType.Bytes
-        record.TypeName <- info.ReturnTypeName
-        record.CancellationTokenSource <- serializer.Pickle info.CancellationTokenSource
-        info.AdditionalResources |> Option.iter (fun r -> record.AdditionalResources <- serializer.Pickle r)
-        record
-
-    member record.ToCloudProcessInfo() =
-        let serializer = ProcessConfiguration.BinarySerializer
+    [<ConstantHashKey("HashKey", "CloudProcess")>]
+    type CloudProcessRecord =
         {
-            Name = match record.Name with null -> None | name -> Some name
-            CancellationTokenSource = serializer.UnPickle record.CancellationTokenSource
-            Dependencies = serializer.UnPickle record.Dependencies
-            AdditionalResources = 
-                match record.AdditionalResources with 
-                | null  -> None 
-                | bytes -> Some <| serializer.UnPickle bytes
-            ReturnTypeName = record.TypeName
-            ReturnType = new Pickle<_>(record.Type)
+            [<RangeKey; CustomName("RangeKey")>]
+            Id : string
+
+            Name : string option
+            Status : CloudProcessStatus
+            EnqueuedTime : DateTimeOffset
+            DequeuedTime : DateTimeOffset option
+            StartTime : DateTimeOffset option
+            CompletionTime : DateTimeOffset option
+            Completed : bool
+
+            [<FsPicklerJson>]
+            CancellationTokenSource : ICloudCancellationTokenSource
+            [<FsPicklerBinary>]
+            Dependencies : AssemblyId []
+            [<FsPicklerBinary>]
+            AdditionalResources : ResourceRegistry option
+
+            ResultUri : string option
+            TypeName : string
+            Type : byte[]
+        }
+    with
+        static member CreateNew(taskId : string, info : CloudProcessInfo) =
+            {
+                Id = taskId
+                Completed = false
+                StartTime = None
+                CompletionTime = None
+                Dependencies = info.Dependencies
+                EnqueuedTime = DateTimeOffset.Now
+                DequeuedTime = None
+                Name = info.Name
+                Status = CloudProcessStatus.Created
+                Type = info.ReturnType.Bytes
+                TypeName = info.ReturnTypeName
+                CancellationTokenSource = info.CancellationTokenSource
+                AdditionalResources = info.AdditionalResources
+                ResultUri = None
+            }
+
+        static member GetProcessRecord(clusterId : ClusterId, processId : string) = async {
+            let key = TableKey.Range processId
+            return! clusterId.GetRuntimeTable<CloudProcessRecord>().GetItemAsync(key)
         }
 
-    static member GetProcessRecord(clusterId : ClusterId, processId : string) = async {
-        return! Table.read<CloudProcessRecord> 
-                    clusterId.DynamoDBAccount 
-                    clusterId.RuntimeTable 
-                    CloudProcessRecord.DefaultHashKey 
-                    processId
-    }
+        member record.ToCloudProcessInfo() =
+            {
+                Name = record.Name
+                CancellationTokenSource = record.CancellationTokenSource
+                Dependencies = record.Dependencies
+                AdditionalResources = record.AdditionalResources
+                ReturnTypeName = record.TypeName
+                ReturnType = new Pickle<_>(record.Type)
+            }
 
-    static member FromDynamoDBDocument (doc : Document) =
-        let taskId = doc.["Id"].AsString()
+    let private ptemplate = template<CloudProcessRecord>
+    let private wtemplate = template<WorkItemRecord>
 
-        let record = new CloudProcessRecord(taskId)
+    let setEnqueued =
+        <@ fun t (r:CloudProcessRecord) -> { r with EnqueuedTime = t ; Completed = false } @>
+        |> ptemplate.PrecomputeUpdateExpr 
 
-        record.Name      <- Table.readStringOrDefault doc "Name"
-        record.ETag      <- Table.readStringOrDefault doc "ETag"
-        record.ResultUri <- Table.readStringOrDefault doc "ResultUri"
-        record.TypeName  <- Table.readStringOrDefault doc "TypeName"
-        record.Type      <- Table.readByteArrayOrDefault doc "Type"
-        record.Dependencies            <- Table.readByteArrayOrDefault doc "Dependencies"
-        record.AdditionalResources     <- Table.readByteArrayOrDefault doc "AdditionalResources"
-        record.CancellationTokenSource <- Table.readByteArrayOrDefault doc "CancellationTokenSource"
+    let setDequeued =
+        <@ fun t (r:CloudProcessRecord) -> { r with DequeuedTime = t } @>
+        |> ptemplate.PrecomputeUpdateExpr 
 
-        record.Status         <- Table.readIntOrDefault doc "Status"
-        record.Completed      <- Table.readBoolOrDefault doc "Completed"
-        record.EnqueuedTime   <- Table.readDateTimeOffsetOrDefault doc "EnqueuedTime"
-        record.DequeuedTime   <- Table.readDateTimeOffsetOrDefault doc "DequeuedTime"
-        record.StartTime      <- Table.readDateTimeOffsetOrDefault doc "StartTime"
-        record.CompletionTime <- Table.readDateTimeOffsetOrDefault doc "CompletionTime"
+    let setStarted =
+        <@ fun t (r:CloudProcessRecord) -> { r with StartTime = t } @>
+        |> ptemplate.PrecomputeUpdateExpr
 
-        record
+    let setCompleted =
+        <@ fun t (r:CloudProcessRecord) -> { r with CompletionTime = t ; Completed = true } @>
+        |> ptemplate.PrecomputeUpdateExpr
 
-    interface IDynamoDBDocument with
-        member this.ToDynamoDBDocument () =
-            let doc = new Document()
+    let setProcessResult =
+        <@ fun u (r:CloudProcessRecord) -> { r with ResultUri = u } @>
+        |> ptemplate.PrecomputeUpdateExpr
 
-            doc.["HashKey"]   <- DynamoDBEntry.op_Implicit(this.HashKey)
-            doc.["RangeKey"]  <- DynamoDBEntry.op_Implicit(this.RangeKey)
+    let resultUnsetPrecondition =
+        <@ fun (r:CloudProcessRecord) -> r.ResultUri = None @>
+        |> ptemplate.PrecomputeConditionalExpr
 
-            doc.["Id"]   <- Document.op_Implicit this.Id
-            doc.["Name"] <- Document.op_Implicit this.Name
-            doc.["ETag"] <- Document.op_Implicit this.ETag
-            doc.["ResultUri"] <- Document.op_Implicit this.ResultUri
-            doc.["TypeName"]  <- Document.op_Implicit this.TypeName
-            doc.["Type"]      <- Document.op_Implicit this.Type
-            doc.["Dependencies"] <- Document.op_Implicit this.Dependencies
-            doc.["AdditionalResources"]     <- Document.op_Implicit this.AdditionalResources
-            doc.["CancellationTokenSource"] <- Document.op_Implicit this.CancellationTokenSource
-
-            this.Status    |> doIfNotNull (fun x -> doc.["Status"] <- DynamoDBEntry.op_Implicit x)
-            this.Completed |> doIfNotNull (fun x -> doc.["Completed"] <- DynamoDBEntry.op_Implicit x)
-            this.EnqueuedTime   |> doIfNotNull (fun x -> doc.["EnqueuedTime"] <- DynamoDBEntry.op_Implicit x)
-            this.DequeuedTime   |> doIfNotNull (fun x -> doc.["DequeuedTime"] <- DynamoDBEntry.op_Implicit x)
-            this.StartTime      |> doIfNotNull (fun x -> doc.["StartTime"] <- DynamoDBEntry.op_Implicit x)
-            this.CompletionTime |> doIfNotNull (fun x -> doc.["CompletionTime"] <- DynamoDBEntry.op_Implicit x)
-
-            doc
+    let jobQueryExpr =
+        <@ fun pid (r:WorkItemRecord) -> r.ProcessId = pid @>
+        |> wtemplate.PrecomputeConditionalExpr
 
 [<DataContract; Sealed>]
-type internal CloudProcessEntry 
-        (clusterId   : ClusterId, 
-         processId   : string, 
-         processInfo : CloudProcessInfo) =
+type internal CloudProcessEntry (clusterId : ClusterId, processId : string, processInfo : CloudProcessInfo) =
     [<DataMember(Name = "ClusterId")>]
     let clusterId = clusterId
 
@@ -144,6 +119,10 @@ type internal CloudProcessEntry
 
     [<DataMember(Name = "ProcessInfo")>]
     let processInfo = processInfo
+
+    let key() = TableKey.Range processId
+    let getProcTable() = clusterId.GetRuntimeTable<CloudProcessRecord>()
+    let getJobTable() = clusterId.GetRuntimeTable<WorkItemRecord>()
 
     override this.ToString() = sprintf "task:%A" processId
 
@@ -164,7 +143,7 @@ type internal CloudProcessEntry
         member this.WaitAsync(): Async<unit> = async {
             let! record = CloudProcessRecord.GetProcessRecord(clusterId, processId)
             // result uri has been populated, hence computation has completed
-            if record.ResultUri <> null then return ()
+            if Option.isNone record.ResultUri then return ()
             else
                 do! Async.Sleep 200
                 return! (this :> ICloudProcessEntry).WaitAsync()
@@ -175,57 +154,44 @@ type internal CloudProcessEntry
         member this.IncrementWorkItemCount(): Async<unit> = async { return () }
         
         member this.DeclareStatus(status: CloudProcessStatus): Async<unit> = async {
-            let record = new CloudProcessRecord(processId)
-            record.Status <- nullable(int status)
-            record.ETag   <- "*"
-            let now = nullable DateTimeOffset.Now
-            match status with
-            | CloudProcessStatus.Created -> 
-                record.Completed    <- nullable false
-                record.EnqueuedTime <- now
-            | CloudProcessStatus.WaitingToRun -> 
-                record.Completed    <- nullable false
-                record.DequeuedTime <- now
-            | CloudProcessStatus.Running -> 
-                record.Completed    <- nullable false
-                record.StartTime    <- now
-            | CloudProcessStatus.Faulted
-            | CloudProcessStatus.Completed
-            | CloudProcessStatus.UserException
-            | CloudProcessStatus.Canceled -> 
-                record.Completed      <- nullable true
-                record.CompletionTime <- nullable DateTimeOffset.Now
+            let now = DateTimeOffset.Now
+            let uExpr =
+                match status with
+                | CloudProcessStatus.Created -> setEnqueued now
+                | CloudProcessStatus.WaitingToRun -> setDequeued (Some now)
+                | CloudProcessStatus.Running -> setStarted (Some now)
+                | CloudProcessStatus.Faulted
+                | CloudProcessStatus.Completed
+                | CloudProcessStatus.UserException
+                | CloudProcessStatus.Canceled -> setCompleted (Some now)
+                | _ -> invalidArg "status" "invalid Cloud process status."
 
-            | _ -> invalidArg "status" "invalid Cloud process status."
-
-            do! Table.put clusterId.DynamoDBAccount clusterId.RuntimeTable record
+            let! _ = getProcTable().UpdateItemAsync(key(), uExpr)
+            return ()
         }
         
         member this.GetState(): Async<CloudProcessState> = async {
-            let! jobsHandle = 
-                Table.query<WorkItemRecord> clusterId.DynamoDBAccount clusterId.RuntimeTable processId
-                |> Async.StartChild
-            let! record = CloudProcessRecord.GetProcessRecord(clusterId, processId)
+            let! jobsHandle = getJobTable().QueryAsync (jobQueryExpr processId) |> Async.StartChild
+            let! record = getProcTable().GetItemAsync(key())
             let! jobs = jobsHandle
 
             let execTime =
                 match record.Completed, record.StartTime, record.CompletionTime with
-                | Nullable true, Nullable s, Nullable c ->
+                | true, Some s, Some c ->
                     Finished(s, c - s)
-                | Nullable false, Nullable s, _ ->
+                | false, Some s, _ ->
                     Started(s, DateTimeOffset.Now - s)
-                | Nullable false, Null, Null ->
-                    NotStarted
+                | false, None, None -> NotStarted
                 | _ -> 
                     let ex = new InvalidOperationException(sprintf "Invalid record %s" record.Id)
                     ex.Data.Add("record", record)
                     raise ex
 
-            let total = jobs.Count
+            let total = jobs.Length
             let active, completed, faulted =
                 jobs
                 |> Seq.fold (fun ((a,c,f) as state) workItem ->
-                    match enum<WorkItemStatus> workItem.Status.Value with
+                    match workItem.Status with
                     | WorkItemStatus.Preparing 
                     | WorkItemStatus.Enqueued  -> state
                     | WorkItemStatus.Faulted   -> (a, c, f + 1)
@@ -236,7 +202,7 @@ type internal CloudProcessEntry
 
             return 
                 { 
-                    Status = enum (record.Status.GetValueOrDefault(-1))
+                    Status = record.Status
                     Info   = (this :> ICloudProcessEntry).Info
                     ExecutionTime = execTime // TODO : dequeued vs running time?
                     ActiveWorkItemCount    = active
@@ -249,18 +215,17 @@ type internal CloudProcessEntry
         member this.TryGetResult(): Async<CloudProcessResult option> = async {
             let! record = CloudProcessRecord.GetProcessRecord(clusterId, processId)
             match record.ResultUri with
-            | null -> return None
-            | uri ->
+            | None -> return None
+            | Some uri ->
                 let! result = S3Persist.ReadPersistedClosure<CloudProcessResult>(clusterId, uri)
                 return Some result
         }
 
         member this.TrySetResult(result: CloudProcessResult, _workerId : IWorkerId): Async<bool> = async {
-            let record  = new CloudProcessRecord(processId)
             let blobUri = guid()
             do! S3Persist.PersistClosure(clusterId, result, blobUri, allowNewSifts = false)
-            record.ResultUri <- blobUri
-            record.ETag      <- "*"
-            do! Table.put clusterId.DynamoDBAccount clusterId.RuntimeTable record
-            return true
+            try
+                let! _ = getProcTable().UpdateItemAsync(key(), setProcessResult (Some blobUri), precondition = resultUnsetPrecondition)
+                return true
+            with :? ConditionalCheckFailedException -> return false
         }

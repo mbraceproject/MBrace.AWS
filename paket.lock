@@ -19,7 +19,7 @@ NUGET
       FSharp.Core (>= 3.1.2.5)
     FSharp.Compiler.Service (2.0.0.6)
     FSharp.Core (4.0.0.1)
-    FSharp.DynamoDB (0.0.12-alpha)
+    FSharp.DynamoDB (0.0.14-alpha)
       AWSSDK.DynamoDBv2 (>= 3.1.1.5)
       Unquote (>= 3.1.1)
     FSharp.Formatting (2.14.0)
@@ -143,5 +143,5 @@ NUGET
 GITHUB
   remote: fsharp/FAKE
   specs:
-    modules/Octokit/Octokit.fsx (695680cee21ed8dbd7d0e4e5b158a98b2e949304)
+    modules/Octokit/Octokit.fsx (998ddffae27ce0add0d7b8634a02fb43a9f96409)
       Octokit
