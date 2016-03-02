@@ -30,3 +30,19 @@ type FsPicklerJsonAttribute() =
         ProcessConfiguration.JsonSerializer.PickleToString value
     override __.Deserialize pickle =
         ProcessConfiguration.JsonSerializer.UnPickleOfString<'T> pickle
+
+[<AutoOpen>]
+module internal TableUtils =
+
+    type IAmazonDynamoDB with
+        member ddb.DeleteTableAsyncSafe(tableName : string) = async {
+            try
+                let! ct = Async.CancellationToken
+                let! _response = ddb.DeleteTableAsync(tableName, ct) |> Async.AwaitTaskCorrect
+                return ()
+            with 
+            | :? Amazon.DynamoDBv2.Model.ResourceNotFoundException -> return ()
+            | :? Amazon.DynamoDBv2.Model.ResourceInUseException ->
+                do! Async.Sleep 1000
+                do! ddb.DeleteTableAsyncSafe(tableName)
+        }

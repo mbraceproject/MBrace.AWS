@@ -27,17 +27,8 @@ AWSWorker.LocalExecutable <- __SOURCE_DIRECTORY__ + "/../../bin/MBrace.AWS.Stand
 let config = Configuration.FromCredentialsStore(AWSRegion.EUCentral1, "eirikmbrace")
 
 let cluster = AWSCluster.InitOnCurrentMachine(config, workerCount = 1)
+//let cluster = AWSCluster.Connect(config)
 
 cluster.Run(cloud { return 42 })
 
-cluster.ShowWorkers()
-
-let worker = cluster.Workers.[0]
-
-worker.CpuUsage
-worker.ProcessorCount
-worker.Net
-
-cluster.ShowWorkers()
-
-System.Double.Parse "3.91530163288116"
+cluster.Reset()

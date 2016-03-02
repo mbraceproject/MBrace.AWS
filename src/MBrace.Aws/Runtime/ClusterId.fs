@@ -84,15 +84,11 @@ with
         |> verify
 
     member private this.DeleteTable(tableName : string) = async {
-        let! ct = Async.CancellationToken
-        let! _ = this.DynamoDBAccount.DynamoDBClient.DeleteTableAsync(tableName, ct) |> Async.AwaitTaskCorrect
-        return ()
+        do! this.DynamoDBAccount.DynamoDBClient.DeleteTableAsyncSafe(tableName)
     }
 
     member private this.DeleteBucket(bucketName : string) = async {
-        let! ct = Async.CancellationToken
-        let! _ = this.S3Account.S3Client.DeleteBucketAsync(bucketName, ct) |> Async.AwaitTaskCorrect
-        return ()
+        do! this.S3Account.S3Client.DeleteBucketAsyncSafe bucketName
     }
 
     member this.ClearUserData() = async {

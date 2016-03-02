@@ -312,6 +312,32 @@ module S3Utils =
             return new S3SeekableReadStream(s3, bucketName, key, response.ContentLength, response.ResponseStream, timeout, response.ETag)
         }
 
+        /// Asynchronously deletes an S3 bucket even if it may be populated with objects
+        member s3.DeleteBucketAsyncSafe(bucketName : string) = async {
+            let! ct = Async.CancellationToken
+            let! response = 
+                s3.ListObjectsAsync(bucketName, cancellationToken = ct) 
+                |> Async.AwaitTaskCorrect
+                |> Async.Catch
+
+            match response with
+            | Choice1Of2 objects ->
+                if objects.S3Objects.Count > 0 then
+                    let request = new DeleteObjectsRequest(BucketName = bucketName)
+                    for o in objects.S3Objects do
+                        request.Objects.Add(new KeyVersion(Key = o.Key))
+
+                    let! _response = s3.DeleteObjectsAsync(request, ct) |> Async.AwaitTaskCorrect
+                    let! _ = s3.DeleteBucketAsync(bucketName, ct) |> Async.AwaitTaskCorrect
+                    return ()
+
+                let! _ = s3.DeleteBucketAsync(bucketName, ct) |> Async.AwaitTaskCorrect
+                return ()
+
+            | Choice2Of2 e when StoreException.NotFound e -> ()
+            | Choice2Of2 e -> do! Async.Raise e
+        }
+
         /// CreatesIfNotExistAsync that protects from 409 conflict errors with supplied retry policy
         member s3.CreateBucketIfNotExistsSafe(bucketName : string, ?retryInterval : int, ?maxRetries : int) = async {
             let policy = mkBucketRetryPolicy maxRetries retryInterval

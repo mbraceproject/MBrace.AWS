@@ -68,7 +68,7 @@ type ClusterManager =
 
         if not force then
             let! workers = (r.WorkerManager :> IWorkerManager).GetAvailableWorkers()
-            if  workers.Length > 0 then
+            if workers.Length > 0 then
                 let exc = InvalidOperationException(sprintf "Found %d active workers. Shutdown workers first or 'force' reset." workers.Length)
                 logger.LogError exc.Message
                 return! Async.Raise exc
