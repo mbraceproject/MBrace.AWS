@@ -29,3 +29,15 @@ let config = Configuration.FromCredentialsStore(AWSRegion.EUCentral1, "eirikmbra
 let cluster = AWSCluster.InitOnCurrentMachine(config, workerCount = 1)
 
 cluster.Run(cloud { return 42 })
+
+cluster.ShowWorkers()
+
+let worker = cluster.Workers.[0]
+
+worker.CpuUsage
+worker.ProcessorCount
+worker.Net
+
+cluster.ShowWorkers()
+
+System.Double.Parse "3.91530163288116"
