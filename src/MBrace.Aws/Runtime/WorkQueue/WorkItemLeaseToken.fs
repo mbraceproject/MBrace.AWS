@@ -12,6 +12,7 @@ open MBrace.Runtime
 open MBrace.Runtime.Utils
 
 open Amazon.SQS.Model
+open FSharp.DynamoDB
 
 open MBrace.AWS.Runtime
 open MBrace.AWS.Runtime.Utilities
@@ -46,6 +47,9 @@ type internal WorkItemLeaseTokenInfo =
     }
 
     override this.ToString() = sprintf "leaseinfo:%A" this.WorkItemId
+
+    member internal __.TableKey = 
+        TableKey.Combined(__.ProcessId, __.WorkItemId)
 
     static member FromReceivedMessage(message : WorkItemMessage, attributes : WorkItemMessageAttributes) =
         {
@@ -137,36 +141,24 @@ type internal WorkItemLeaseToken =
         LeaseInfo       : WorkItemLeaseTokenInfo
         ProcessInfo     : CloudProcessInfo
     }
+
+    member private __.Table = __.ClusterId.GetRuntimeTable<WorkItemRecord>()
     
     interface ICloudWorkItemLeaseToken with
         member this.DeclareCompleted() : Async<unit> = async {
             this.CompleteAction.Invoke Complete
             this.CompleteAction.Dispose() // disconnect marshaled object
 
-            let record = new WorkItemRecord(this.LeaseInfo.ProcessId, fromGuid this.LeaseInfo.WorkItemId)
-            record.Status         <- nullable(int WorkItemStatus.Completed)
-            record.CompletionTime <- nullable(DateTimeOffset.Now)
-            record.Completed      <- nullable true
-            record.ETag           <- "*" 
-
-            do! Table.put this.ClusterId.DynamoDBAccount this.ClusterId.RuntimeTable record
+            let! _ = this.Table.UpdateItemAsync(this.LeaseInfo.TableKey, setWorkItemCompleted DateTimeOffset.Now)
+            return ()
         }
         
         member this.DeclareFaulted(edi : ExceptionDispatchInfo) : Async<unit> = async {
             this.CompleteAction.Invoke Abandon
             this.CompleteAction.Dispose() // disconnect marshaled object
 
-            let record = new WorkItemRecord(this.LeaseInfo.ProcessId, fromGuid this.LeaseInfo.WorkItemId)
-            record.Status         <- nullable(int WorkItemStatus.Faulted)
-            record.Completed      <- nullable false
-            record.CompletionTime <- nullableDefault
-            // there exists a remote possibility that fault exceptions might be of arbitrary size
-            // should probably persist payload to blob as done with results
-            record.LastException  <- ProcessConfiguration.JsonSerializer.PickleToString edi
-            record.FaultInfo      <- nullable(int FaultInfo.FaultDeclaredByWorker)
-            record.ETag           <- "*"
-
-            do! Table.put this.ClusterId.DynamoDBAccount this.ClusterId.RuntimeTable record
+            let! _ = this.Table.UpdateItemAsync(this.LeaseInfo.TableKey, setWorkItemFaulted edi DateTimeOffset.Now)
+            return ()
         }
         
         member this.FaultInfo : CloudWorkItemFaultInfo = this.FaultInfo
@@ -200,25 +192,23 @@ type internal WorkItemLeaseToken =
              info      : WorkItemLeaseTokenInfo, 
              monitor   : WorkItemLeaseMonitor, 
              faultInfo : CloudWorkItemFaultInfo) = async {
+
         let! processRecordT = 
             CloudProcessRecord.GetProcessRecord(clusterId, info.ProcessId) 
             |> Async.StartChild
 
         let! workRecord = 
-            Table.read<WorkItemRecord> 
-                clusterId.DynamoDBAccount 
-                clusterId.RuntimeTable 
-                info.ProcessId 
-                (fromGuid info.WorkItemId)
+            clusterId.GetRuntimeTable<WorkItemRecord>()
+                     .GetItemAsync(info.TableKey)
 
         let! processRecord = processRecordT
 
         return {
                     ClusterId      = clusterId
                     CompleteAction = MarshaledAction.Create monitor.CompleteWith
-                    WorkItemSize   = workRecord.GetSize()
-                    WorkItemType   = workRecord.GetWorkItemType()
-                    TypeName       = workRecord.Type
+                    WorkItemSize   = workRecord.Size
+                    WorkItemType   = workRecord.Type
+                    TypeName       = workRecord.TypeName
                     FaultInfo      = faultInfo
                     LeaseInfo      = info
                     ProcessInfo    = processRecord.ToCloudProcessInfo()

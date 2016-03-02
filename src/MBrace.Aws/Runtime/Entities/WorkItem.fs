@@ -4,6 +4,7 @@ open System
 
 open FSharp.DynamoDB
 
+open MBrace.Core.Internals
 open MBrace.Runtime
 open MBrace.Runtime.Utils
 open MBrace.AWS.Runtime.Utilities
@@ -38,12 +39,15 @@ type WorkItemRecord =
         TargetWorker : string option
         Type : CloudWorkItemType
         Status : WorkItemStatus
-        ReturnType : string
+        TypeName : string
         Size : int64
 
         CurrentWorker : string option
         FaultInfo : FaultInfo
-        LastException : string option
+
+        [<FsPicklerJson>]
+        LastException : ExceptionDispatchInfo option
+
         EnqueueTime : DateTimeOffset option
         DequeueTime : DateTimeOffset option
         StartTime : DateTimeOffset option
@@ -60,7 +64,7 @@ with
             TargetWorker = workItem.TargetWorker |> Option.map (fun w -> w.Id)
             Type = workItem.WorkItemType
             Status = WorkItemStatus.Preparing
-            ReturnType = PrettyPrinters.Type.prettyPrintUntyped workItem.Type
+            TypeName = PrettyPrinters.Type.prettyPrintUntyped workItem.Type
             FaultInfo = FaultInfo.NoFault
             Size = 0L
             CurrentWorker = None
@@ -73,3 +77,25 @@ with
             DeliveryCount = 0
             Completed = false
         }
+
+[<AutoOpen>]
+module internal WorkItemRecordImpl =
+    
+    let private template = template<WorkItemRecord>
+
+    let setWorkItemCompleted =
+        <@ fun t (r:WorkItemRecord) -> 
+                    SET r.CompletionTime.Value t &&& 
+                    SET r.Completed true &&& 
+                    SET r.Status WorkItemStatus.Completed @>
+
+        |> template.PrecomputeUpdateExpr
+
+    let setWorkItemFaulted =
+        <@ fun edi t (r:WorkItemRecord) -> 
+                    SET r.CompletionTime.Value t &&&
+                    SET r.LastException.Value edi &&& 
+                    SET r.FaultInfo FaultInfo.FaultDeclaredByWorker &&& 
+                    SET r.Status WorkItemStatus.Faulted @>
+
+        |> template.PrecomputeUpdateExpr

@@ -48,6 +48,7 @@ type DynamoDBTableEntity (hashKey : string, rangeKey : string) =
         member __.RangeKey = rangeKey
 
 
+/// Serialize property to DynamoDB using FsPickler binary serializer
 type FsPicklerBinaryAttribute() =
     inherit PropertySerializerAttribute<byte[]> ()
     override __.Serialize value = 
@@ -55,6 +56,7 @@ type FsPicklerBinaryAttribute() =
     override __.Deserialize pickle =
         ProcessConfiguration.BinarySerializer.UnPickle<'T> pickle
 
+/// Serialize property to DynamoDB using FsPickler Json serializer
 type FsPicklerJsonAttribute() =
     inherit PropertySerializerAttribute<string> ()
     override __.Serialize value = 
