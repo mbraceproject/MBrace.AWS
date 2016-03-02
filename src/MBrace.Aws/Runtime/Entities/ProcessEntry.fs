@@ -192,7 +192,6 @@ type internal CloudProcessEntry (clusterId : ClusterId, processId : string, proc
                 jobs
                 |> Seq.fold (fun ((a,c,f) as state) workItem ->
                     match workItem.Status with
-                    | WorkItemStatus.Preparing 
                     | WorkItemStatus.Enqueued  -> state
                     | WorkItemStatus.Faulted   -> (a, c, f + 1)
                     | WorkItemStatus.Dequeued

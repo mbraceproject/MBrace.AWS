@@ -19,7 +19,7 @@ open MBrace.AWS.Runtime.Utilities
 [<AutoOpen>]
 module private DynamoDBAtomUtils =
 
-    [<RangeKeyConstant("RangeKey", "CloudAtom")>]
+    [<ConstantRangeKey("RangeKey", "CloudAtom")>]
     type AtomEntry =
         {
             [<HashKey>]
@@ -114,7 +114,8 @@ type DynamoDBAtom<'T> internal (tableName : string, account : AWSAccount, hashKe
         member __.Value = getValueAsync() |> Async.RunSync
 
         member __.Dispose (): Async<unit> = async {
-            do! getContext().DeleteItemAsync(TableKey.Hash hashKey)
+            let! _ = getContext().DeleteItemAsync(TableKey.Hash hashKey)
+            return ()
         }
 
         member __.ForceAsync (newValue : 'T) = async {

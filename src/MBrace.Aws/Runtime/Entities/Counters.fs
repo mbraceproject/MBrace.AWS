@@ -38,7 +38,8 @@ type internal TableCounter (clusterId : ClusterId, hashKey : string) =
 
     interface ICloudCounter with
         member x.Dispose() = async {
-            do! getTable().DeleteItemAsync(TableKey.Hash hashKey)
+            let! _ = getTable().DeleteItemAsync(TableKey.Hash hashKey)
+            return ()
         }
         
         member x.Increment() = async { 

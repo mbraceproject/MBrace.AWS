@@ -74,19 +74,19 @@ type ClusterManager =
                 return! Async.Raise exc
             
         if deleteQueues then 
-            logger.LogWarningf "Deleting Queues %A, %A." clusterId.WorkItemQueue clusterId.RuntimeTable
+            logger.LogWarningf "Deleting Queues %A, %A." clusterId.WorkItemQueueName clusterId.WorkItemTopicName
             do! clusterId.ClearRuntimeQueues()
             
         if deleteRuntimeState then 
-            logger.LogWarningf "Deleting runtime S3 Bucket %A and Table %A." clusterId.RuntimeS3Bucket clusterId.RuntimeTable
+            logger.LogWarningf "Deleting runtime S3 Bucket %A and Table %A." clusterId.RuntimeS3BucketName clusterId.RuntimeTableName
             do! clusterId.ClearRuntimeState()
             
         if deleteLogs then 
-            logger.LogWarningf "Deleting system log Table %A." clusterId.RuntimeLogsTable
+            logger.LogWarningf "Deleting system log Table %A." clusterId.RuntimeLogsTableName
             do! clusterId.ClearRuntimeLogs()
 
         if deleteUserData then 
-            logger.LogWarningf "Deleting UserData S3 Bucket %A and Table %A." clusterId.UserDataS3Bucket clusterId.UserDataTable
+            logger.LogWarningf "Deleting UserData S3 Bucket %A and Table %A." clusterId.UserDataS3BucketName clusterId.UserDataTableName
             do! clusterId.ClearUserData()
     
         if reactivate then        
@@ -116,8 +116,8 @@ type ClusterManager =
         do! clusterId.InitializeAllStoreResources(maxRetries = 20, retryInterval = 3000)
 
         logger.LogInfof "Creating MBrace storage primitives"
-        let fileStore = S3FileStore.Create(clusterId.S3Account, defaultBucket = clusterId.UserDataS3Bucket)
-        let atomProvider = DynamoDBAtomProvider.Create(clusterId.DynamoDBAccount, defaultTable = clusterId.UserDataTable)
+        let fileStore = S3FileStore.Create(clusterId.S3Account, defaultBucket = clusterId.UserDataS3BucketName)
+        let atomProvider = DynamoDBAtomProvider.Create(clusterId.DynamoDBAccount, defaultTable = clusterId.UserDataTableName)
 //        let dictionaryProvider = TableDictionaryProvider.Create(clusterId.StorageAccount)
         let queueProvider = SQSCloudQueueProvider.Create(clusterId.SQSAccount)
         let serializer = FsPicklerBinarySerializer()
