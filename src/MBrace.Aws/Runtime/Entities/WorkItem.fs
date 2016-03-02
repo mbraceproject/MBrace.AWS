@@ -15,7 +15,6 @@ type MessagePayload =
     | Batch  of CloudWorkItem []
 
 type WorkItemStatus =
-    | Preparing = 0
     | Enqueued  = 1
     | Dequeued  = 2
     | Started   = 3
@@ -48,7 +47,7 @@ type WorkItemRecord =
         [<FsPicklerJson>]
         LastException : ExceptionDispatchInfo option
 
-        EnqueueTime : DateTimeOffset option
+        EnqueueTime : DateTimeOffset
         DequeueTime : DateTimeOffset option
         StartTime : DateTimeOffset option
         CompletionTime : DateTimeOffset option
@@ -57,19 +56,19 @@ type WorkItemRecord =
         Completed : bool
     }
 with
-    static member FromCloudWorkItem(workItem : CloudWorkItem) =
+    static member FromCloudWorkItem(workItem : CloudWorkItem, size : int64) =
         {
             ProcessId = workItem.Process.Id
             WorkItemId = workItem.Id
             TargetWorker = workItem.TargetWorker |> Option.map (fun w -> w.Id)
             Type = workItem.WorkItemType
-            Status = WorkItemStatus.Preparing
+            Status = WorkItemStatus.Enqueued
             TypeName = PrettyPrinters.Type.prettyPrintUntyped workItem.Type
             FaultInfo = FaultInfo.NoFault
-            Size = 0L
+            Size = size
             CurrentWorker = None
             LastException = None
-            EnqueueTime = None
+            EnqueueTime = DateTimeOffset.Now
             DequeueTime = None
             StartTime = None
             CompletionTime = None
@@ -82,6 +81,14 @@ with
 module internal WorkItemRecordImpl =
     
     let private template = template<WorkItemRecord>
+
+    type CloudWorkItemFaultInfo with
+        member fI.ToEnum() =
+            match fI with
+            | NoFault -> FaultInfo.NoFault
+            | IsTargetedWorkItemOfDeadWorker _ -> FaultInfo.IsTargetedWorkItemOfDeadWorker
+            | FaultDeclaredByWorker _ -> FaultInfo.FaultDeclaredByWorker
+            | WorkerDeathWhileProcessingWorkItem _ -> FaultInfo.WorkerDeathWhileProcessingWorkItem
 
     let setWorkItemCompleted =
         <@ fun t (r:WorkItemRecord) -> 
@@ -97,5 +104,15 @@ module internal WorkItemRecordImpl =
                     SET r.LastException.Value edi &&& 
                     SET r.FaultInfo FaultInfo.FaultDeclaredByWorker &&& 
                     SET r.Status WorkItemStatus.Faulted @>
+
+        |> template.PrecomputeUpdateExpr
+
+    let setWorkItemDequeued =
+        <@ fun w t c f (r:WorkItemRecord) ->
+                SET r.DequeueTime.Value t &&&
+                SET r.Status WorkItemStatus.Dequeued &&&
+                SET r.CurrentWorker.Value w &&&
+                SET r.DeliveryCount c &&&
+                SET r.FaultInfo f @>
 
         |> template.PrecomputeUpdateExpr

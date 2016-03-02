@@ -25,7 +25,7 @@ open FSharp.DynamoDB
             AggregatedUris : Map<string, string>
         }
 
-    let template = RecordTemplate.Define<ResultAggregatorEntry>()
+    let private template = RecordTemplate.Define<ResultAggregatorEntry>()
 
     let entryNotExists = 
         <@ fun id r -> r.AggregatedUris |> Map.containsKey id |> not @>

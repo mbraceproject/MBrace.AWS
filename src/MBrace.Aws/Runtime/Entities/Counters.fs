@@ -22,7 +22,7 @@ module private CounterImpl =
             Value : int64
         }
 
-    let template = RecordTemplate.Define<CounterEntity>()
+    let private template = RecordTemplate.Define<CounterEntity>()
 
     let incrExpr = template.PrecomputeUpdateExpr <@ fun e -> { e with Value = e.Value + 1L } @>
 

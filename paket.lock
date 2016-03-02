@@ -6,7 +6,7 @@ NUGET
       Microsoft.Net.Http (>= 2.2.29) - framework: portable-net45+win8+wp8+wpa81
       PCLCrypto (>= 1.0.2.15130) - framework: portable-net45+win8+wp8+wpa81
       PCLStorage (>= 1.0.2) - framework: portable-net45+win8+wp8+wpa81
-    AWSSDK.DynamoDBv2 (3.1.1.5)
+    AWSSDK.DynamoDBv2 (3.1.2)
       AWSSDK.Core (>= 3.1.4.3 < 3.2.0)
     AWSSDK.S3 (3.1.3.13)
       AWSSDK.Core (>= 3.1.4.3 < 3.2.0)
@@ -19,7 +19,7 @@ NUGET
       FSharp.Core (>= 3.1.2.5)
     FSharp.Compiler.Service (2.0.0.6)
     FSharp.Core (4.0.0.1)
-    FSharp.DynamoDB (0.0.17-alpha)
+    FSharp.DynamoDB (0.0.18-alpha)
       AWSSDK.DynamoDBv2 (>= 3.1.1.5)
       Unquote (>= 3.1.1)
     FSharp.Formatting (2.14.0)

@@ -4,6 +4,8 @@ open System
 open System.IO
 open System.Threading.Tasks
 
+open FSharp.DynamoDB
+
 open MBrace.Core
 open MBrace.Core.Internals
 open MBrace.Runtime
@@ -15,6 +17,7 @@ open MBrace.AWS.Runtime.Utilities
 open MBrace.AWS.Store
 
 type internal MessagingClient =
+
     static member TryDequeue 
             (clusterId     : ClusterId, 
              logger        : ISystemLogger, 
@@ -31,49 +34,42 @@ type internal MessagingClient =
             logger.Logf LogLevel.Debug "%O : starting lock renew loop" workInfo
             let monitor = WorkItemLeaseMonitor.Start(clusterId, workInfo, logger)
 
-            try
-                let newRecord = new WorkItemRecord(workInfo.ProcessId, fromGuid workInfo.WorkItemId)
-                newRecord.ETag          <- "*"
-                newRecord.Completed     <- nullable false
-                newRecord.DequeueTime   <- nullable workInfo.DequeueTime
-                newRecord.Status        <- nullable(int WorkItemStatus.Dequeued)
-                newRecord.CurrentWorker <- localWorkerId.Id
-                newRecord.DeliveryCount <- nullable workInfo.DeliveryCount
-                newRecord.FaultInfo     <- nullable(int FaultInfo.NoFault)
+            let table = clusterId.GetRuntimeTable<WorkItemRecord>()
 
+            try
                 // determine the fault info for the dequeued work item
                 let! faultInfo = async {
                     let faultCount = workInfo.DeliveryCount - 1
                     match workInfo.TargetWorker with
                     | Some target when target <> localWorkerId.Id -> 
                         // a targeted work item that has been dequeued by a different worker is to be declared faulted
-                        newRecord.FaultInfo <- nullable(int FaultInfo.IsTargetedWorkItemOfDeadWorker)
                         return IsTargetedWorkItemOfDeadWorker(faultCount, new WorkerId(target))
 
                     | _ when faultCount = 0 -> return NoFault
                     | _ ->
-                        let hashKey    = workInfo.ProcessId
-                        let rangeKey   = fromGuid workInfo.WorkItemId
-                        let! oldRecord = Table.read<WorkItemRecord> clusterId.DynamoDBAccount clusterId.RuntimeTable hashKey rangeKey
+                        let! oldRecord = table.GetItemAsync(workInfo.TableKey)
 
-                        match enum<FaultInfo> oldRecord.FaultInfo.Value with
+                        match oldRecord.FaultInfo with
                         | FaultInfo.FaultDeclaredByWorker -> // a fault exception has been set by the executing worker
-                            let lastExc = ProcessConfiguration.JsonSerializer.UnPickleOfString<ExceptionDispatchInfo>(oldRecord.LastException)
-                            let lastWorker = new WorkerId(oldRecord.CurrentWorker)
-                            return FaultDeclaredByWorker(faultCount, lastExc, lastWorker)
-                        | _ -> // a worker has died while previously dequeueing the worker
-                            newRecord.FaultInfo <- nullable(int FaultInfo.WorkerDeathWhileProcessingWorkItem)
+                            let lastExn = oldRecord.LastException |> Option.get
+                            let lastWorker = new WorkerId(oldRecord.CurrentWorker |> Option.get)
+                            return FaultDeclaredByWorker(faultCount, lastExn, lastWorker)
+                        | _ -> 
+                            // a worker has died while previously dequeueing the worker
                             // account for cases where worker died before even updating the work item record
-                            let previousWorker = 
-                                match oldRecord.CurrentWorker with 
-                                | null -> "<unknown>" 
-                                | w    -> w
+                            let previousWorker = defaultArg oldRecord.CurrentWorker "<unknown>"
                             return WorkerDeathWhileProcessingWorkItem(faultCount, new WorkerId(previousWorker))
                 }
 
                 logger.Logf LogLevel.Debug "%O : extracted fault info %A" workInfo faultInfo
                 logger.Logf LogLevel.Debug "%O : changing status to %A" workInfo WorkItemStatus.Dequeued
-                do! Table.put clusterId.DynamoDBAccount clusterId.RuntimeTable newRecord
+
+                let updateOp = 
+                    setWorkItemDequeued localWorkerId.Id DateTimeOffset.Now
+                                        workInfo.DeliveryCount (faultInfo.ToEnum())
+
+                let! _ = table.UpdateItemAsync(workInfo.TableKey, updateOp)
+
                 logger.Logf LogLevel.Debug "%O : changed status successfully" workInfo
                 let! leaseToken = WorkItemLeaseToken.Create(clusterId, workInfo, monitor, faultInfo)
                 return Some (leaseToken :> ICloudWorkItemLeaseToken)
@@ -89,26 +85,17 @@ type internal MessagingClient =
              workItem      : CloudWorkItem, 
              allowNewSifts : bool, 
              send          : WorkItemMessage -> Task) = async { 
-        // Step 1: initial record entry creation
-        let record = WorkItemRecord.FromCloudWorkItem(workItem)
-        do! Table.put clusterId.DynamoDBAccount clusterId.RuntimeTable record
-        logger.Logf LogLevel.Debug "workItem:%O : enqueue" workItem.Id
 
-        // Step 2: Persist work item payload to blob store
+        // Step 1: Persist work item payload to blob store
         let blobUri = sprintf "workItem/%s/%s" workItem.Process.Id (fromGuid workItem.Id)
         do! S3Persist.PersistClosure<MessagePayload>(clusterId, Single workItem, blobUri, allowNewSifts)
         let! size = S3Persist.GetPersistedClosureSize(clusterId, blobUri)
 
-        // Step 3: update record entry
-        let newRecord = record.CloneDefault()
-        newRecord.Status      <- nullable(int WorkItemStatus.Enqueued)
-        newRecord.EnqueueTime <- nullable DateTimeOffset.Now
-        newRecord.Size        <- nullable size
-        newRecord.FaultInfo   <- nullable(int FaultInfo.NoFault)
-        newRecord.ETag        <- "*"
-        do! Table.put clusterId.DynamoDBAccount clusterId.RuntimeTable newRecord
+        // Step 2: create record entry in table store
+        let record = WorkItemRecord.FromCloudWorkItem(workItem, size)
+        let! _ = clusterId.GetRuntimeTable<WorkItemRecord>().PutItemAsync(record, itemDoesNotExist)
 
-        // Step 4: send work item message to service bus queue
+        // Step 3: send work item message to service bus queue
         let msg : WorkItemMessage = 
             { 
                 BlobUri      = blobUri
@@ -131,31 +118,17 @@ type internal MessagingClient =
         // silent discard if empty
         if jobs.Length = 0 then return () else
 
-        // Step 1: initial work item record population
-        let records = jobs |> Seq.map WorkItemRecord.FromCloudWorkItem
-        do! Table.putBatch clusterId.DynamoDBAccount clusterId.RuntimeTable records
-
-        // Step 2: persist payload to blob store
+        // Step 1: persist payload to blob store
         let headJob = jobs.[0]
         let blobUri = sprintf "workItem/%s/batch/%s" headJob.Process.Id (fromGuid headJob.Id)
         do! S3Persist.PersistClosure<MessagePayload>(clusterId, Batch jobs, blobUri, allowNewSifts = false)
         let! size = S3Persist.GetPersistedClosureSize(clusterId, blobUri)
 
-        // Step 3: update runtime records
-        let now = DateTimeOffset.Now
-        let newRecords = 
-            records |> Seq.map (fun r -> 
-                let newRec = r.CloneDefault()
-                newRec.ETag        <- "*"
-                newRec.Status      <- nullable(int WorkItemStatus.Enqueued)
-                newRec.EnqueueTime <- nullable now
-                newRec.FaultInfo   <- nullable(int FaultInfo.NoFault)
-                newRec.Size        <- nullable(size)
-                newRec)
+        // Step 2: populate work item records
+        let workItems = jobs |> Seq.map (fun j -> WorkItemRecord.FromCloudWorkItem(j, size))
+        let! _ = clusterId.GetRuntimeTable<WorkItemRecord>().BatchPutItemsAsync(workItems)
 
-        do! Table.putBatch clusterId.DynamoDBAccount clusterId.RuntimeTable newRecords
-
-        // Step 4: create work messages and post to service bus queue
+        // Step 3: create work messages and post to service bus queue
         let mkWorkItemMessage (i : int) (workItem : CloudWorkItem) : WorkItemMessage =
             {
                 BlobUri      = blobUri
@@ -224,16 +197,15 @@ type internal Queue (clusterId : ClusterId, queueUri, logger : ISystemLogger) =
         
     static member Create(clusterId : ClusterId, logger : ISystemLogger) = async { 
         let account   = clusterId.SQSAccount
-        let! queueUri = Sqs.tryGetQueueUri account clusterId.WorkItemQueue
+        let! queueUri = Sqs.tryGetQueueUri account clusterId.WorkItemQueueName
         match queueUri with
         | Some queueUri ->
-            logger.LogInfof "Queue %A already exists." clusterId.WorkItemQueue
+            logger.LogInfof "Queue %A already exists." clusterId.WorkItemQueueName
             return new Queue(clusterId, queueUri, logger)
         | None ->
-            logger.LogInfof "Creating new ServiceBus queue %A" clusterId.WorkItemQueue
+            logger.LogInfof "Creating new ServiceBus queue %A" clusterId.WorkItemQueueName
             // TODO : what should be the default queue attributes?
-
-            let! queueUri = Sqs.createQueue account clusterId.WorkItemQueue
+            let! queueUri = Sqs.createQueue account clusterId.WorkItemQueueName
             return new Queue(clusterId, queueUri, logger)
     }
 
@@ -248,7 +220,7 @@ type internal Subscription
          targetWorkerId : IWorkerId, 
          logger         : ISystemLogger) = 
     let account   = clusterId.SQSAccount
-    let topic     = clusterId.WorkItemTopic
+    let topic     = clusterId.WorkItemTopicName
     let workerId  = targetWorkerId.Id
     let queueName = getQueueName topic workerId
 
@@ -285,7 +257,7 @@ type internal Subscription
 [<Sealed; AutoSerializable(false)>]
 type internal Topic (clusterId : ClusterId, logger : ISystemLogger) = 
     let account = clusterId.SQSAccount
-    let topic   = clusterId.WorkItemTopic
+    let topic   = clusterId.WorkItemTopicName
     
     let getQueueUriOrCreate (msg : WorkItemMessage) = async {
         // since this internal class is only called by the WorkItemQueue

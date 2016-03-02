@@ -30,7 +30,7 @@ module private CancellationEntryImpl =
             Children : string list
         }
 
-    let template = RecordTemplate.Define<CancellationEntry>()
+    let private template = RecordTemplate.Define<CancellationEntry>()
 
     let isNotCancelled = template.PrecomputeConditionalExpr <@ fun c -> c.IsCancellationRequested = false @>
     let cancelOp = template.PrecomputeUpdateExpr <@ fun c -> { c with IsCancellationRequested = true ; Children = [] } @>
