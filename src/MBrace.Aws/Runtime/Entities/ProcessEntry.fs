@@ -79,6 +79,8 @@ module private ProcessEntryImpl =
     let private ptemplate = template<CloudProcessRecord>
     let private wtemplate = template<WorkItemRecord>
 
+    let procHashKeyCondition = ptemplate.ConstantHashKeyCondition |> Option.get
+
     let setEnqueued =
         <@ fun t (r:CloudProcessRecord) -> { r with EnqueuedTime = t ; Completed = false } @>
         |> ptemplate.PrecomputeUpdateExpr 

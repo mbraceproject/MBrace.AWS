@@ -5,6 +5,8 @@ open System.Runtime.Serialization
 
 open Nessos.FsPickler
 
+open FSharp.DynamoDB
+
 open MBrace.Core
 open MBrace.Core.Internals
 open MBrace.Runtime
@@ -16,66 +18,75 @@ open MBrace.AWS.Runtime.Utilities
 [<Sealed; AutoSerializable(false)>]
 type CloudProcessManager private (clusterId : ClusterId, logger : ISystemLogger) =
 
+    static let workItemTemplate = template<WorkItemRecord>
+    static let getWorkItemQuery =
+        <@ fun procId (r:WorkItemRecord) -> r.ProcessId = procId @>
+        |> workItemTemplate.PrecomputeConditionalExpr
+
+    static let getProcKey procId = TableKey.Range procId
+
+    let processTable = clusterId.GetRuntimeTable<CloudProcessRecord>()
+    let workItemTable = clusterId.GetRuntimeTable<WorkItemRecord>()
+
     interface ICloudProcessManager with
-        member __.ClearProcess(taskId: string) = async {
-            let record = new CloudProcessRecord(taskId)
-            record.ETag <- "*"
-            do! Table.delete 
-                    clusterId.DynamoDBAccount 
-                    clusterId.RuntimeTable 
-                    record // TODO : perform full cleanup?
+        member __.ClearProcess(procId: string) = async {
+            let deleteProc() = async {
+                let procKey = getProcKey procId
+                let! proc = processTable.DeleteItemAsync(procKey)
+                proc.CancellationTokenSource.Cancel()
+                return ()
+            }
+
+            let deleteWorkItems() = async {
+                let! items = workItemTable.QueryAsync(getWorkItemQuery procId)
+                do!
+                    items
+                    |> Seq.map workItemTemplate.ExtractKey
+                    |> Seq.chunksOf 25
+                    |> Seq.map workItemTable.BatchDeleteItemsAsync
+                    |> Async.Parallel
+                    |> Async.Ignore
+            }
+
+            let! _ = Async.Parallel [deleteProc() ; deleteWorkItems()]
+            return ()
         }
         
         member __.ClearAllProcesses() = async {
-            let! records = 
-                Table.query<CloudProcessRecord> 
-                    clusterId.DynamoDBAccount 
-                    clusterId.RuntimeTable 
-                    CloudProcessRecord.DefaultHashKey
-            do! Table.deleteBatch 
-                    clusterId.DynamoDBAccount 
-                    clusterId.RuntimeTable 
-                    records
+            let this = __ :> ICloudProcessManager
+            let! records = processTable.QueryAsync(procHashKeyCondition)
+            do!
+                records
+                |> Seq.map (fun r -> this.ClearProcess(r.Id))
+                |> Async.Parallel
+                |> Async.Ignore
         }
         
         member __.StartProcess(info: CloudProcessInfo) = async {
             let taskId = guid()
             logger.LogInfof "Creating cloud process %A" taskId
             let record = CloudProcessRecord.CreateNew(taskId, info)
-            do! Table.put clusterId.DynamoDBAccount clusterId.RuntimeTable record
+            let! _ = processTable.PutItemAsync(record, precondition = itemDoesNotExist)
             let tcs = new CloudProcessEntry(clusterId, taskId, info)
             return tcs :> ICloudProcessEntry
         }
         
         member __.GetAllProcesses() = async {
-            let! records = 
-                Table.query<CloudProcessRecord> 
-                    clusterId.DynamoDBAccount 
-                    clusterId.RuntimeTable 
-                    CloudProcessRecord.DefaultHashKey
+            let! records = processTable.QueryAsync(procHashKeyCondition)
             return records 
                    |> Seq.map(fun r ->
-                        new CloudProcessEntry(
-                            clusterId, r.Id, r.ToCloudProcessInfo()) 
+                        new CloudProcessEntry(clusterId, r.Id, r.ToCloudProcessInfo()) 
                         :> ICloudProcessEntry) 
                    |> Seq.toArray
         }
         
-        member __.TryGetProcessById(taskId: string) = async {
-            let! record = 
-                Table.read<CloudProcessRecord> 
-                    clusterId.DynamoDBAccount
-                    clusterId.RuntimeTable
-                    CloudProcessRecord.DefaultHashKey
-                    taskId
-            match record with
-            | null -> return None 
-            | _ -> 
-                let entry = 
-                    new CloudProcessEntry(
-                        clusterId, taskId, record.ToCloudProcessInfo())
-                    :> ICloudProcessEntry
-                return Some entry
+        member __.TryGetProcessById(procId: string) = async {
+            try
+                let! record = processTable.GetItemAsync(getProcKey procId)
+                let entry = new CloudProcessEntry(clusterId, procId, record.ToCloudProcessInfo())
+                return Some (entry :> _)
+
+            with :? ResourceNotFoundException -> return None
         }
 
     static member Create(clusterId : ClusterId, logger) = 
