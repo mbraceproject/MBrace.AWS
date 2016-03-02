@@ -157,7 +157,7 @@ type internal WorkItemLeaseToken =
             this.CompleteAction.Invoke Abandon
             this.CompleteAction.Dispose() // disconnect marshaled object
 
-            let! _ = this.Table.UpdateItemAsync(this.LeaseInfo.TableKey, setWorkItemFaulted edi DateTimeOffset.Now)
+            let! _ = this.Table.UpdateItemAsync(this.LeaseInfo.TableKey, setWorkItemFaulted (Some edi) DateTimeOffset.Now)
             return ()
         }
         

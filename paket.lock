@@ -19,7 +19,7 @@ NUGET
       FSharp.Core (>= 3.1.2.5)
     FSharp.Compiler.Service (2.0.0.6)
     FSharp.Core (4.0.0.1)
-    FSharp.DynamoDB (0.0.18-alpha)
+    FSharp.DynamoDB (0.0.19-alpha)
       AWSSDK.DynamoDBv2 (>= 3.1.1.5)
       Unquote (>= 3.1.1)
     FSharp.Formatting (2.14.0)

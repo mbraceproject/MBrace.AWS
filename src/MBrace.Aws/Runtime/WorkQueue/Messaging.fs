@@ -39,7 +39,7 @@ type internal MessagingClient =
             try
                 // determine the fault info for the dequeued work item
                 let! faultInfo = async {
-                    let faultCount = workInfo.DeliveryCount - 1
+                    let faultCount = workInfo.DeliveryCount
                     match workInfo.TargetWorker with
                     | Some target when target <> localWorkerId.Id -> 
                         // a targeted work item that has been dequeued by a different worker is to be declared faulted

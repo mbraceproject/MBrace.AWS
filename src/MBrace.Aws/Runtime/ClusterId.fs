@@ -22,7 +22,7 @@ module private TableKeySchema =
     type DefaultKeySchema =
         {
             [<HashKey>] HashKey : string
-            [<RangeKey>] Rangekey : string
+            [<RangeKey>] RangeKey : string
         }
 
     let keySchema = RecordTemplate.Define<DefaultKeySchema>().KeySchema

@@ -101,7 +101,7 @@ module internal WorkItemRecordImpl =
     let setWorkItemFaulted =
         <@ fun edi t (r:WorkItemRecord) -> 
                     SET r.CompletionTime.Value t &&&
-                    SET r.LastException.Value edi &&& 
+                    SET r.LastException edi &&& 
                     SET r.FaultInfo FaultInfo.FaultDeclaredByWorker &&& 
                     SET r.Status WorkItemStatus.Faulted @>
 

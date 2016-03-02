@@ -85,7 +85,7 @@ type BlobValue<'T> internal (account : AWSAccount, bucketName : string, key : st
         req.Timeout <- Nullable<_>(TimeSpan.FromMinutes 40.)
 
         use stream = new MemoryStream()
-        ProcessConfiguration.BinarySerializer.Serialize<'T>(stream, value)
+        ProcessConfiguration.BinarySerializer.Serialize<'T>(stream, value, leaveOpen = true)
         do! stream.FlushAsync() |> Async.AwaitTaskCorrect
 
         req.InputStream <- stream
