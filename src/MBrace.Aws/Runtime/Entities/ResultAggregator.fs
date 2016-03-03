@@ -38,7 +38,7 @@ open FSharp.DynamoDB
 [<DataContract; Sealed>]
 type ResultAggregator<'T> internal (clusterId : ClusterId, hashKey : string, size : int) =
     let [<DataMember(Name = "ClusterId")>] clusterId = clusterId
-    let [<DataMember(Name = "HashKey")>] partitionKey = hashKey
+    let [<DataMember(Name = "HashKey")>] hashKey = hashKey
     let [<DataMember(Name = "Size")>] size = size
 
     let getTable() = clusterId.GetRuntimeTable<ResultAggregatorEntry>()
@@ -69,7 +69,7 @@ type ResultAggregator<'T> internal (clusterId : ClusterId, hashKey : string, siz
         }
         
         member this.SetResult(index: int, value: 'T, _workerId : IWorkerId): Async<bool> = async { 
-            let uri = sprintf "%s/%s" partitionKey (guid())
+            let uri = sprintf "%s/%s" hashKey (guid())
             do! S3Persist.PersistClosure(clusterId, value, uri, allowNewSifts = false)
             let id = sprintf "item%d" index
             let! item = getTable().UpdateItemAsync(TableKey.Hash hashKey, 

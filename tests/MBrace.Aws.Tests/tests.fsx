@@ -32,6 +32,12 @@ cluster.Reset(force = true)
 
 cluster.Run(Cloud.ParallelEverywhere Cloud.CurrentWorker)
 
+let c = cluster.CreateCancellationTokenSource([c.Token])
+
+c.Token.IsCancellationRequested
+
+c.Cancel()
+
 
 cluster.Workers
 

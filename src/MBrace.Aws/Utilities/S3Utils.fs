@@ -328,7 +328,6 @@ module S3Utils =
                         request.Objects.Add(new KeyVersion(Key = o.Key))
 
                     let! _response = s3.DeleteObjectsAsync(request, ct) |> Async.AwaitTaskCorrect
-                    let! _ = s3.DeleteBucketAsync(bucketName, ct) |> Async.AwaitTaskCorrect
                     return ()
 
                 let! _ = s3.DeleteBucketAsync(bucketName, ct) |> Async.AwaitTaskCorrect
