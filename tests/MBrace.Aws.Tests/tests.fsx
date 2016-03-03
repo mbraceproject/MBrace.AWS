@@ -26,11 +26,11 @@ open MBrace.AWS.Store
 AWSWorker.LocalExecutable <- __SOURCE_DIRECTORY__ + "/../../bin/MBrace.AWS.StandaloneWorker.exe"
 let config = Configuration.FromCredentialsStore(AWSRegion.EUCentral1, "eirikmbrace")
 
-let cluster = AWSCluster.InitOnCurrentMachine(config, workerCount = 3)
-//let cluster = AWSCluster.Connect(config)
+let cluster = AWSCluster.InitOnCurrentMachine(config, workerCount = 3, logger = ConsoleLogger())
+//let cluster = AWSCluster.Connect(config, logger = ConsoleLogger())
 cluster.Reset(force = true)
 
-cluster.Run(Cloud.ParallelEverywhere Cloud.CurrentWorker)
+cluster.Run(Cloud.Parallel [for i in 1 .. 20 -> Cloud.CurrentWorker])
 
 let c = cluster.CreateCancellationTokenSource([c.Token])
 
@@ -44,3 +44,6 @@ cluster.Workers
 cluster.ShowWorkers()
 
 cluster.ShowSystemLogs()
+
+cluster.ShowProcesses()
+cluster.ClearAllProcesses()

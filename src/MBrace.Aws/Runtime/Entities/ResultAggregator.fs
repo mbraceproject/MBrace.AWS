@@ -24,6 +24,11 @@ open FSharp.DynamoDB
 
             AggregatedUris : Map<string, string>
         }
+    with
+        member __.Count = __.AggregatedUris.Count - 1
+        
+        static member Init(id, capacity) = 
+            { Id = id ; Capacity = capacity ; AggregatedUris = Map.ofList [("head", "empty")] }
 
     let private template = RecordTemplate.Define<ResultAggregatorEntry>()
 
@@ -50,7 +55,7 @@ type ResultAggregator<'T> internal (clusterId : ClusterId, hashKey : string, siz
         
         member this.CurrentSize: Async<int> = async {
             let! item = getTable().GetItemAsync(TableKey.Hash hashKey)
-            return item.AggregatedUris.Count
+            return item.Count
         }
         
         member this.Dispose(): Async<unit> = async {
@@ -76,12 +81,12 @@ type ResultAggregator<'T> internal (clusterId : ClusterId, hashKey : string, siz
                                                     addEntry id uri, 
                                                     precondition = entryNotExists id)
 
-            return item.AggregatedUris.Count = size
+            return item.Count = size
         }
         
         member this.ToArray(): Async<'T []> = async { 
             let! item = getTable().GetItemAsync(TableKey.Hash hashKey)
-            if item.AggregatedUris.Count <> size then
+            if item.Count < size then
                 let msg = sprintf "Result aggregator incomplete (%d/%d)." item.AggregatedUris.Count size
                 return! Async.Raise <| new InvalidOperationException(msg)
             else
@@ -97,7 +102,7 @@ type DynamoDBResultAggregatorFactory private (clusterId : ClusterId) =
     let getTable() = clusterId.GetRuntimeTable<ResultAggregatorEntry>()
     interface ICloudResultAggregatorFactory with
         member x.CreateResultAggregator(aggregatorId : string, capacity: int): Async<ICloudResultAggregator<'T>> = async {
-            let item = { Id = aggregatorId ; Capacity = capacity ; AggregatedUris = Map.empty }
+            let item = ResultAggregatorEntry.Init(aggregatorId, capacity)
             let! _ = getTable().PutItemAsync(item, itemDoesNotExist)
             return new ResultAggregator<'T>(clusterId, aggregatorId, capacity) :> ICloudResultAggregator<'T>
         }
