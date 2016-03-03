@@ -26,9 +26,15 @@ open MBrace.AWS.Store
 AWSWorker.LocalExecutable <- __SOURCE_DIRECTORY__ + "/../../bin/MBrace.AWS.StandaloneWorker.exe"
 let config = Configuration.FromCredentialsStore(AWSRegion.EUCentral1, "eirikmbrace")
 
-let cluster = AWSCluster.InitOnCurrentMachine(config, workerCount = 1)
+let cluster = AWSCluster.InitOnCurrentMachine(config, workerCount = 3)
 //let cluster = AWSCluster.Connect(config)
+cluster.Reset(force = true)
 
-cluster.Run(cloud { return 42 })
+cluster.Run(Cloud.ParallelEverywhere Cloud.CurrentWorker)
 
-cluster.Reset()
+
+cluster.Workers
+
+cluster.ShowWorkers()
+
+cluster.ShowSystemLogs()

@@ -73,3 +73,7 @@ module internal WorkerRecordUtils =
     let updatePerfMetrics =
         <@ fun p (r:WorkerRecord) -> { r with PerformanceInfo = p } @>
         |> template.PrecomputeUpdateExpr
+
+    let updateLastHeartbeat =
+        <@ fun hb (r:WorkerRecord) -> { r with LastHeartBeat = hb } @>
+        |> template.PrecomputeUpdateExpr

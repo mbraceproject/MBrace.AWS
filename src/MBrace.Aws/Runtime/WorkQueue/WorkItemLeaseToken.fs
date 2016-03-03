@@ -17,6 +17,11 @@ open FSharp.DynamoDB
 open MBrace.AWS.Runtime
 open MBrace.AWS.Runtime.Utilities
 
+type internal SqsSettings =
+    /// Message lock renew interval (in milliseconds).
+    static member RenewLockInverval = 5000 
+    
+
 type WorkItemMessage = 
     {
         ProcessId    : string
@@ -102,11 +107,13 @@ type internal WorkItemLeaseMonitor private
             match res with
             | Choice1Of2 _ -> 
                 logger.Logf LogLevel.Debug "%A : lock renewed" info
+                do! Async.Sleep SqsSettings.RenewLockInverval
                 return! renewLoop inbox
             | Choice2Of2 (:? ReceiptHandleIsInvalidException) ->
                 logger.Logf LogLevel.Warning "%A : lock lost" info
             | Choice2Of2 exn -> 
                 logger.LogError <| sprintf "%A : lock renew failed with %A" info exn
+                do! Async.Sleep SqsSettings.RenewLockInverval
                 return! renewLoop inbox
 
         | Some Complete ->

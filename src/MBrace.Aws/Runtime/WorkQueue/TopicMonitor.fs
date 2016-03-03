@@ -13,43 +13,57 @@ open MBrace.Runtime.Utils
 [<Sealed; AutoSerializable(false)>]
 type TopicMonitor private 
         (workerManager : WorkerManager, 
+         currentWorker : IWorkerId option,
          topic  : Topic, 
          queue  : Queue, 
          logger : ISystemLogger) =
-    let random =
-        let seed = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj())
-        new Random(seed)
 
-    // keeps a rough track of the current active cluster size
-    let clusterSize = 
-        let getter = async { 
+    // generates a pair of numbers indicating a position of the current worker in the cluster
+    // used to organize a roundrobin topic monitoring sequence between workers.
+    let workerPosition = 
+        let getPos = async { 
             try 
                 let! ws = workerManager.GetAvailableWorkers()
-                return ws.Length 
-            with _ -> return 2 
+                let i = 
+                    match currentWorker with
+                    | None -> 0
+                    | Some cw ->
+                        ws 
+                        |> Seq.sortBy (fun w -> w.Id)
+                        |> Seq.tryFindIndex (fun w -> w.Id = cw)
+                        |> fun r -> defaultArg r 0
+
+                return int64 i, int64 ws.Length
+
+            with _ -> return 0L, 2L
         }
 
-        CacheAtom.Create(getter, intervalMilliseconds = 10000)
+        CacheAtom.Create(getPos, intervalMilliseconds = 30000)
 
     let cleanupWorkerQueue (worker : IWorkerId) = async {
-        let subscription = topic.GetSubscription(worker)
-        let! allMessages = subscription.DequeueAllMessagesBatch()
-        if not <| Array.isEmpty allMessages then
-            logger.LogInfof 
-                "TopicMonitor : perfoming worker queue maintance for %A." 
-                worker.Id
-            logger.LogInfof 
-                "TopicMonitor : moving %d messages to main queue for %A" 
-                allMessages.Length 
-                worker.Id
-            do! queue.EnqueueMessagesBatch(allMessages)
-            do! topic.Delete worker
+        try
+            let subscription = topic.GetSubscription(worker)
+            let! allMessages = subscription.DequeueAllMessagesBatch()
+            if not <| Array.isEmpty allMessages then
+                logger.LogInfof 
+                    "TopicMonitor : perfoming worker queue maintance for %A." 
+                    worker.Id
+                logger.LogInfof 
+                    "TopicMonitor : moving %d messages to main queue for %A" 
+                    allMessages.Length 
+                    worker.Id
+                do! queue.EnqueueMessagesBatch(allMessages)
+                do! topic.Delete worker
+
+        with e ->
+            logger.Logf LogLevel.Error "Error cleaning up subscription '%s': %O" worker.Id e
     }
 
     // WorkItem queue maintenance : periodically check for non-responsive workers and cleanup their queue
-    let rec loop () = async {
-        do! Async.Sleep 10000
-        if random.Next(0, min clusterSize.Value 4) = 0 then return! loop() else
+    let rec loop (count : int64) = async {
+        do! Async.Sleep 5000
+        let! i,n = workerPosition.GetValueAsync()
+        if count % n <> i then return! loop (count + 1L) else
 
         logger.LogInfo "TopicMonitor : starting topic maintenance."
 
@@ -67,21 +81,15 @@ type TopicMonitor private
         | Choice2Of2 ex -> 
             logger.Logf LogLevel.Error "TopicMonitor : maintenance error:  %A" ex
 
-        return! loop ()
+        return! loop (count + 1L)
     }
 
     let cts = new CancellationTokenSource()
-    do Async.Start(loop(), cts.Token)
+    do Async.Start(loop 0L, cts.Token)
 
     interface IDisposable with
         member __.Dispose() = cts.Cancel()
 
-    static member Create
-            (clusterId     : ClusterId, 
-             workerManager : WorkerManager, 
-             logger        : ISystemLogger) = async {
-        let! queueT = Queue.Create(clusterId, logger) |> Async.StartChild
-        let topic   = Topic.Create(clusterId, logger)
-        let! queue  = queueT
-        return new TopicMonitor(workerManager, topic, queue, logger)
+    static member Create (workerManager : WorkerManager, workQueue : WorkItemQueue, logger : ISystemLogger, ?currentWorker: IWorkerId) = async {
+        return new TopicMonitor(workerManager, currentWorker, workQueue.Topic, workQueue.Queue, logger)
     }

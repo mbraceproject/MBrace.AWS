@@ -155,12 +155,29 @@ type WorkerManager private (clusterId : ClusterId, logger : ISystemLogger) =
                     PerformanceInfo = None
                 }
 
-            let! _ = getTable().PutItemAsync(record)
+            let! key = getTable().PutItemAsync(record)
+
+            let rec heartbeat interval = async {
+                do! Async.Sleep interval
+                let now = DateTimeOffset.Now
+                try
+                    let! _ = getTable().UpdateItemAsync(key, updateLastHeartbeat now)
+                    logger.Logf LogLevel.Debug "sending heartbeat"
+                    return ()
+                with e ->
+                    logger.Logf LogLevel.Error "could not send heartbeat: %O" e
+
+                return! heartbeat interval
+            }
+
+            let cts = new System.Threading.CancellationTokenSource()
+            Async.Start(heartbeat (int info.HeartbeatInterval.TotalMilliseconds), cts.Token)
 
             let unsubscriber =
                 { 
                     new IDisposable with
-                        member x.Dispose() = 
+                        member x.Dispose() =
+                            cts.Cancel()
                             this.UnsubscribeWorker(workerId)
                             |> Async.RunSync
                 }
