@@ -34,7 +34,8 @@ module private CancellationEntryImpl =
         }
     with
         static member Init() =
-            { Id = guid() ; IsCancellationRequested = false ; Children = [placeHolder] }
+            let id = "cancellationToken:" + guid()
+            { Id = id ; IsCancellationRequested = false ; Children = [placeHolder] }
 
         member __.Children' =
             __.Children |> Seq.filter (fun ch -> ch <> placeHolder)

@@ -13,7 +13,7 @@ open FSharp.DynamoDB
 [<AutoOpen>]
 module private CounterImpl =
 
-    [<ConstantRangeKey("RangeKey", "CounterEntity")>]
+    [<ConstantRangeKey("RangeKey", "Counter")>]
     type CounterEntity = 
         { 
             [<HashKey; CustomName("HashKey")>]
@@ -60,7 +60,7 @@ type DynamoDBCounterFactory private (clusterId : ClusterId) =
 
     interface ICloudCounterFactory with
         member x.CreateCounter(initialValue: int64) = async {
-            let id = guid()
+            let id = "counter:" + guid()
             let entry = { Id = id ; Value = initialValue }
             let! _ = getTable().PutItemAsync(entry)
             return new TableCounter(clusterId, id) :> ICloudCounter

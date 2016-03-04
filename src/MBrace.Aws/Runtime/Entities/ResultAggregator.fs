@@ -28,7 +28,7 @@ open FSharp.DynamoDB
             AggregatedUris : Map<string, string>
         }
     with
-        static member Init(id, capacity) = 
+        static member Init(id, capacity) =
             { Id = id ; Capacity = capacity ; AggregatedUris = Map.ofList [(placeHolder, placeHolder)] }
 
         member __.Count = __.AggregatedUris.Count - 1
@@ -110,9 +110,10 @@ type DynamoDBResultAggregatorFactory private (clusterId : ClusterId) =
     let getTable() = clusterId.GetRuntimeTable<ResultAggregatorEntry>()
     interface ICloudResultAggregatorFactory with
         member x.CreateResultAggregator(aggregatorId : string, capacity: int): Async<ICloudResultAggregator<'T>> = async {
-            let item = ResultAggregatorEntry.Init(aggregatorId, capacity)
+            let id = "resultAggregator:" + aggregatorId
+            let item = ResultAggregatorEntry.Init(id, capacity)
             let! _ = getTable().PutItemAsync(item, itemDoesNotExist)
-            return new ResultAggregator<'T>(clusterId, aggregatorId, capacity) :> ICloudResultAggregator<'T>
+            return new ResultAggregator<'T>(clusterId, id, capacity) :> ICloudResultAggregator<'T>
         }
     
     static member Create(clusterId : ClusterId) = new DynamoDBResultAggregatorFactory(clusterId)

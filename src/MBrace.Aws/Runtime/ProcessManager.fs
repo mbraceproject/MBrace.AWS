@@ -18,11 +18,6 @@ open MBrace.AWS.Runtime.Utilities
 [<Sealed; AutoSerializable(false)>]
 type CloudProcessManager private (clusterId : ClusterId, logger : ISystemLogger) =
 
-    static let workItemTemplate = template<WorkItemRecord>
-    static let getWorkItemQuery =
-        <@ fun procId (r:WorkItemRecord) -> r.ProcessId = procId @>
-        |> workItemTemplate.PrecomputeConditionalExpr
-
     static let getProcKey procId = TableKey.Range procId
 
     let processTable = clusterId.GetRuntimeTable<CloudProcessRecord>()
@@ -38,10 +33,10 @@ type CloudProcessManager private (clusterId : ClusterId, logger : ISystemLogger)
             }
 
             let deleteWorkItems() = async {
-                let! items = workItemTable.QueryAsync(getWorkItemQuery procId)
+                let! items = workItemTable.QueryAsync(getWorkItemsByProcessQuery procId)
                 do!
                     items
-                    |> Seq.map workItemTemplate.ExtractKey
+                    |> Seq.map workItemTable.Template.ExtractKey
                     |> Seq.chunksOf 25
                     |> Seq.map workItemTable.BatchDeleteItemsAsync
                     |> Async.Parallel

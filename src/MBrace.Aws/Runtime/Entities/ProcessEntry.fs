@@ -31,9 +31,8 @@ module private ProcessEntryImpl =
             CompletionTime : DateTimeOffset option
             Completed : bool
 
-            [<FsPicklerJson>]
-            CancellationTokenSource : ICloudCancellationTokenSource
             [<FsPicklerBinary>]
+            CancellationTokenSource : ICloudCancellationTokenSource
             Dependencies : AssemblyId []
             [<FsPicklerBinary>]
             AdditionalResources : ResourceRegistry option
@@ -82,32 +81,28 @@ module private ProcessEntryImpl =
     let procHashKeyCondition = ptemplate.ConstantHashKeyCondition |> Option.get
 
     let setEnqueued =
-        <@ fun t (r:CloudProcessRecord) -> { r with EnqueuedTime = t ; Completed = false } @>
+        <@ fun t (r:CloudProcessRecord) -> { r with EnqueuedTime = t ; Completed = false ; Status = CloudProcessStatus.Created } @>
         |> ptemplate.PrecomputeUpdateExpr 
 
     let setDequeued =
-        <@ fun t (r:CloudProcessRecord) -> { r with DequeuedTime = t } @>
+        <@ fun t (r:CloudProcessRecord) -> { r with DequeuedTime = t ; Status = CloudProcessStatus.WaitingToRun } @>
         |> ptemplate.PrecomputeUpdateExpr 
 
     let setStarted =
-        <@ fun t (r:CloudProcessRecord) -> { r with StartTime = t } @>
+        <@ fun t (r:CloudProcessRecord) -> { r with StartTime = t  ; Status = CloudProcessStatus.Running } @>
         |> ptemplate.PrecomputeUpdateExpr
 
     let setCompleted =
-        <@ fun t (r:CloudProcessRecord) -> { r with CompletionTime = t ; Completed = true } @>
+        <@ fun t s (r:CloudProcessRecord) -> { r with CompletionTime = t ; Completed = true ; Status = s } @>
         |> ptemplate.PrecomputeUpdateExpr
 
     let setProcessResult =
-        <@ fun u (r:CloudProcessRecord) -> { r with ResultUri = u } @>
+        <@ fun u s (r:CloudProcessRecord) -> { r with ResultUri = u ; Status = s } @>
         |> ptemplate.PrecomputeUpdateExpr
 
     let resultUnsetPrecondition =
         <@ fun (r:CloudProcessRecord) -> r.ResultUri = None @>
         |> ptemplate.PrecomputeConditionalExpr
-
-    let jobQueryExpr =
-        <@ fun pid (r:WorkItemRecord) -> r.ProcessId = pid @>
-        |> wtemplate.PrecomputeConditionalExpr
 
 [<DataContract; Sealed>]
 type internal CloudProcessEntry (clusterId : ClusterId, processId : string, processInfo : CloudProcessInfo) =
@@ -163,7 +158,7 @@ type internal CloudProcessEntry (clusterId : ClusterId, processId : string, proc
                 | CloudProcessStatus.Faulted
                 | CloudProcessStatus.Completed
                 | CloudProcessStatus.UserException
-                | CloudProcessStatus.Canceled -> setCompleted (Some now)
+                | CloudProcessStatus.Canceled -> setCompleted (Some now) status
                 | _ -> invalidArg "status" "invalid Cloud process status."
 
             let! _ = getProcTable().UpdateItemAsync(key(), uExpr)
@@ -171,7 +166,7 @@ type internal CloudProcessEntry (clusterId : ClusterId, processId : string, proc
         }
         
         member this.GetState(): Async<CloudProcessState> = async {
-            let! jobsHandle = getJobTable().QueryAsync (jobQueryExpr processId) |> Async.StartChild
+            let! jobsHandle = getJobTable().QueryAsync (getWorkItemsByProcessQuery processId) |> Async.StartChild
             let! record = getProcTable().GetItemAsync(key())
             let! jobs = jobsHandle
 
@@ -224,7 +219,13 @@ type internal CloudProcessEntry (clusterId : ClusterId, processId : string, proc
             let blobUri = guid()
             do! S3Persist.PersistClosure(clusterId, result, blobUri, allowNewSifts = false)
             try
-                let! _ = getProcTable().UpdateItemAsync(key(), setProcessResult (Some blobUri), precondition = resultUnsetPrecondition)
+                let status = 
+                    match result with 
+                    | Completed _ -> CloudProcessStatus.Completed
+                    | Exception _ -> CloudProcessStatus.UserException
+                    | Cancelled _ -> CloudProcessStatus.Canceled
+
+                let! _ = getProcTable().UpdateItemAsync(key(), setProcessResult (Some blobUri) status, precondition = resultUnsetPrecondition)
                 return true
             with :? ConditionalCheckFailedException -> return false
         }

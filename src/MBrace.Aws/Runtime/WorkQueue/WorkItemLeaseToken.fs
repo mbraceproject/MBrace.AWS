@@ -54,7 +54,8 @@ type internal WorkItemLeaseTokenInfo =
     override this.ToString() = sprintf "leaseinfo:%A" this.WorkItemId
 
     member internal __.TableKey = 
-        TableKey.Combined(__.ProcessId, __.WorkItemId)
+        TableKey.Combined(WorkItemRecord.GetHashKey  __.ProcessId, 
+                            WorkItemRecord.GetRangeKey __.WorkItemId)
 
     static member FromReceivedMessage(message : WorkItemMessage, attributes : WorkItemMessageAttributes) =
         {

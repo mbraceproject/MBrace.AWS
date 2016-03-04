@@ -33,7 +33,7 @@ type WorkItemRecord =
         ProcessId : string
 
         [<RangeKey; CustomName("RangeKey")>]
-        WorkItemId : Guid
+        WorkItemId : string
 
         TargetWorker : string option
         Type : CloudWorkItemType
@@ -56,10 +56,13 @@ type WorkItemRecord =
         Completed : bool
     }
 with
+    static member GetHashKey (procId) = "cloudProcess:" + procId
+    static member GetRangeKey (workItemId : Guid) = "workItem:" + workItemId.ToString()
+
     static member FromCloudWorkItem(workItem : CloudWorkItem, size : int64) =
         {
-            ProcessId = workItem.Process.Id
-            WorkItemId = workItem.Id
+            ProcessId = WorkItemRecord.GetHashKey workItem.Process.Id
+            WorkItemId = WorkItemRecord.GetRangeKey workItem.Id
             TargetWorker = workItem.TargetWorker |> Option.map (fun w -> w.Id)
             Type = workItem.WorkItemType
             Status = WorkItemStatus.Enqueued
@@ -116,3 +119,10 @@ module internal WorkItemRecordImpl =
                 SET r.FaultInfo f @>
 
         |> template.PrecomputeUpdateExpr
+
+    let getWorkItemsByProcessQuery =
+        let qc =
+            <@ fun procId (r:WorkItemRecord) -> r.ProcessId = procId @>
+            |> template.PrecomputeConditionalExpr
+
+        fun pid -> qc (WorkItemRecord.GetHashKey pid)
