@@ -68,6 +68,12 @@ module Utils =
             | Nullable x -> Some x
             | _          -> None
 
+
+    type IDictionary<'K, 'V> with
+        member d.TryFind k =
+            let ok, found = d.TryGetValue k
+            if ok then Some found else None
+
     type Async with
         static member Cast<'U>(task : Async<obj>) = async { let! t = task in return box t :?> 'U }
 

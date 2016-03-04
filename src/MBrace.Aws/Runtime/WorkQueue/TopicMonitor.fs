@@ -52,8 +52,9 @@ type TopicMonitor private
                     "TopicMonitor : moving %d messages to main queue for %A" 
                     allMessages.Length 
                     worker.Id
-                do! queue.EnqueueMessagesBatch(allMessages)
-                do! topic.Delete worker // TODO: fix
+
+                do! queue.EnqueueMessagesBatch(allMessages |> Seq.map WorkItemMessage.FromReceivedMessage)
+                do! subscription.Delete(allMessages)
 
         with e ->
             logger.Logf LogLevel.Error "Error cleaning up subscription '%s': %O" worker.Id e

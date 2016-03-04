@@ -1,6 +1,7 @@
 ﻿namespace MBrace.AWS.Runtime
 
 open System
+open System.Collections.Generic
 open System.IO
 open System.Threading
 open System.Runtime.Serialization
@@ -17,58 +18,48 @@ open FSharp.DynamoDB
 open MBrace.AWS.Runtime
 open MBrace.AWS.Runtime.Utilities
 
-type internal SqsSettings =
-    /// Message lock renew interval (in milliseconds).
-    static member RenewLockInverval = 5000 
-    
-
-type WorkItemMessage = 
+type internal WorkItemMessage =
     {
-        ProcessId    : string
-        WorkItemId   : CloudWorkItemId
-        BatchIndex   : int option
-        TargetWorker : string option
-        BlobUri      : string
-    }
-
-type WorkItemMessageAttributes =
-    {
-        QueueUri      : string
-        ReceiptHandle : string
-        ReceiveCount  : int
-    }
-
-type internal WorkItemLeaseTokenInfo =
-    {
-        QueueUri      : string
-        ReceiptHandle : string
         ProcessId     : string
         WorkItemId    : Guid
         BatchIndex    : int option
         TargetWorker  : string option
         BlobUri       : string
-        DequeueTime   : DateTimeOffset
-        DeliveryCount : int
     }
 
     override this.ToString() = sprintf "leaseinfo:%A" this.WorkItemId
 
-    member internal __.TableKey = 
+    member __.TableKey = 
         TableKey.Combined(WorkItemRecord.GetHashKey  __.ProcessId, 
                             WorkItemRecord.GetRangeKey __.WorkItemId)
 
-    static member FromReceivedMessage(message : WorkItemMessage, attributes : WorkItemMessageAttributes) =
-        {
-            QueueUri      = attributes.QueueUri
-            ReceiptHandle = attributes.ReceiptHandle
-            WorkItemId    = message.WorkItemId
-            BlobUri       = message.BlobUri
-            ProcessId     = message.ProcessId
-            BatchIndex    = message.BatchIndex
-            TargetWorker  = message.TargetWorker
-            DequeueTime   = DateTimeOffset.Now
-            DeliveryCount = attributes.ReceiveCount
-        }
+    member m.ToMessageAttributes() =
+        m |> toBase64
+//        let dict = new Dictionary<_,_>()
+//        let mkStringAttr x = new MessageAttributeValue(StringValue = x)
+//        dict.Add("BlobUri", mkStringAttr m.BlobUri)
+//        dict.Add("ProcessId", mkStringAttr m.ProcessId)
+//        m.BatchIndex |> Option.iter (fun bi -> dict.Add("BatchIndex", mkStringAttr (string bi)))
+//        m.TargetWorker |> Option.iter (fun tw -> dict.Add("TargetWorker", mkStringAttr tw))
+//        string m.WorkItemId, dict
+
+    static member FromReceivedMessage(message : SqsDequeueMessage) =
+        message.Message.Body |> fromBase64
+//        let msg = message.Message
+//        {
+//            WorkItemId    = Guid.Parse msg.Body
+//            BlobUri       = msg.MessageAttributes.["BlobUri"].StringValue
+//            ProcessId     = msg.MessageAttributes.["ProcessId"].StringValue
+//            BatchIndex    = 
+//                match msg.MessageAttributes.TryFind "BatchIndex" with
+//                | None -> None
+//                | Some av -> av.StringValue |> int |> Some
+//
+//            TargetWorker  = 
+//                match msg.MessageAttributes.TryFind "TargetWorker" with
+//                | None -> None
+//                | Some av -> av.StringValue |> Some
+//        }
 
 type internal LeaseAction =
     | Complete
@@ -76,54 +67,33 @@ type internal LeaseAction =
 
 /// Periodically renews lock for supplied work item, releases lock if specified as completed.
 [<Sealed; AutoSerializable(false)>]
-type internal WorkItemLeaseMonitor private 
-        (clusterId : ClusterId,
-         info      : WorkItemLeaseTokenInfo,
-         logger    : ISystemLogger) =
-
-    let deleteMsg () = async {
-        let req = DeleteMessageRequest(
-                    QueueUrl      = info.QueueUri,
-                    ReceiptHandle = info.ReceiptHandle)
-        let! ct = Async.CancellationToken
-        do! clusterId.SQSAccount.SQSClient.DeleteMessageAsync(req, ct)
-            |> Async.AwaitTaskCorrect
-            |> Async.Ignore
-    }
-
+type internal WorkItemLeaseMonitor private (message : SqsDequeueMessage, info : WorkItemMessage, logger : ISystemLogger) =
     let rec renewLoop (inbox : MailboxProcessor<LeaseAction>) = async {
         let! action = inbox.TryReceive(timeout = 60)
         match action with
         | None ->
             // hide message from other workers for another 1 min
-            let req = ChangeMessageVisibilityRequest(
-                         QueueUrl      = info.QueueUri,
-                         ReceiptHandle = info.ReceiptHandle,
-                         VisibilityTimeout = 60)
-
-            let! ct = Async.CancellationToken
-            let! res = clusterId.SQSAccount.SQSClient.ChangeMessageVisibilityAsync(req, ct)
-                       |> Async.AwaitTaskCorrect
-                       |> Async.Catch
+            let! res = message.RenewLock(timeoutMilliseconds = 60000) |> Async.Catch
 
             match res with
             | Choice1Of2 _ -> 
                 logger.Logf LogLevel.Debug "%A : lock renewed" info
-                do! Async.Sleep SqsSettings.RenewLockInverval
+                do! Async.Sleep 20000
                 return! renewLoop inbox
             | Choice2Of2 (:? ReceiptHandleIsInvalidException) ->
                 logger.Logf LogLevel.Warning "%A : lock lost" info
+
             | Choice2Of2 exn -> 
                 logger.LogError <| sprintf "%A : lock renew failed with %A" info exn
-                do! Async.Sleep SqsSettings.RenewLockInverval
+                do! Async.Sleep 20000
                 return! renewLoop inbox
 
         | Some Complete ->
-            do! deleteMsg()
+            do! message.Complete()
             logger.LogInfof "%A : completed" info
 
         | Some Abandon ->
-            do! deleteMsg()
+            do! message.Abandon()
             logger.LogInfof "%A : abandoned" info
     }
 
@@ -135,8 +105,8 @@ type internal WorkItemLeaseMonitor private
     interface IDisposable with 
         member __.Dispose() = cts.Cancel()
 
-    static member Start(id : ClusterId, info : WorkItemLeaseTokenInfo, logger : ISystemLogger) =
-        new WorkItemLeaseMonitor(id, info, logger)
+    static member Start(message : SqsDequeueMessage, info : WorkItemMessage, logger : ISystemLogger) =
+        new WorkItemLeaseMonitor(message, info, logger)
 
 /// Implements ICloudWorkItemLeaseToken
 type internal WorkItemLeaseToken =
@@ -147,7 +117,7 @@ type internal WorkItemLeaseToken =
         WorkItemSize    : int64
         TypeName        : string
         FaultInfo       : CloudWorkItemFaultInfo
-        LeaseInfo       : WorkItemLeaseTokenInfo
+        MessageInfo     : WorkItemMessage
         ProcessInfo     : CloudProcessInfo
     }
 
@@ -158,7 +128,7 @@ type internal WorkItemLeaseToken =
             this.CompleteAction.Invoke Complete
             this.CompleteAction.Dispose() // disconnect marshaled object
 
-            let! _ = this.Table.UpdateItemAsync(this.LeaseInfo.TableKey, setWorkItemCompleted DateTimeOffset.Now)
+            let! _ = this.Table.UpdateItemAsync(this.MessageInfo.TableKey, setWorkItemCompleted DateTimeOffset.Now)
             return ()
         }
         
@@ -166,39 +136,39 @@ type internal WorkItemLeaseToken =
             this.CompleteAction.Invoke Abandon
             this.CompleteAction.Dispose() // disconnect marshaled object
 
-            let! _ = this.Table.UpdateItemAsync(this.LeaseInfo.TableKey, setWorkItemFaulted (Some edi) DateTimeOffset.Now)
+            let! _ = this.Table.UpdateItemAsync(this.MessageInfo.TableKey, setWorkItemFaulted (Some edi) DateTimeOffset.Now)
             return ()
         }
         
         member this.FaultInfo : CloudWorkItemFaultInfo = this.FaultInfo
         
         member this.GetWorkItem() : Async<CloudWorkItem> = async { 
-            let! payload = S3Persist.ReadPersistedClosure<MessagePayload>(this.ClusterId, this.LeaseInfo.BlobUri)
+            let! payload = S3Persist.ReadPersistedClosure<MessagePayload>(this.ClusterId, this.MessageInfo.BlobUri)
             match payload with
             | Single item -> return item
-            | Batch items -> return items.[Option.get this.LeaseInfo.BatchIndex]
+            | Batch items -> return items.[Option.get this.MessageInfo.BatchIndex]
         }
         
-        member this.Id : CloudWorkItemId = this.LeaseInfo.WorkItemId
+        member this.Id : CloudWorkItemId = this.MessageInfo.WorkItemId
         
         member this.WorkItemType : CloudWorkItemType = this.WorkItemType
         
         member this.Size : int64 = this.WorkItemSize
         
         member this.TargetWorker : IWorkerId option = 
-            match this.LeaseInfo.TargetWorker with
+            match this.MessageInfo.TargetWorker with
             | None   -> None
             | Some w -> Some(WorkerId(w) :> _)
         
         member this.Process : ICloudProcessEntry = 
-            new CloudProcessEntry(this.ClusterId, this.LeaseInfo.ProcessId, this.ProcessInfo) :> _
+            new CloudProcessEntry(this.ClusterId, this.MessageInfo.ProcessId, this.ProcessInfo) :> _
         
         member this.Type : string = this.TypeName
 
     /// Creates a new WorkItemLeaseToken with supplied configuration parameters
     static member Create
             (clusterId : ClusterId, 
-             info      : WorkItemLeaseTokenInfo, 
+             info      : WorkItemMessage, 
              monitor   : WorkItemLeaseMonitor, 
              faultInfo : CloudWorkItemFaultInfo) = async {
 
@@ -219,7 +189,7 @@ type internal WorkItemLeaseToken =
                     WorkItemType   = workRecord.Type
                     TypeName       = workRecord.TypeName
                     FaultInfo      = faultInfo
-                    LeaseInfo      = info
+                    MessageInfo    = info
                     ProcessInfo    = processRecord.ToCloudProcessInfo()
                }
     }

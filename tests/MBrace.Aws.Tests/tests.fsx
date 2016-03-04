@@ -30,6 +30,8 @@ let cluster = AWSCluster.InitOnCurrentMachine(config, workerCount = 3, logger = 
 //let cluster = AWSCluster.Connect(config, logger = ConsoleLogger())
 cluster.Reset(force = true)
 
+cluster.Run(cloud { return 42 })
+
 let proc = cluster.CreateProcess(cloud { return! Cloud.Parallel [for i in 1 .. 20 -> Cloud.CurrentWorker]})
 
 proc.Status

@@ -22,24 +22,24 @@ type internal MessagingClient =
             (clusterId     : ClusterId, 
              logger        : ISystemLogger, 
              localWorkerId : IWorkerId, 
-             dequeue       : unit -> Async<(WorkItemMessage * WorkItemMessageAttributes) option>) 
+             dequeue       : unit -> Async<SqsDequeueMessage option>) 
             : Async<ICloudWorkItemLeaseToken option> = async { 
         let! res = dequeue()
         match res with
         | None -> return None
-        | Some (message, attributes) ->
-            let workInfo = WorkItemLeaseTokenInfo.FromReceivedMessage(message, attributes)
-            logger.Logf LogLevel.Debug "%O : dequeued, delivery count = %d" workInfo workInfo.DeliveryCount 
+        | Some msg ->
+            let workInfo = WorkItemMessage.FromReceivedMessage(msg)
+            logger.Logf LogLevel.Debug "%O : dequeued, receive count = %d" workInfo msg.ReceiveCount
 
             logger.Logf LogLevel.Debug "%O : starting lock renew loop" workInfo
-            let monitor = WorkItemLeaseMonitor.Start(clusterId, workInfo, logger)
+            let monitor = WorkItemLeaseMonitor.Start(msg, workInfo, logger)
 
             let table = clusterId.GetRuntimeTable<WorkItemRecord>()
 
             try
                 // determine the fault info for the dequeued work item
                 let! faultInfo = async {
-                    let faultCount = workInfo.DeliveryCount
+                    let faultCount = msg.ReceiveCount
                     match workInfo.TargetWorker with
                     | Some target when target <> localWorkerId.Id -> 
                         // a targeted work item that has been dequeued by a different worker is to be declared faulted
@@ -66,7 +66,7 @@ type internal MessagingClient =
 
                 let updateOp = 
                     setWorkItemDequeued localWorkerId.Id DateTimeOffset.Now
-                                        workInfo.DeliveryCount (faultInfo.ToEnum())
+                                        msg.ReceiveCount (faultInfo.ToEnum())
 
                 let! _ = table.UpdateItemAsync(workInfo.TableKey, updateOp)
 
@@ -147,28 +147,6 @@ type internal MessagingClient =
             (getHumanReadableByteSize size)
     }
 
-[<AutoOpen>]
-module private QueueUtils = 
-    let tryDequeue account queueUri = 
-        async {
-            let! res = Sqs.dequeueWithAttributes account queueUri None
-            match res with
-            | Some (receiptHandle, body, attr) -> 
-                let message = fromBase64<WorkItemMessage> body
-                let receiveCount = 
-                    if attr.ContainsKey "ApproximateReceiveCount" 
-                    then int <| attr.["ApproximateReceiveCount"] 
-                    else 0
-                let attributes = 
-                    {
-                        QueueUri      = queueUri
-                        ReceiptHandle = receiptHandle
-                        ReceiveCount  = receiveCount
-                    }
-                return Some (message, attributes)
-            | _ -> return None
-        }
-
 /// Queue client implementation
 [<Sealed; AutoSerializable(false)>]
 type internal Queue (clusterId : ClusterId, queueUri, logger : ISystemLogger) = 
@@ -178,9 +156,9 @@ type internal Queue (clusterId : ClusterId, queueUri, logger : ISystemLogger) =
     let send msg = queue.EnqueueAsync msg
     let sendBatch msgs = queue.EnqueueBatchAsync msgs
     
-    let tryDequeue () = tryDequeue account queueUri
+    let tryDequeue () = Sqs.TryDequeue(account, queueUri)
 
-    member __.GetMessageCountAsync() = Sqs.getCount account queueUri
+    member __.GetMessageCountAsync() = Sqs.GetMessageCount(account, queueUri)
 
     member __.EnqueueBatch(jobs : CloudWorkItem []) = 
         MessagingClient.EnqueueBatch(clusterId, logger, jobs, sendBatch)
@@ -197,7 +175,7 @@ type internal Queue (clusterId : ClusterId, queueUri, logger : ISystemLogger) =
         
     static member Create(clusterId : ClusterId, logger : ISystemLogger) = async { 
         let account   = clusterId.SQSAccount
-        let! queueUri = Sqs.tryGetQueueUri account clusterId.WorkItemQueueName
+        let! queueUri = Sqs.TryGetQueueUri(account, clusterId.WorkItemQueueName)
         match queueUri with
         | Some queueUri ->
             logger.LogInfof "Queue %A already exists." clusterId.WorkItemQueueName
@@ -205,7 +183,7 @@ type internal Queue (clusterId : ClusterId, queueUri, logger : ISystemLogger) =
         | None ->
             logger.LogInfof "Creating new ServiceBus queue %A" clusterId.WorkItemQueueName
             // TODO : what should be the default queue attributes?
-            let! queueUri = Sqs.createQueue account clusterId.WorkItemQueueName
+            let! queueUri = Sqs.CreateQueue(account, clusterId.WorkItemQueueName)
             return new Queue(clusterId, queueUri, logger)
     }
 
@@ -227,30 +205,33 @@ type internal Subscription
     // NOTE: the worker specific queue is created on push. 
     // This is to avoid creating new queues unnecessarily,
     // hence the need for tryGetQueueUri
-    let tryDequeue () = 
-        Sqs.tryGetQueueUri account queueName
-        |> AsyncOption.Bind (tryDequeue account)
-
-    let tryGetCount = Sqs.getCount account |> AsyncOption.Lift
+    let tryDequeue () = async {
+        let! qUri = Sqs.TryGetQueueUri(account, queueName)
+        match qUri with
+        | None -> return None
+        | Some uri -> return! Sqs.TryDequeue(account, uri)
+    }
 
     member __.TargetWorkerId = targetWorkerId
 
-    member __.GetMessageCountAsync() =
-        Sqs.tryGetQueueUri account queueName
-        |> AsyncOption.Bind tryGetCount
-        |> AsyncOption.WithDefault 0L
+    member __.GetMessageCountAsync() = async {
+        let! qUri = Sqs.TryGetQueueUri(account, queueName)
+        match qUri with
+        | None -> return 0
+        | Some uri -> return! Sqs.GetMessageCount(account, uri)
+    }
 
     member __.TryDequeue(currentWorker : IWorkerId) = 
         MessagingClient.TryDequeue(clusterId, logger, currentWorker, tryDequeue)
 
     member __.DequeueAllMessagesBatch() = async {
-        let! uri = Sqs.tryGetQueueUri account queueName
+        let! uri = Sqs.TryGetQueueUri(account, queueName)
         match uri with
-        | Some queueUri ->
-            let! msgs = Sqs.dequeueAll account queueUri
-            return msgs |> Array.map fromBase64<WorkItemMessage>
+        | Some queueUri -> return! Sqs.DequeueAll(account, queueUri)
         | _ -> return [||]
     }
+
+    member __.Delete(messages : seq<SqsDequeueMessage>) = Sqs.DeleteBatch(clusterId.SQSAccount, messages)
 
 /// Topic client implementation as a worker specific SQS queue
 [<Sealed; AutoSerializable(false)>]
@@ -263,16 +244,16 @@ type internal Topic (clusterId : ClusterId, logger : ISystemLogger) =
         // we can safely assume that TargetWorker is Some in this case
         let workerId = Option.get msg.TargetWorker
         let queueName = getQueueName topic workerId
-        let! queueUri = Sqs.tryGetQueueUri account queueName
+        let! queueUri = Sqs.TryGetQueueUri(account, queueName)
         match queueUri with
         | Some uri -> return uri
-        | _ -> return! Sqs.createQueue account queueName
+        | _ -> return! Sqs.CreateQueue(account, queueName)
     }
 
     let enqueue (msg : WorkItemMessage) = async {
         let! queueUri = getQueueUriOrCreate msg
-        let body = toBase64 msg
-        do! Sqs.enqueue account queueUri body
+        let body = msg.ToMessageAttributes()
+        do! Sqs.Enqueue(account, queueUri, body)
     }
 
     let enqueueBatch (msgs : seq<WorkItemMessage>) = async {
@@ -281,8 +262,8 @@ type internal Topic (clusterId : ClusterId, logger : ISystemLogger) =
             |> Seq.groupBy (fun m -> Option.get m.TargetWorker)
             |> Seq.map (fun (_, msgs) -> async {
                 let! queueUri = getQueueUriOrCreate (Seq.head msgs)
-                let msgBodies = msgs |> Seq.map toBase64
-                do! Sqs.enqueueBatch account queueUri msgBodies })
+                let bodies = msgs |> Seq.map (fun m -> let b = m.ToMessageAttributes() in b, None)
+                do! Sqs.EnqueueBatch(account, queueUri, bodies) })
             |> Async.Parallel
             |> Async.Ignore
     }
@@ -298,10 +279,10 @@ type internal Topic (clusterId : ClusterId, logger : ISystemLogger) =
 
     member __.Delete(workerId : IWorkerId) = async {
         let queueName = getQueueName topic workerId.Id
-        let! queueUri = Sqs.tryGetQueueUri account queueName
+        let! queueUri = Sqs.TryGetQueueUri(account, queueName)
         match queueUri with
-        | Some queueUri -> do! Sqs.deleteQueue account queueUri
-        | _ -> return ()
+        | Some queueUri -> do! Sqs.DeleteQueue(account, queueUri)
+        | None -> return ()
     }
 
     static member Create(clusterId, logger : ISystemLogger) = 
