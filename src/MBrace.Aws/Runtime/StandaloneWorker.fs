@@ -31,6 +31,8 @@ module StandaloneWorker =
 //                ignore <| svc.AttachLogger(ConsoleLogger(showDate = true, useColors = true))
             ignore <| svc.AttachLogger(ConsoleLogger(showDate = true, useColors = true))
 
+            svc.HeartbeatInterval <- TimeSpan.FromSeconds 2.
+            svc.HeartbeatThreshold <- TimeSpan.FromSeconds 10.
 //            cli.WorkingDirectory |> Option.iter (fun w -> svc.WorkingDirectory <- w)
 //            cli.MaxWorkItems |> Option.iter (fun w -> svc.MaxConcurrentWorkItems <- w)
 //            cli.HeartbeatInterval |> Option.iter (fun i -> svc.HeartbeatInterval <- i)

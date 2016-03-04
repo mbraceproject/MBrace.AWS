@@ -53,7 +53,7 @@ type TopicMonitor private
                     allMessages.Length 
                     worker.Id
                 do! queue.EnqueueMessagesBatch(allMessages)
-                do! topic.Delete worker
+                do! topic.Delete worker // TODO: fix
 
         with e ->
             logger.Logf LogLevel.Error "Error cleaning up subscription '%s': %O" worker.Id e

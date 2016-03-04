@@ -95,10 +95,11 @@ type internal WorkItemLeaseMonitor private
         let! action = inbox.TryReceive(timeout = 60)
         match action with
         | None ->
+            // hide message from other workers for another 1 min
             let req = ChangeMessageVisibilityRequest(
                          QueueUrl      = info.QueueUri,
-                         ReceiptHandle = info.ReceiptHandle)
-            req.VisibilityTimeout <- 60 // hide message from other workers for another 1 min
+                         ReceiptHandle = info.ReceiptHandle,
+                         VisibilityTimeout = 60)
 
             let! ct = Async.CancellationToken
             let! res = clusterId.SQSAccount.SQSClient.ChangeMessageVisibilityAsync(req, ct)

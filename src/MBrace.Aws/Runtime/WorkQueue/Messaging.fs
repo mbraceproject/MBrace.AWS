@@ -22,9 +22,9 @@ type internal MessagingClient =
             (clusterId     : ClusterId, 
              logger        : ISystemLogger, 
              localWorkerId : IWorkerId, 
-             dequeue       : unit -> Task<(WorkItemMessage * WorkItemMessageAttributes) option>) 
+             dequeue       : unit -> Async<(WorkItemMessage * WorkItemMessageAttributes) option>) 
             : Async<ICloudWorkItemLeaseToken option> = async { 
-        let! res = dequeue() |> Async.AwaitTaskCorrect
+        let! res = dequeue()
         match res with
         | None -> return None
         | Some (message, attributes) ->
@@ -178,7 +178,7 @@ type internal Queue (clusterId : ClusterId, queueUri, logger : ISystemLogger) =
     let send msg = queue.EnqueueAsync msg
     let sendBatch msgs = queue.EnqueueBatchAsync msgs
     
-    let tryDequeue () = tryDequeue account queueUri |> Async.StartAsTask
+    let tryDequeue () = tryDequeue account queueUri
 
     member __.GetMessageCountAsync() = Sqs.getCount account queueUri
 
@@ -230,7 +230,6 @@ type internal Subscription
     let tryDequeue () = 
         Sqs.tryGetQueueUri account queueName
         |> AsyncOption.Bind (tryDequeue account)
-        |> Async.StartAsTask
 
     let tryGetCount = Sqs.getCount account |> AsyncOption.Lift
 
