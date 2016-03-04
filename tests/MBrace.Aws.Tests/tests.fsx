@@ -32,11 +32,6 @@ cluster.Reset(force = true)
 
 cluster.Run(Cloud.Parallel [for i in 1 .. 20 -> Cloud.CurrentWorker])
 
-c.Token.IsCancellationRequested
-
-c.Cancel()
-
-
 cluster.Workers
 
 cluster.ShowWorkers()
