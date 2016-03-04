@@ -84,7 +84,7 @@ type internal MessagingClient =
              logger        : ISystemLogger, 
              workItem      : CloudWorkItem, 
              allowNewSifts : bool, 
-             send          : WorkItemMessage -> Task) = async { 
+             send          : WorkItemMessage -> Async<unit>) = async { 
 
         // Step 1: Persist work item payload to blob store
         let blobUri = sprintf "workItem/%s/%s" workItem.Process.Id (fromGuid workItem.Id)
@@ -105,7 +105,7 @@ type internal MessagingClient =
                 BatchIndex   = None
             }
 
-        do! send msg |> Async.AwaitTaskCorrect
+        do! send msg
 
         logger.Logf LogLevel.Debug "workItem:%O : enqueue completed, size %s" workItem.Id (getHumanReadableByteSize size)
     }
@@ -114,7 +114,7 @@ type internal MessagingClient =
             (clusterId : ClusterId, 
              logger    : ISystemLogger, 
              jobs      : CloudWorkItem[], 
-             send      : WorkItemMessage seq -> Task) = async { 
+             send      : seq<WorkItemMessage> -> Async<unit>) = async { 
         // silent discard if empty
         if jobs.Length = 0 then return () else
 
@@ -139,7 +139,7 @@ type internal MessagingClient =
             }
 
         let messages = jobs |> Array.mapi mkWorkItemMessage
-        do! send messages |> Async.AwaitTaskCorrect
+        do! send messages
         logger.LogInfof 
             "Enqueued batched jobs of %d items for task %s, total size %s." 
             jobs.Length 
@@ -175,8 +175,8 @@ type internal Queue (clusterId : ClusterId, queueUri, logger : ISystemLogger) =
     let account = clusterId.SQSAccount
     let queue   = SQSCloudQueue<WorkItemMessage>(queueUri, account) :> CloudQueue<WorkItemMessage>
 
-    let send msg = queue.EnqueueAsync msg |> Async.StartAsTask :> Task
-    let sendBatch msgs = queue.EnqueueBatchAsync msgs |> Async.StartAsTask :> Task
+    let send msg = queue.EnqueueAsync msg
+    let sendBatch msgs = queue.EnqueueBatchAsync msgs
     
     let tryDequeue () = tryDequeue account queueUri |> Async.StartAsTask
 
@@ -270,26 +270,23 @@ type internal Topic (clusterId : ClusterId, logger : ISystemLogger) =
         | _ -> return! Sqs.createQueue account queueName
     }
 
-    let enqueue (msg : WorkItemMessage) = 
-        async {
-            let! queueUri = getQueueUriOrCreate msg
-            let body = toBase64 msg
-            do! Sqs.enqueue account queueUri body
-        } 
-        |> Async.StartAsTask
-        :> Task
+    let enqueue (msg : WorkItemMessage) = async {
+        let! queueUri = getQueueUriOrCreate msg
+        let body = toBase64 msg
+        do! Sqs.enqueue account queueUri body
+    }
 
-    // WorkItemQueue doesn't support mixed messages right now, so it's safe
-    // to assume all messages in a batch have the same TargetWorker
-    let enqueueBatch (msgs : seq<WorkItemMessage>) =
-        async {
-            if msgs |> Seq.isEmpty |> not then
+    let enqueueBatch (msgs : seq<WorkItemMessage>) = async {
+        do!
+            msgs
+            |> Seq.groupBy (fun m -> Option.get m.TargetWorker)
+            |> Seq.map (fun (_, msgs) -> async {
                 let! queueUri = getQueueUriOrCreate (Seq.head msgs)
                 let msgBodies = msgs |> Seq.map toBase64
-                do! Sqs.enqueueBatch account queueUri msgBodies
-        }
-        |> Async.StartAsTask
-        :> Task
+                do! Sqs.enqueueBatch account queueUri msgBodies })
+            |> Async.Parallel
+            |> Async.Ignore
+    }
 
     member this.GetSubscription(subscriptionId : IWorkerId) = 
         new Subscription(clusterId, subscriptionId, logger)

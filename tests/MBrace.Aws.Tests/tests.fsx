@@ -42,3 +42,9 @@ cluster.ShowSystemLogs()
 
 cluster.ShowProcesses()
 cluster.ClearAllProcesses()
+
+//let worker = cluster.Workers.[0] :> IWorkerRef
+//let worker' = cluster.Run(Cloud.CurrentWorker, target = worker)
+//worker' = worker
+
+let workers = cluster.Run(Cloud.ParallelEverywhere Cloud.CurrentWorker)
