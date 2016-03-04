@@ -153,7 +153,14 @@ module private LoggerImpl =
 
         let flush () = async {
             if queue.Count > 0 then
-                try do! table.BatchPutItemsAsync queue |> Async.Ignore
+                try
+                    do!
+                        queue
+                        |> Seq.chunksOf 25
+                        |> Seq.map table.BatchPutItemsAsync
+                        |> Async.Parallel
+                        |> Async.Ignore
+
                 with e -> Console.WriteLine (sprintf "Error writing logs: %O" e)
                 queue.Clear()
         }

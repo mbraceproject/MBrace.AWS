@@ -14,6 +14,9 @@ open FSharp.DynamoDB
  [<AutoOpen>]
  module private ResultAggregatorImpl =
 
+    [<Literal>]
+    let private placeHolder = "head"
+
     [<ConstantRangeKey("RangeKey", "ResultAggregator")>]
     type ResultAggregatorEntry =
         {
@@ -25,10 +28,16 @@ open FSharp.DynamoDB
             AggregatedUris : Map<string, string>
         }
     with
-        member __.Count = __.AggregatedUris.Count - 1
-        
         static member Init(id, capacity) = 
-            { Id = id ; Capacity = capacity ; AggregatedUris = Map.ofList [("head", "empty")] }
+            { Id = id ; Capacity = capacity ; AggregatedUris = Map.ofList [(placeHolder, placeHolder)] }
+
+        member __.Count = __.AggregatedUris.Count - 1
+        member __.Uris =
+            __.AggregatedUris
+            |> Seq.filter (fun i -> i.Key <> placeHolder)
+            |> Seq.sortBy (fun i -> i.Key)
+            |> Seq.map (fun i -> i.Value)
+        
 
     let private template = RecordTemplate.Define<ResultAggregatorEntry>()
 
@@ -91,9 +100,8 @@ type ResultAggregator<'T> internal (clusterId : ClusterId, hashKey : string, siz
                 return! Async.Raise <| new InvalidOperationException(msg)
             else
                 return!
-                    item.AggregatedUris
-                    |> Seq.sortBy (fun e -> e.Key)
-                    |> Seq.map (fun e -> S3Persist.ReadPersistedClosure<'T>(clusterId, e.Value))
+                    item.Uris
+                    |> Seq.map (fun u -> S3Persist.ReadPersistedClosure<'T>(clusterId, u))
                     |> Async.Parallel
         }
 

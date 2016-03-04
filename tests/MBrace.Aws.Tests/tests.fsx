@@ -32,8 +32,6 @@ cluster.Reset(force = true)
 
 cluster.Run(Cloud.Parallel [for i in 1 .. 20 -> Cloud.CurrentWorker])
 
-let c = cluster.CreateCancellationTokenSource([c.Token])
-
 c.Token.IsCancellationRequested
 
 c.Cancel()
@@ -42,6 +40,7 @@ c.Cancel()
 cluster.Workers
 
 cluster.ShowWorkers()
+cluster.ClearSystemLogs()
 
 cluster.ShowSystemLogs()
 

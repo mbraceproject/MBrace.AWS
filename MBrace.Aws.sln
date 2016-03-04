@@ -39,6 +39,13 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{87B587B4-308
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "MBrace.AWS.StandaloneWorker", "src\MBrace.AWS.StandaloneWorker\MBrace.AWS.StandaloneWorker.fsproj", "{B36C97D0-928B-4CB0-9F70-79BA47F4C920}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "resource", "resource", "{55EEE23E-3717-4AEA-AFD5-1E90EB9BC5DE}"
+	ProjectSection(SolutionItems) = preProject
+		resource\Mblue.res = resource\Mblue.res
+		resource\Mgrey.res = resource\Mgrey.res
+		resource\Morange.res = resource\Morange.res
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -67,5 +74,6 @@ Global
 		{8E6D5255-776D-4B61-85F9-73C37AA1FB9A} = {A6A6AF7D-D6E3-442D-9B1E-58CC91879BE1}
 		{E7BBBE5E-616E-4F85-94CE-E912CB342E9F} = {ED8079DD-2B06-4030-9F0F-DC548F98E1C4}
 		{B36C97D0-928B-4CB0-9F70-79BA47F4C920} = {87B587B4-3081-4DA2-8D56-D8827F5D571D}
+		{55EEE23E-3717-4AEA-AFD5-1E90EB9BC5DE} = {BF60BC93-E09B-4E5F-9D85-95A519479D54}
 	EndGlobalSection
 EndGlobal
