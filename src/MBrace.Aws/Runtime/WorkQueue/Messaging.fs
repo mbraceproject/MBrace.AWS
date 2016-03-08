@@ -124,8 +124,13 @@ type internal MessagingClient =
         let! size = S3Persist.GetPersistedClosureSize(clusterId, blobUri)
 
         // Step 2: populate work item records
+        let table = clusterId.GetRuntimeTable<WorkItemRecord>()
         let workItems = jobs |> Seq.map (fun j -> WorkItemRecord.FromCloudWorkItem(j, size))
-        let! _ = clusterId.GetRuntimeTable<WorkItemRecord>().BatchPutItemsAsync(workItems)
+        let! _ = 
+            workItems
+            |> Seq.chunksOf 25
+            |> Seq.map table.BatchPutItemsAsync
+            |> Async.Parallel
 
         // Step 3: create work messages and post to service bus queue
         let mkWorkItemMessage (i : int) (workItem : CloudWorkItem) : WorkItemMessage =
