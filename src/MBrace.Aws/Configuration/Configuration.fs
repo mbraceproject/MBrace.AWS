@@ -31,6 +31,10 @@ type AWSRegion (region : RegionEndpoint) =
 
     override __.ToString() = name
 
+    static member Parse(name : string) =
+        let ep = RegionEndpoint.GetBySystemName name
+        new AWSRegion(ep)
+
     /// The Asia Pacific (Tokyo) endpoint.
     static member APNortheast1 = mk RegionEndpoint.APNortheast1
     /// The Asia Pacific (Seoul) endpoint.
@@ -76,11 +80,15 @@ with
 
 /// Azure Configuration Builder. Used to specify MBrace.AWS cluster storage configuration.
 [<AutoSerializable(true); Sealed; NoEquality; NoComparison>]
-type Configuration(region : AWSRegion, clusterId : string, credentials : AWSCredentials) =
-    do Validate.hostname clusterId
-    let mkName sep name = sprintf "%s%s%s" name sep clusterId
+type Configuration(region : AWSRegion, credentials : AWSCredentials, ?resourcePrefix : string) =
+    static let defaultVersion = typeof<Configuration>.Assembly.GetName().Version
 
-    let mutable version = typeof<Configuration>.Assembly.GetName().Version
+    let resourcePrefix = 
+        match resourcePrefix with
+        | Some rp -> Validate.hostname rp ; rp
+        | None -> sprintf "v%d-%d" defaultVersion.Major defaultVersion.Minor
+        
+    let mkName sep name = sprintf "%s%s%s" name sep resourcePrefix
 
     // Default Service Bus Configuration
     let mutable workItemQueue        = mkName "-" "MBraceWorkItemQueue"
@@ -95,10 +103,10 @@ type Configuration(region : AWSRegion, clusterId : string, credentials : AWSCred
     let mutable runtimeTable        = mkName "." "MBraceRuntimeData"
     let mutable runtimeLogsTable    = mkName "." "MBraceRuntimeLogs"
 
-    /// Runtime version this configuration is targeting. Default to current assembly version.
-    member __.Version
-        with get () = version.ToString()
-        and set v = version <- Version.Parse v
+    member __.ResourcePrefix = resourcePrefix
+
+    member __.DefaultCredentials = credentials
+    member __.DefaultRegion = region
 
     /// AWS S3 Account credentials
     member val S3Credentials = credentials with get, set
@@ -151,6 +159,6 @@ type Configuration(region : AWSRegion, clusterId : string, credentials : AWSCred
         and set udt = Validate.tableName udt ; userDataTable <- udt
 
     /// Create a configuration object by reading credentials from the local store
-    static member FromCredentialsStore(region : AWSRegion, clusterId : string, ?profileName : string) =
+    static member FromCredentialsStore(region : AWSRegion, ?profileName : string, ?resourcePrefix : string) =
         let credentials = AWSCredentials.FromCredentialStore(?profileName = profileName)
-        new Configuration(region, clusterId, credentials)
+        new Configuration(region, credentials, ?resourcePrefix = resourcePrefix)

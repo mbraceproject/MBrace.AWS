@@ -2,6 +2,7 @@ REDIRECTS: ON
 NUGET
   remote: https://www.nuget.org/api/v2
   specs:
+    Argu (2.1)
     AWSSDK.Core (3.1.5)
       Microsoft.Net.Http (>= 2.2.29) - framework: portable-net45+win8+wp8+wpa81
       PCLCrypto (>= 1.0.2.15130) - framework: portable-net45+win8+wp8+wpa81
@@ -59,9 +60,17 @@ NUGET
     Newtonsoft.Json (8.0.2)
     NuGet.CommandLine (3.3.0)
     NUnit (2.6.4)
-    NUnit.Console (3.0.1)
-    NUnit.Runners (3.0.1)
-      NUnit.Console (3.0.1)
+    NUnit.ConsoleRunner (3.2.0)
+    NUnit.Extension.NUnitProjectLoader (3.2.0)
+    NUnit.Extension.NUnitV2Driver (3.2.0)
+    NUnit.Extension.NUnitV2ResultWriter (3.2.0)
+    NUnit.Extension.VSProjectLoader (3.2.0)
+    NUnit.Runners (3.2.0)
+      NUnit.ConsoleRunner (3.2.0)
+      NUnit.Extension.NUnitProjectLoader (3.2.0)
+      NUnit.Extension.NUnitV2Driver (3.2.0)
+      NUnit.Extension.NUnitV2ResultWriter (3.2.0)
+      NUnit.Extension.VSProjectLoader (3.2.0)
     Octokit (0.18.0)
       Microsoft.Net.Http
     PCLCrypto (1.0.86) - framework: portable-net45+win8+wp8+wpa81
@@ -143,5 +152,5 @@ NUGET
 GITHUB
   remote: fsharp/FAKE
   specs:
-    modules/Octokit/Octokit.fsx (e71048b08b7aefebb3adeaa4518915510d55785c)
+    modules/Octokit/Octokit.fsx (58dce73f9a069ae7fbfbae993f5e6f06ed9218d5)
       Octokit

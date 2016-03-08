@@ -16,7 +16,7 @@ open MBrace.Runtime
 open MBrace.AWS
 open MBrace.AWS.Runtime
 open MBrace.AWS.Runtime.Utilities
-//open MBrace.AWS.Runtime.Arguments
+open MBrace.AWS.Runtime.Arguments
 
 /// A system logger that writes entries to stdout
 type ConsoleLogger = MBrace.Runtime.ConsoleLogger
@@ -42,28 +42,20 @@ type FsPicklerJsonSerializer = MBrace.Runtime.FsPicklerJsonSerializer
 /// Json.NET serializer implementation
 type JsonDotNetSerializer = MBrace.Runtime.JsonDotNetSerializer
 
-///// AWS blob storage utilities
-//type S3Storage =
-//
-//    /// <summary>
-//    ///     Creates a blob storage client object from given connection string
-//    /// </summary>
-//    /// <param name="connectionString">Blob storage connection string</param>
-//    /// <param name="serializer">Serializer for use with store. Defaults to FsPickler binary serializer.</param>
-//    static member FromConnectionString(connectionString : string, [<O;D(null:obj)>]?serializer:ISerializer) : CloudFileSystem =
-//        let blobStore = MBrace.AWS.Store.S3FileStore.Create(connectionString)
-//        let serializer = match serializer with Some s -> s | None -> new FsPicklerBinarySerializer() :> _
-//        new CloudFileSystem(blobStore, serializer)
-//
-//    /// <summary>
-//    ///      Creates a blob storage client object from given account credentials
-//    /// </summary>
-//    /// <param name="accountName">Storage account name.</param>
-//    /// <param name="accountKey">Storage account key.</param>
-//    /// <param name="serializer">Serializer for use with store. Defaults to FsPickler binary serializer.</param>
-//    static member FromCredentials(accountName : string, accountKey : string, [<O;D(null:obj)>]?serializer:ISerializer) : CloudFileSystem =
-//        let account = AWSAccount.Create(new Amazon.Runtime.BasicAWSCredentials(accountName, accountKey), Region.)
-//        AWSBlobStorage.FromConnectionString(account.ConnectionString, ?serializer = serializer)
+/// AWS blob storage utilities
+type S3Storage =
+
+    /// <summary>
+    ///     Creates an S3 client object from given credentials
+    /// </summary>
+    /// <param name="credentials">AWS credentials string.</param>
+    /// <param name="region">AWS region identifier.</param>
+    /// <param name="serializer">Serializer for use with store. Defaults to FsPickler binary serializer.</param>
+    static member FromCredentials(credentials : AWSCredentials, region : AWSRegion, [<O;D(null:obj)>]?serializer:ISerializer) : CloudFileSystem =
+        let account = AWSAccount.Create(credentials.Credentials, region.RegionEndpoint)
+        let s3Store = MBrace.AWS.Store.S3FileStore.Create(account)
+        let serializer = match serializer with Some s -> s | None -> new FsPicklerBinarySerializer() :> _
+        new CloudFileSystem(s3Store, serializer)
 
 /// Local AWS Standalone worker management methods
 [<AutoSerializable(false); AbstractClass; Sealed>]
@@ -97,11 +89,11 @@ type AWSWorker private () =
         let background = defaultArg background false
         let quiet = defaultArg quiet ProcessConfiguration.IsUnix
         let exe = AWSWorker.LocalExecutable
-//        let cli = ArgumentConfiguration.Create(?config = config, ?workingDirectory = workingDirectory, ?maxWorkItems = maxWorkItems, ?logLevel = logLevel, quiet = quiet,
-//                                                ?logfile = logFile, ?workerId = workerId, ?heartbeatInterval = heartbeatInterval, ?heartbeatThreshold = heartbeatThreshold)
-//
-//        let args = ArgumentConfiguration.ToCommandLineArguments(cli)
-        let psi = new ProcessStartInfo(exe, "") //args)
+        let cli = ArgumentConfiguration.Create(?config = config, ?workingDirectory = workingDirectory, ?maxWorkItems = maxWorkItems, ?logLevel = logLevel, quiet = quiet,
+                                                ?logfile = logFile, ?workerId = workerId, ?heartbeatInterval = heartbeatInterval, ?heartbeatThreshold = heartbeatThreshold)
+
+        let args = ArgumentConfiguration.ToCommandLineArguments(cli)
+        let psi = new ProcessStartInfo(exe, args)
         psi.WorkingDirectory <- Path.GetDirectoryName exe
         if background then
             psi.UseShellExecute <- false

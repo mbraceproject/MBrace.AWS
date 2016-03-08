@@ -5,3 +5,4 @@ AWSSDK.DynamoDBv2
 AWSSDK.SQS
 AWSSDK.SimpleNotificationService
 FSharp.DynamoDB
+Argu

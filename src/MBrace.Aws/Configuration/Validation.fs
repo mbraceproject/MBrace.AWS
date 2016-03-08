@@ -56,4 +56,4 @@ module Validate =
         if not <| tryTableName tableName then
             sprintf "Invalid DynamoDB table name '%s', see %s" 
                     tableName "http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Limits.html"
-            |> invalidArg "tableName" 
+            |> invalidArg "tableName"

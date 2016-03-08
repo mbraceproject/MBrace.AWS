@@ -161,7 +161,7 @@ module private LoggerImpl =
                         |> Async.Parallel
                         |> Async.Ignore
 
-                with e -> Console.WriteLine (sprintf "Error writing logs: %O" e)
+                with _ -> ()
                 queue.Clear()
         }
 

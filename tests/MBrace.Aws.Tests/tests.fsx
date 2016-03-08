@@ -24,7 +24,7 @@ open MBrace.AWS.Runtime
 open MBrace.AWS.Store
 
 AWSWorker.LocalExecutable <- __SOURCE_DIRECTORY__ + "/../../bin/MBrace.AWS.StandaloneWorker.exe"
-let config = Configuration.FromCredentialsStore(AWSRegion.EUCentral1, "eirikmbrace")
+let config = Configuration.FromCredentialsStore(AWSRegion.EUCentral1, resourcePrefix = "eirikmbrace")
 
 let cluster = AWSCluster.InitOnCurrentMachine(config, workerCount = 3, logger = ConsoleLogger())
 //let cluster = AWSCluster.Connect(config, logger = ConsoleLogger())

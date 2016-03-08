@@ -38,7 +38,7 @@ module private TableKeySchema =
 type ClusterId =
     {   
         /// Runtime version string
-        Version : string
+        ResourcePrefix : string
 
         S3Account       : AWSAccount
         DynamoDBAccount : AWSAccount
@@ -153,10 +153,8 @@ with
     /// <param name="configuration">Azure cluster configuration object.</param>
     static member Activate(configuration : Configuration) =
         ProcessConfiguration.EnsureInitialized()
-        let version = Version.Parse configuration.Version
-
         {
-            Version              = version.ToString(4)
+            ResourcePrefix       = configuration.ResourcePrefix
                                  
             S3Account            = AWSAccount.Create(configuration.S3Credentials.Credentials, configuration.S3Region.RegionEndpoint)
             DynamoDBAccount      = AWSAccount.Create(configuration.DynamoDBCredentials.Credentials, configuration.DynamoDBRegion.RegionEndpoint)
