@@ -86,7 +86,7 @@ type Configuration(region : AWSRegion, credentials : AWSCredentials, ?resourcePr
     let resourcePrefix = 
         match resourcePrefix with
         | Some rp -> Validate.hostname rp ; rp
-        | None -> sprintf "v%d-%d" defaultVersion.Major defaultVersion.Minor
+        | None -> sprintf "v%dm%d" defaultVersion.Major defaultVersion.Minor
         
     let mkName sep name = sprintf "%s%s%s" name sep resourcePrefix
 
