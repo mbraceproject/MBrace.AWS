@@ -111,11 +111,11 @@ module internal WorkItemRecordImpl =
         |> template.PrecomputeUpdateExpr
 
     let setWorkItemDequeued =
-        <@ fun w t c f (r:WorkItemRecord) ->
+        <@ fun w t f (r:WorkItemRecord) ->
                 SET r.DequeueTime.Value t &&&
                 SET r.Status WorkItemStatus.Dequeued &&&
                 SET r.CurrentWorker.Value w &&&
-                SET r.DeliveryCount c &&&
+                SET r.DeliveryCount (r.DeliveryCount + 1) &&&
                 SET r.FaultInfo f @>
 
         |> template.PrecomputeUpdateExpr

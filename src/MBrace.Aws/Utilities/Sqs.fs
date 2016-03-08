@@ -29,15 +29,11 @@ module private SqsConstants =
 
 [<Sealed; AutoSerializable(false)>]
 type SqsDequeueMessage internal (account : IAmazonSQS, queueUri : string, message : Message) =
-    let receiptHandle = message.ReceiptHandle
-    let receiveCount = 
-        let ok, found = message.Attributes.TryGetValue "ApproximateReceiveCount"
-        if ok then int found else 0
+    let receiptHandle = message.ReceiptHandle // keep receipt copy since property is settable
 
     member __.QueueUri = queueUri
     member __.ReceiptHandle = receiptHandle
     member __.Message = message
-    member __.ReceiveCount = receiveCount
     member __.RenewLock(?timeoutMilliseconds : int) = async {
         let timeout = defaultArg timeoutMilliseconds 30000 |> float |> TimeSpan.FromMilliseconds
         let request = new ChangeMessageVisibilityRequest(queueUri, receiptHandle, int timeout.TotalSeconds)

@@ -29,44 +29,43 @@ type internal MessagingClient =
         | None -> return None
         | Some msg ->
             let workInfo = WorkItemMessage.FromReceivedMessage(msg)
-            logger.Logf LogLevel.Debug "%O : dequeued, receive count = %d" workInfo msg.ReceiveCount
+            logger.Logf LogLevel.Debug "%O : dequeued" workInfo
 
             logger.Logf LogLevel.Debug "%O : starting lock renew loop" workInfo
             let monitor = WorkItemLeaseMonitor.Start(msg, workInfo, logger)
 
             let table = clusterId.GetRuntimeTable<WorkItemRecord>()
-
             try
+                let! oldRecord = table.GetItemAsync(workInfo.TableKey)
+                let faultCount = oldRecord.DeliveryCount
+
                 // determine the fault info for the dequeued work item
-                let! faultInfo = async {
-                    let faultCount = msg.ReceiveCount
+                let faultInfo =
                     match workInfo.TargetWorker with
                     | Some target when target <> localWorkerId.Id -> 
                         // a targeted work item that has been dequeued by a different worker is to be declared faulted
-                        return IsTargetedWorkItemOfDeadWorker(faultCount, new WorkerId(target))
+                        if faultCount > 0 then 
+                            WorkerDeathWhileProcessingWorkItem(faultCount, new WorkerId(target))
+                        else
+                            IsTargetedWorkItemOfDeadWorker(faultCount, new WorkerId(target))
 
-                    | _ when faultCount = 0 -> return NoFault
+                    | _ when faultCount = 0 -> NoFault
                     | _ ->
-                        let! oldRecord = table.GetItemAsync(workInfo.TableKey)
-
                         match oldRecord.FaultInfo with
                         | FaultInfo.FaultDeclaredByWorker -> // a fault exception has been set by the executing worker
                             let lastExn = oldRecord.LastException |> Option.get
                             let lastWorker = new WorkerId(oldRecord.CurrentWorker |> Option.get)
-                            return FaultDeclaredByWorker(faultCount, lastExn, lastWorker)
+                            FaultDeclaredByWorker(faultCount, lastExn, lastWorker)
                         | _ -> 
                             // a worker has died while previously dequeueing the worker
                             // account for cases where worker died before even updating the work item record
                             let previousWorker = defaultArg oldRecord.CurrentWorker "<unknown>"
-                            return WorkerDeathWhileProcessingWorkItem(faultCount, new WorkerId(previousWorker))
-                }
+                            WorkerDeathWhileProcessingWorkItem(faultCount, new WorkerId(previousWorker))
 
                 logger.Logf LogLevel.Debug "%O : extracted fault info %A" workInfo faultInfo
                 logger.Logf LogLevel.Debug "%O : changing status to %A" workInfo WorkItemStatus.Dequeued
 
-                let updateOp = 
-                    setWorkItemDequeued localWorkerId.Id DateTimeOffset.Now
-                                        msg.ReceiveCount (faultInfo.ToEnum())
+                let updateOp = setWorkItemDequeued localWorkerId.Id DateTimeOffset.Now (faultInfo.ToEnum())
 
                 let! _ = table.UpdateItemAsync(workInfo.TableKey, updateOp)
 
