@@ -44,8 +44,8 @@ type ClusterId =
         DynamoDBAccount : AWSAccount
         SQSAccount      : AWSAccount
                
-        WorkItemQueueName     : string // SQS Name
-        WorkItemTopicName     : string // SNS Topic
+        WorkItemQueueName     : string // SQS Queue
+        WorkItemTopicName     : string // SQS Topic
 
         RuntimeS3BucketName   : string // Runtime S3 bucket name
         RuntimeTableName      : string // Runtime DynamoDB table name
@@ -117,14 +117,35 @@ with
     }
 
     member this.ClearRuntimeQueues() = async {
-        let! ct = Async.CancellationToken
-        do!
-            [|
-                this.SQSAccount.SQSClient.CreateQueueAsync(this.WorkItemQueueName, ct) |> Async.AwaitTaskCorrect |> Async.Ignore
-                this.SQSAccount.SNSClient.CreateTopicAsync(this.WorkItemTopicName, ct) |> Async.AwaitTaskCorrect |> Async.Ignore
-            |]
-            |> Async.Parallel
-            |> Async.Ignore
+        let client = this.SQSAccount.SQSClient
+        let deleteQueue (qn : string) = async {
+            let! ct = Async.CancellationToken
+            let! _ = client.DeleteQueueAsync(qn, ct) |> Async.AwaitTaskCorrect
+            return ()
+        }
+
+        let deleteWorkItemQueue() = async {
+            let! ct = Async.CancellationToken
+            let! uri = client.GetQueueUrlAsync(this.WorkItemQueueName, ct) |> Async.AwaitTaskCorrect
+            do! deleteQueue uri.QueueUrl
+        }
+
+        let deleteTopics () = async {
+            let request = new Amazon.SQS.Model.ListQueuesRequest()
+            request.QueueNamePrefix <- this.WorkItemTopicName
+            let! ct = Async.CancellationToken
+            let! queues = client.ListQueuesAsync(request, ct) |> Async.AwaitTaskCorrect
+            do!
+                queues.QueueUrls
+                |> Seq.map deleteQueue
+                |> Async.Parallel
+                |> Async.Ignore
+        }
+
+        let! dqt = deleteWorkItemQueue() |> Async.StartChild
+        do! deleteTopics()
+        let! _ = dqt
+        return ()
     }
 
     /// <summary>

@@ -11,7 +11,6 @@ open Amazon.S3
 open Amazon.SQS
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.DataModel
-open Amazon.SimpleNotificationService
 
 open FSharp.DynamoDB
 
@@ -25,7 +24,6 @@ type private AWSAccountData =
         S3Client        : AmazonS3Client
         DynamoDBClient  : AmazonDynamoDBClient
         SQSClient       : AmazonSQSClient
-        SNSClient       : AmazonSimpleNotificationServiceClient
     }
 
 /// Defines a serializable AWS account descriptor which does not leak credentials
@@ -41,7 +39,6 @@ type AWSAccount private (accountData : AWSAccountData) =
             S3Client = new AmazonS3Client(credentials, region)
             DynamoDBClient = new AmazonDynamoDBClient(credentials, region)
             SQSClient = new AmazonSQSClient(credentials, region)
-            SNSClient = new AmazonSimpleNotificationServiceClient(credentials, region)
         }
 
     static let recoverAccountData (accessKey : string) (region : RegionEndpoint) =
@@ -91,8 +88,6 @@ type AWSAccount private (accountData : AWSAccountData) =
     member __.SQSClient = getAccountData().SQSClient :> IAmazonSQS
     /// Amazon DynamoDB Client instance for account
     member __.DynamoDBClient = getAccountData().DynamoDBClient :> IAmazonDynamoDB
-    /// Amazon SNS Client instance for account
-    member __.SNSClient = getAccountData().SNSClient :> IAmazonSimpleNotificationService
     /// Gets table context using given name and record schema type
     member __.GetTableContext<'Schema>(tableName : string) =
         TableContext.Create<'Schema>(__.DynamoDBClient, tableName, verifyTable = false)
