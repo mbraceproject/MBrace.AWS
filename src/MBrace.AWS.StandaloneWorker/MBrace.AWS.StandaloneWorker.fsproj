@@ -8,7 +8,7 @@
     <ProjectGuid>b36c97d0-928b-4cb0-9f70-79ba47f4c920</ProjectGuid>
     <OutputType>Exe</OutputType>
     <RootNamespace>MBrace.AWS.StandaloneWorker</RootNamespace>
-    <AssemblyName>MBrace.AWS.StandaloneWorker</AssemblyName>
+    <AssemblyName>mbrace.awsworker</AssemblyName>
     <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <TargetFSharpCoreVersion>4.4.0.0</TargetFSharpCoreVersion>

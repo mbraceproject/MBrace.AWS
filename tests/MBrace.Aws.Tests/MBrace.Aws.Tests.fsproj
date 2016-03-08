@@ -69,6 +69,7 @@
     <Compile Include="StoreTests.fs" />
     <Compile Include="AtomTests.fs" />
     <Compile Include="QueueTests.fs" />
+    <Compile Include="CloudTests.fs" />
     <None Include="tests.fsx" />
     <None Include="paket.references" />
     <Content Include="App.config" />

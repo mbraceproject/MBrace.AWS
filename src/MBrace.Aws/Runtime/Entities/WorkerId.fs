@@ -45,7 +45,7 @@ type WorkerRecord =
         HeartbeatInterval : TimeSpan
         HeartbeatThreshold : TimeSpan
         Version : string
-        PerformanceInfo : PerformanceInfo option
+        PerformanceInfo : PerformanceInfo
 
         [<FsPicklerJson>]
         ExecutionStatus : WorkerExecutionStatus
