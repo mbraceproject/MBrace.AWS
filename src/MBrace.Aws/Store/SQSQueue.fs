@@ -35,22 +35,25 @@ type SQSCloudQueue<'T> internal (queueUri, account : AWSAccount) =
 
     [<DataMember(Name = "QueueUri")>]
     let queueUri = queueUri
+
+    let client() = account.SQSClient
     
     interface CloudQueue<'T> with
         member __.Id = queueUri
 
         member __.EnqueueAsync(message : 'T) = 
-            Sqs.Enqueue (account, queueUri, toBase64 message)
+            client().Enqueue (queueUri, toBase64 message)
         
         member __.EnqueueBatchAsync(messages) = async {
             let msgBodies = messages |> Seq.map (fun m -> toBase64 m, None)
-            do! Sqs.EnqueueBatch(account, queueUri, msgBodies)
+            do! client().EnqueueBatch(queueUri, msgBodies)
         }
         
         member __.DequeueAsync(timeout) = async {
+            let client = client()
             match timeout with
             | Some _ ->
-                let! msg = Sqs.TryDequeue(account, queueUri, ?timeoutMilliseconds = timeout)
+                let! msg = client.TryDequeue(queueUri, ?timeoutMilliseconds = timeout)
                 match msg with
                 | Some m -> 
                     do! m.Complete()
@@ -58,7 +61,7 @@ type SQSCloudQueue<'T> internal (queueUri, account : AWSAccount) =
                 | None -> return! Async.Raise(TimeoutException())
             | _ -> 
                 let rec aux _ = async {
-                    let! msg = Sqs.TryDequeue(account, queueUri)
+                    let! msg = client.TryDequeue(queueUri)
                     match msg with
                     | Some m ->
                         do! m.Complete()
@@ -70,15 +73,16 @@ type SQSCloudQueue<'T> internal (queueUri, account : AWSAccount) =
         }
 
         member __.DequeueBatchAsync(maxItems) = async {
-            let! messages = Sqs.DequeueBatch(account, queueUri, maxReceiveCount = maxItems)
-            do! Sqs.DeleteBatch(account, messages)
+            let client = client()
+            let! messages = client.DequeueBatch(queueUri, maxReceiveCount = maxItems)
+            do! client.DeleteBatch(messages)
             return messages
                    |> Seq.map (fun msg -> fromBase64<'T> msg.Message.Body) 
                    |> Seq.toArray
         }
         
         member __.TryDequeueAsync() = async {
-            let! msg = Sqs.TryDequeue(account, queueUri)
+            let! msg = client().TryDequeue(queueUri)
             match msg with
             | Some msg -> 
                 do! msg.Complete()
@@ -87,11 +91,11 @@ type SQSCloudQueue<'T> internal (queueUri, account : AWSAccount) =
         }
 
         member x.GetCountAsync() = async {
-            let! c = Sqs.GetMessageCount(account, queueUri)
+            let! c = client().GetMessageCount(queueUri)
             return int64 c
         }
 
-        member x.Dispose() = Sqs.DeleteQueue(account, queueUri)
+        member x.Dispose() = client().DeleteQueueUri(queueUri)
 
 [<Sealed; DataContract>]
 type SQSCloudQueueProvider private (account : AWSAccount, queuePrefix : string) =

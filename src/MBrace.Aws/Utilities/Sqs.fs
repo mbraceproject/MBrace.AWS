@@ -1,4 +1,5 @@
-﻿namespace MBrace.AWS.Runtime.Utilities
+﻿[<AutoOpen>]
+module MBrace.AWS.Runtime.Utilities.SqsUtils
 
 open System
 open System.Net
@@ -58,17 +59,17 @@ type SqsDequeueMessage internal (account : IAmazonSQS, queueUri : string, messag
     member __.Abandon() = __.RenewLock(timeoutMilliseconds = 0)
 
 
-type Sqs =
-    static member Enqueue (account : AWSAccount, queueUri : string, msgBody, ?attributes) = async {
+type IAmazonSQS with
+    member client.Enqueue (queueUri : string, msgBody : string, ?attributes) = async {
         let req = new SendMessageRequest(QueueUrl = queueUri, MessageBody = msgBody)
         attributes |> Option.iter (fun attr -> req.MessageAttributes <- attr)
         let! ct = Async.CancellationToken
-        do! account.SQSClient.SendMessageAsync(req, ct) 
+        do! client.SendMessageAsync(req, ct) 
             |> Async.AwaitTaskCorrect
             |> Async.Ignore
     }
 
-    static member EnqueueBatch (account : AWSAccount, queueUri : string, messages) = async {
+    member client.EnqueueBatch (queueUri : string, messages) = async {
         let groups = messages |> Seq.chunksOf SqsConstants.maxBatchCount
         
         // TODO: partial failures are not handled right now
@@ -81,12 +82,12 @@ type Sqs =
                 req.Entries.Add e)
 
             let! ct = Async.CancellationToken
-            do! account.SQSClient.SendMessageBatchAsync(req, ct)
+            do! client.SendMessageBatchAsync(req, ct)
                 |> Async.AwaitTaskCorrect
                 |> Async.Ignore
     }
 
-    static member TryDequeue(account : AWSAccount, queueUri : string, ?messageAttributes, ?visibilityTimeout : int, ?timeoutMilliseconds : int) = async {
+    member client.TryDequeue(queueUri : string, ?messageAttributes, ?visibilityTimeout : int, ?timeoutMilliseconds : int) = async {
         let timeout = defaultArg timeoutMilliseconds 20000 |> float |> TimeSpan.FromMilliseconds
         let visibilityTimeout = defaultArg visibilityTimeout 30000 |> float |> TimeSpan.FromMilliseconds
         if timeout > SqsConstants.maxWaitTime then invalidArg "timeoutMilliseconds" "must be at most 20 seconds"
@@ -100,16 +101,16 @@ type Sqs =
         req.WaitTimeSeconds <- int timeout.TotalSeconds
 
         let! ct  = Async.CancellationToken
-        let! res = account.SQSClient.ReceiveMessageAsync(req, ct) |> Async.AwaitTaskCorrect
+        let! res = client.ReceiveMessageAsync(req, ct) |> Async.AwaitTaskCorrect
 
         if res.Messages.Count = 1 then
-            let msg = new SqsDequeueMessage(account.SQSClient, queueUri, res.Messages.[0])
+            let msg = new SqsDequeueMessage(client, queueUri, res.Messages.[0])
             return Some msg
         else 
             return None
     }
 
-    static member DequeueBatch(account : AWSAccount, queueUri : string, ?messageAttributes, ?visibilityTimeout : int, ?maxReceiveCount : int) = async {
+    member client.DequeueBatch(queueUri : string, ?messageAttributes, ?visibilityTimeout : int, ?maxReceiveCount : int) = async {
         let visibilityTimeout = defaultArg visibilityTimeout 30000 |> float |> TimeSpan.FromMilliseconds
         let req = ReceiveMessageRequest(QueueUrl = queueUri)
         req.MaxNumberOfMessages <- defaultArg maxReceiveCount SqsConstants.maxRecvCount
@@ -117,15 +118,15 @@ type Sqs =
         messageAttributes |> Option.iter (fun ma -> req.MessageAttributeNames <- ma)
         
         let! ct  = Async.CancellationToken
-        let! res = account.SQSClient.ReceiveMessageAsync(req, ct) |> Async.AwaitTaskCorrect
+        let! res = client.ReceiveMessageAsync(req, ct) |> Async.AwaitTaskCorrect
         
         return 
             res.Messages 
-            |> Seq.map (fun msg -> new SqsDequeueMessage(account.SQSClient, queueUri, msg))
+            |> Seq.map (fun msg -> new SqsDequeueMessage(client, queueUri, msg))
             |> Seq.toArray
     }
 
-    static member DequeueAll(account : AWSAccount, queueUri : string, ?messageAttributes) = async {
+    member client.DequeueAll(queueUri : string, ?messageAttributes, ?visibilityTimeout : int) = async {
         let msgs = ResizeArray<SqsDequeueMessage>()
 
         // because of the way SQS works, you can get empty receive
@@ -133,7 +134,10 @@ type Sqs =
         // hosts, hence we need to tolerate a number of empty
         // receives with small delay in between
         let rec loop numEmptyReceives = async {
-            let! batch = Sqs.DequeueBatch(account, queueUri, ?messageAttributes = messageAttributes)
+            let! batch = client.DequeueBatch(queueUri,
+                            ?visibilityTimeout = visibilityTimeout,
+                            ?messageAttributes = messageAttributes)
+
             match batch with
             | [||] when numEmptyReceives < 10 -> 
                 do! Async.Sleep 100
@@ -148,7 +152,7 @@ type Sqs =
         return msgs.ToArray()
     }
 
-    static member DeleteBatch (account : AWSAccount, messages : seq<SqsDequeueMessage>) = async {
+    member client.DeleteBatch (messages : seq<SqsDequeueMessage>) = async {
         do!
             messages 
             |> Seq.chunksOf SqsConstants.maxBatchCount
@@ -160,40 +164,26 @@ type Sqs =
                     request.Entries.Add e
 
                 let! ct = Async.CancellationToken
-                let! _response = account.SQSClient.DeleteMessageBatchAsync(request, ct) |> Async.AwaitTaskCorrect
+                let! _response = client.DeleteMessageBatchAsync(request, ct) |> Async.AwaitTaskCorrect
                 return ()})
             |> Async.Parallel
             |> Async.Ignore
     }
 
-    static member GetMessageCount (account : AWSAccount, queueUri : string) = async {
+    member client.GetMessageCount (queueUri : string) = async {
         let req = GetQueueAttributesRequest(QueueUrl = queueUri)
         let attrName = QueueAttributeName.ApproximateNumberOfMessages.Value
         req.AttributeNames.Add(attrName)
 
         let! ct  = Async.CancellationToken
-        let! res = account.SQSClient.GetQueueAttributesAsync(req, ct)
-                   |> Async.AwaitTaskCorrect
-
+        let! res = client.GetQueueAttributesAsync(req, ct) |> Async.AwaitTaskCorrect
         return res.ApproximateNumberOfMessages
     }
 
-    static member DeleteQueue (account : AWSAccount, queueUri : string) = async {
-        let req = DeleteQueueRequest(QueueUrl = queueUri)
-        let! ct = Async.CancellationToken
-        try 
-            do! 
-                account.SQSClient.DeleteQueueAsync(req, ct)
-                |> Async.AwaitTaskCorrect
-                |> Async.Ignore
-
-        with :? QueueDoesNotExistException -> ()
-    }
-
-    static member TryGetQueueUri (account : AWSAccount, queueName : string) = async {
+    member client.TryGetQueueUri (queueName : string) = async {
         let req  = GetQueueUrlRequest(QueueName = queueName)
         let! ct  = Async.CancellationToken
-        let! res = account.SQSClient.GetQueueUrlAsync(req, ct)
+        let! res = client.GetQueueUrlAsync(req, ct)
                    |> Async.AwaitTaskCorrect
                    |> Async.Catch
 
@@ -203,29 +193,51 @@ type Sqs =
         | Choice2Of2 exn -> return! Async.Raise exn
     }
 
-    static member QueueExists (account : AWSAccount, queueName : string) = async {
-        let! queueUri = Sqs.TryGetQueueUri (account, queueName)
+    member client.GetQueueUris(?prefix : string) = async {
+        let req = ListQueuesRequest()
+        prefix |> Option.iter (fun p -> req.QueueNamePrefix <- p)
+        let! ct = Async.CancellationToken
+        let! res = client.ListQueuesAsync(req, ct) |> Async.AwaitTaskCorrect
+        return res.QueueUrls
+    }
+
+    member client.DeleteQueueUri (queueUri : string) = async {
+        let req = DeleteQueueRequest(QueueUrl = queueUri)
+        let! ct = Async.CancellationToken
+        try 
+            do! 
+                client.DeleteQueueAsync(req, ct)
+                |> Async.AwaitTaskCorrect
+                |> Async.Ignore
+
+        with :? QueueDoesNotExistException -> ()
+    }
+
+    member client.QueueNameExists (queueName : string) = async {
+        let! queueUri = client.TryGetQueueUri queueName
         return Option.isSome queueUri
     }
 
-    static member CreateQueue (account : AWSAccount, queueName : string) = async {
+    member client.CreateQueueWithName (queueName : string) = async {
         try
             let req  = CreateQueueRequest(QueueName = queueName)
             let! ct  = Async.CancellationToken
             let! res =
-                account.SQSClient.CreateQueueAsync(req, ct)
+                client.CreateQueueAsync(req, ct)
                 |> Async.AwaitTaskCorrect
 
             return res.QueueUrl
 
         with :? QueueDeletedRecentlyException ->
             do! Async.Sleep 1000
-            return! Sqs.CreateQueue(account, queueName)
+            return! client.CreateQueueWithName queueName
     }
 
-    static member EnsureQueueExists (account : AWSAccount, queueName : string) = async {
-        let! queueUri = Sqs.TryGetQueueUri (account, queueName)
+    member client.EnsureQueueNameExists (queueName : string) = async {
+        let! queueUri = client.TryGetQueueUri queueName
         match queueUri with
-        | Some queueUri -> return queueUri
-        | None -> return! Sqs.CreateQueue (account, queueName)
+        | Some queueUri -> return true, queueUri
+        | None -> 
+            let! queueUri = client.CreateQueueWithName queueName
+            return false, queueUri
     }

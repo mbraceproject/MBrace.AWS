@@ -18,8 +18,13 @@ open FSharp.DynamoDB
 open MBrace.AWS.Runtime
 open MBrace.AWS.Runtime.Utilities
 
+type internal WorkItemQueueSettings =
+    static member VisibilityTimeout = 30000
+    static member RenewInterval = 15000
+
 type internal WorkItemMessage =
     {
+        Version       : Version
         ProcessId     : string
         WorkItemId    : Guid
         BatchIndex    : int option
@@ -33,33 +38,10 @@ type internal WorkItemMessage =
         TableKey.Combined(WorkItemRecord.GetHashKey  __.ProcessId, 
                             WorkItemRecord.GetRangeKey __.WorkItemId)
 
-    member m.ToMessageAttributes() =
-        m |> toBase64
-//        let dict = new Dictionary<_,_>()
-//        let mkStringAttr x = new MessageAttributeValue(StringValue = x)
-//        dict.Add("BlobUri", mkStringAttr m.BlobUri)
-//        dict.Add("ProcessId", mkStringAttr m.ProcessId)
-//        m.BatchIndex |> Option.iter (fun bi -> dict.Add("BatchIndex", mkStringAttr (string bi)))
-//        m.TargetWorker |> Option.iter (fun tw -> dict.Add("TargetWorker", mkStringAttr tw))
-//        string m.WorkItemId, dict
+    member m.ToSqsMessageBody() = toJson m
 
-    static member FromReceivedMessage(message : SqsDequeueMessage) =
-        message.Message.Body |> fromBase64
-//        let msg = message.Message
-//        {
-//            WorkItemId    = Guid.Parse msg.Body
-//            BlobUri       = msg.MessageAttributes.["BlobUri"].StringValue
-//            ProcessId     = msg.MessageAttributes.["ProcessId"].StringValue
-//            BatchIndex    = 
-//                match msg.MessageAttributes.TryFind "BatchIndex" with
-//                | None -> None
-//                | Some av -> av.StringValue |> int |> Some
-//
-//            TargetWorker  = 
-//                match msg.MessageAttributes.TryFind "TargetWorker" with
-//                | None -> None
-//                | Some av -> av.StringValue |> Some
-//        }
+    static member FromDequeuedSqsMessage(message : SqsDequeueMessage) =
+        fromJson<WorkItemMessage> message.Message.Body
 
 type internal LeaseAction =
     | Complete
@@ -73,19 +55,19 @@ type internal WorkItemLeaseMonitor private (message : SqsDequeueMessage, info : 
         match action with
         | None ->
             // hide message from other workers for another 1 min
-            let! res = message.RenewLock(timeoutMilliseconds = 60000) |> Async.Catch
+            let! res = message.RenewLock(timeoutMilliseconds = WorkItemQueueSettings.VisibilityTimeout) |> Async.Catch
 
             match res with
             | Choice1Of2 _ -> 
                 logger.Logf LogLevel.Debug "%A : lock renewed" info
-                do! Async.Sleep 20000
+                do! Async.Sleep WorkItemQueueSettings.RenewInterval
                 return! renewLoop inbox
             | Choice2Of2 (:? ReceiptHandleIsInvalidException) ->
                 logger.Logf LogLevel.Warning "%A : lock lost" info
 
             | Choice2Of2 exn -> 
                 logger.LogError <| sprintf "%A : lock renew failed with %A" info exn
-                do! Async.Sleep 20000
+                do! Async.Sleep WorkItemQueueSettings.RenewInterval
                 return! renewLoop inbox
 
         | Some Complete ->

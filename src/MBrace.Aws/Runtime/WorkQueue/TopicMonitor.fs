@@ -53,7 +53,8 @@ type TopicMonitor private
                     allMessages.Length 
                     worker.Id
 
-                do! queue.EnqueueMessagesBatch(allMessages |> Seq.map WorkItemMessage.FromReceivedMessage)
+                let workItems = allMessages |> Seq.map WorkItemMessage.FromDequeuedSqsMessage
+                do! queue.EnqueueMessagesBatch(workItems)
                 do! subscription.Delete(allMessages)
 
         with e ->

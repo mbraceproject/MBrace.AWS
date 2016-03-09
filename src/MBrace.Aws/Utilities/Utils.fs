@@ -25,15 +25,6 @@ module Utils =
 
     let uri fmt = Printf.ksprintf (fun s -> new Uri(s)) fmt
 
-    let inline nullable< 'T when 'T : struct and 'T : (new : unit -> 'T) and  'T :> ValueType > (value : 'T) = 
-        new Nullable<'T>(value)
-
-    let inline nullableDefault< 'T when 'T : struct and 'T : (new : unit -> 'T) and  'T :> ValueType > = 
-        new Nullable<'T>()
-
-    let (|Null|Nullable|) (value : Nullable<'T>) =
-        if value.HasValue then Nullable(value.Value) else Null
-
     [<RequireQualifiedAccess>]
     module StoreException =
         let checkExn code (e : exn) =
@@ -49,24 +40,20 @@ module Utils =
         let Conflict (e : exn) = checkExn HttpStatusCode.Conflict e
         let NotFound (e : exn) = checkExn HttpStatusCode.NotFound e
 
-    let doIfNotNull f = function
-        | Nullable(x) -> f x
-        | _ -> ()
-
-    let fromBase64<'T> (base64 : string) =
-        let binary = Convert.FromBase64String base64
-        ProcessConfiguration.BinarySerializer.UnPickle<'T>(binary)
-
     let toBase64 (message : 'T) = 
         message
         |> ProcessConfiguration.BinarySerializer.Pickle 
         |> Convert.ToBase64String
 
-    module Option =
-        let ofNullable (x : Nullable<'T>) =
-            match x with
-            | Nullable x -> Some x
-            | _          -> None
+    let fromBase64<'T> (base64 : string) =
+        let binary = Convert.FromBase64String base64
+        ProcessConfiguration.BinarySerializer.UnPickle<'T>(binary)
+
+    let toJson<'T> (message : 'T) =
+        ProcessConfiguration.JsonSerializer.PickleToString(message)
+
+    let fromJson<'T> (json : string) =
+        ProcessConfiguration.JsonSerializer.UnPickleOfString<'T>(json)
 
 
     type IDictionary<'K, 'V> with

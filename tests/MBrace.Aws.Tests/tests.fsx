@@ -49,4 +49,7 @@ let worker = cluster.Workers.[0] :> IWorkerRef
 let proc' = cluster.CreateProcess(Cloud.Sleep 10000, target = worker)
 proc'.Result
 
-let workers = cluster.Run(Cloud.ParallelEverywhere Cloud.CurrentWorker)
+cloud { let! w = Cloud.CurrentWorker in return Some w }
+|> Cloud.ChoiceEverywhere
+|> cluster.Run
+//let workers = cluster.Run(Cloud.ChoiceEverywhere { let! w = Cloud.CurrentWorker )

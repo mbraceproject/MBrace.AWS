@@ -28,7 +28,7 @@ type internal MessagingClient =
         match res with
         | None -> return None
         | Some msg ->
-            let workInfo = WorkItemMessage.FromReceivedMessage(msg)
+            let workInfo = WorkItemMessage.FromDequeuedSqsMessage msg
             logger.Logf LogLevel.Debug "%O : dequeued" workInfo
 
             logger.Logf LogLevel.Debug "%O : starting lock renew loop" workInfo
@@ -97,6 +97,7 @@ type internal MessagingClient =
         // Step 3: send work item message to service bus queue
         let msg : WorkItemMessage = 
             { 
+                Version      = ProcessConfiguration.Version
                 BlobUri      = blobUri
                 WorkItemId   = workItem.Id
                 ProcessId    = workItem.Process.Id
@@ -135,6 +136,7 @@ type internal MessagingClient =
         // Step 3: create work messages and post to service bus queue
         let mkWorkItemMessage (i : int) (workItem : CloudWorkItem) : WorkItemMessage =
             {
+                Version      = ProcessConfiguration.Version
                 BlobUri      = blobUri
                 WorkItemId   = workItem.Id
                 ProcessId    = workItem.Process.Id
@@ -154,15 +156,18 @@ type internal MessagingClient =
 /// Queue client implementation
 [<Sealed; AutoSerializable(false)>]
 type internal Queue (clusterId : ClusterId, queueUri, logger : ISystemLogger) = 
-    let account = clusterId.SQSAccount
-    let queue   = SQSCloudQueue<WorkItemMessage>(queueUri, account) :> CloudQueue<WorkItemMessage>
-
-    let send msg = queue.EnqueueAsync msg
-    let sendBatch msgs = queue.EnqueueBatchAsync msgs
+    let client = clusterId.SQSAccount.SQSClient
     
-    let tryDequeue () = Sqs.TryDequeue(account, queueUri)
+    let tryDequeue () = client.TryDequeue(queueUri, visibilityTimeout = WorkItemQueueSettings.VisibilityTimeout)
+    let send (msg:WorkItemMessage) =
+        let body = msg.ToSqsMessageBody()
+        client.Enqueue(queueUri, body)
 
-    member __.GetMessageCountAsync() = Sqs.GetMessageCount(account, queueUri)
+    let sendBatch (msgs:seq<WorkItemMessage>) =
+        let bodies = msgs |> Seq.map (fun m -> m.ToSqsMessageBody(), None)
+        client.EnqueueBatch(queueUri, bodies)
+
+    member __.GetMessageCountAsync() = client.GetMessageCount(queueUri)
 
     member __.EnqueueBatch(jobs : CloudWorkItem []) = 
         MessagingClient.EnqueueBatch(clusterId, logger, jobs, sendBatch)
@@ -174,21 +179,18 @@ type internal Queue (clusterId : ClusterId, queueUri, logger : ISystemLogger) =
         MessagingClient.TryDequeue(clusterId, logger, workerId, tryDequeue)
 
     member __.EnqueueMessagesBatch(messages : seq<WorkItemMessage>) = async {
-        do! queue.EnqueueBatchAsync(messages)
+        do! sendBatch messages
     }
         
     static member Create(clusterId : ClusterId, logger : ISystemLogger) = async { 
-        let account   = clusterId.SQSAccount
-        let! queueUri = Sqs.TryGetQueueUri(account, clusterId.WorkItemQueueName)
-        match queueUri with
-        | Some queueUri ->
+        let account = clusterId.SQSAccount.SQSClient
+        let! exists, queueUri = account.EnsureQueueNameExists clusterId.WorkItemQueueName
+        if exists then
             logger.LogInfof "Queue %A already exists." clusterId.WorkItemQueueName
-            return new Queue(clusterId, queueUri, logger)
-        | None ->
-            logger.LogInfof "Creating new ServiceBus queue %A" clusterId.WorkItemQueueName
-            // TODO : what should be the default queue attributes?
-            let! queueUri = Sqs.CreateQueue(account, clusterId.WorkItemQueueName)
-            return new Queue(clusterId, queueUri, logger)
+        else
+            logger.LogInfof "Creating new SQS queue %A" clusterId.WorkItemQueueName
+
+        return new Queue(clusterId, queueUri, logger)
     }
 
 [<AutoOpen>]
@@ -200,8 +202,9 @@ module internal TopicUtils =
 type internal Subscription 
         (clusterId      : ClusterId, 
          targetWorkerId : IWorkerId, 
-         logger         : ISystemLogger) = 
-    let account   = clusterId.SQSAccount
+         logger         : ISystemLogger) =
+
+    let client    = clusterId.SQSAccount.SQSClient
     let topic     = clusterId.WorkItemTopicName
     let workerId  = targetWorkerId.Id
     let queueName = getQueueName topic workerId
@@ -210,37 +213,37 @@ type internal Subscription
     // This is to avoid creating new queues unnecessarily,
     // hence the need for tryGetQueueUri
     let tryDequeue () = async {
-        let! qUri = Sqs.TryGetQueueUri(account, queueName)
+        let! qUri = client.TryGetQueueUri queueName
         match qUri with
         | None -> return None
-        | Some uri -> return! Sqs.TryDequeue(account, uri)
+        | Some uri -> return! client.TryDequeue uri
     }
 
     member __.TargetWorkerId = targetWorkerId
 
     member __.GetMessageCountAsync() = async {
-        let! qUri = Sqs.TryGetQueueUri(account, queueName)
+        let! qUri = client.TryGetQueueUri(queueName)
         match qUri with
         | None -> return 0
-        | Some uri -> return! Sqs.GetMessageCount(account, uri)
+        | Some uri -> return! client.GetMessageCount uri
     }
 
     member __.TryDequeue(currentWorker : IWorkerId) = 
         MessagingClient.TryDequeue(clusterId, logger, currentWorker, tryDequeue)
 
     member __.DequeueAllMessagesBatch() = async {
-        let! uri = Sqs.TryGetQueueUri(account, queueName)
+        let! uri = client.TryGetQueueUri(queueName)
         match uri with
-        | Some queueUri -> return! Sqs.DequeueAll(account, queueUri)
+        | Some queueUri -> return! client.DequeueAll(queueUri, visibilityTimeout = WorkItemQueueSettings.VisibilityTimeout)
         | _ -> return [||]
     }
 
-    member __.Delete(messages : seq<SqsDequeueMessage>) = Sqs.DeleteBatch(clusterId.SQSAccount, messages)
+    member __.Delete(messages : seq<SqsDequeueMessage>) = client.DeleteBatch(messages)
 
 /// Topic client implementation as a worker specific SQS queue
 [<Sealed; AutoSerializable(false)>]
 type internal Topic (clusterId : ClusterId, logger : ISystemLogger) = 
-    let account = clusterId.SQSAccount
+    let client = clusterId.SQSAccount.SQSClient
     let topic   = clusterId.WorkItemTopicName
     
     let getQueueUriOrCreate (msg : WorkItemMessage) = async {
@@ -248,16 +251,14 @@ type internal Topic (clusterId : ClusterId, logger : ISystemLogger) =
         // we can safely assume that TargetWorker is Some in this case
         let workerId = Option.get msg.TargetWorker
         let queueName = getQueueName topic workerId
-        let! queueUri = Sqs.TryGetQueueUri(account, queueName)
-        match queueUri with
-        | Some uri -> return uri
-        | _ -> return! Sqs.CreateQueue(account, queueName)
+        let! _, uri = client.EnsureQueueNameExists(queueName)
+        return uri
     }
 
     let enqueue (msg : WorkItemMessage) = async {
         let! queueUri = getQueueUriOrCreate msg
-        let body = msg.ToMessageAttributes()
-        do! Sqs.Enqueue(account, queueUri, body)
+        let body = msg.ToSqsMessageBody()
+        do! client.Enqueue(queueUri, body)
     }
 
     let enqueueBatch (msgs : seq<WorkItemMessage>) = async {
@@ -266,8 +267,8 @@ type internal Topic (clusterId : ClusterId, logger : ISystemLogger) =
             |> Seq.groupBy (fun m -> Option.get m.TargetWorker)
             |> Seq.map (fun (_, msgs) -> async {
                 let! queueUri = getQueueUriOrCreate (Seq.head msgs)
-                let bodies = msgs |> Seq.map (fun m -> let b = m.ToMessageAttributes() in b, None)
-                do! Sqs.EnqueueBatch(account, queueUri, bodies) })
+                let bodies = msgs |> Seq.map (fun m -> let b = m.ToSqsMessageBody() in b, None)
+                do! client.EnqueueBatch(queueUri, bodies) })
             |> Async.Parallel
             |> Async.Ignore
     }
@@ -283,9 +284,9 @@ type internal Topic (clusterId : ClusterId, logger : ISystemLogger) =
 
     member __.Delete(workerId : IWorkerId) = async {
         let queueName = getQueueName topic workerId.Id
-        let! queueUri = Sqs.TryGetQueueUri(account, queueName)
+        let! queueUri = client.TryGetQueueUri(queueName)
         match queueUri with
-        | Some queueUri -> do! Sqs.DeleteQueue(account, queueUri)
+        | Some queueUri -> do! client.DeleteQueueUri(queueUri)
         | None -> return ()
     }
 

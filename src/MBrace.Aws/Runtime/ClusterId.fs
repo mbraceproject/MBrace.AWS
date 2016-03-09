@@ -118,26 +118,19 @@ with
 
     member this.ClearRuntimeQueues() = async {
         let client = this.SQSAccount.SQSClient
-        let deleteQueue (qn : string) = async {
-            let! ct = Async.CancellationToken
-            let! _ = client.DeleteQueueAsync(qn, ct) |> Async.AwaitTaskCorrect
-            return ()
-        }
 
         let deleteWorkItemQueue() = async {
-            let! ct = Async.CancellationToken
-            let! uri = client.GetQueueUrlAsync(this.WorkItemQueueName, ct) |> Async.AwaitTaskCorrect
-            do! deleteQueue uri.QueueUrl
+            let! uri = client.TryGetQueueUri this.WorkItemQueueName
+            match uri with
+            | None -> ()
+            | Some u -> do! client.DeleteQueueUri(u)
         }
 
         let deleteTopics () = async {
-            let request = new Amazon.SQS.Model.ListQueuesRequest()
-            request.QueueNamePrefix <- this.WorkItemTopicName
-            let! ct = Async.CancellationToken
-            let! queues = client.ListQueuesAsync(request, ct) |> Async.AwaitTaskCorrect
+            let! topicUris = client.GetQueueUris(prefix = this.WorkItemTopicName)
             do!
-                queues.QueueUrls
-                |> Seq.map deleteQueue
+                topicUris
+                |> Seq.map client.DeleteQueueUri
                 |> Async.Parallel
                 |> Async.Ignore
         }

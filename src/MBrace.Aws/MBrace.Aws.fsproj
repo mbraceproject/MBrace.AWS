@@ -75,7 +75,6 @@
     <Compile Include="Store\DynamoDBAtom.fs" />
     <Compile Include="Store\SQSQueue.fs" />
     <Compile Include="Runtime\ClusterId.fs" />
-    <Compile Include="Runtime\Metadata.fs" />
     <Compile Include="Runtime\Persist.fs" />
     <Compile Include="Runtime\Entities\Counters.fs" />
     <Compile Include="Runtime\Entities\CancellationEntry.fs" />
