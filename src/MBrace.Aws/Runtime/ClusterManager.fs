@@ -111,9 +111,12 @@ type ClusterManager =
         match systemLogger with Some l -> logger.AttachLogger l |> ignore | None -> ()
 
         let clusterId = ClusterId.Activate configuration
-        logger.LogInfof "Activating cluster configuration:\n\tS3: %s\n\tServiceBus: %s\n\tConfiguration Hash: %s" configuration.S3Credentials.AccessKey configuration.SQSCredentials.AccessKey clusterId.Hash
+        logger.LogInfof "Activating cluster configuration:\n\tS3: %s\n\tDynamoDB: %s\n\tSQS: %s\n\tConfiguration Hash: %s" 
+            configuration.S3Credentials.AccessKey
+            configuration.DynamoDBCredentials.AccessKey 
+            configuration.SQSCredentials.AccessKey clusterId.Hash
 
-        logger.LogInfof "Initializing Azure store entities"
+        logger.LogInfof "Initializing S3 resources"
         do! clusterId.InitializeAllStoreResources(maxRetries = 20, retryInterval = 3000)
 
         logger.LogInfof "Creating MBrace storage primitives"

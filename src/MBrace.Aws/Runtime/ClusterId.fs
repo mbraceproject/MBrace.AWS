@@ -164,7 +164,7 @@ with
     /// <summary>
     ///     Activates a cluster id instance using provided configuration object.
     /// </summary>
-    /// <param name="configuration">Azure cluster configuration object.</param>
+    /// <param name="configuration">AWS cluster configuration object.</param>
     static member Activate(configuration : Configuration) =
         ProcessConfiguration.EnsureInitialized()
         {

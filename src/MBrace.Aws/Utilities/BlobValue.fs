@@ -12,7 +12,7 @@ open MBrace.AWS.Runtime.Utilities
 
 open Amazon.S3.Model
 
-/// Represents a value that has been persisted to blob store
+/// Represents a value that has been persisted to S3
 [<Sealed; DataContract>]
 type BlobValue<'T> internal (account : AWSAccount, bucketName : string, key : string) =    
     [<DataMember(Name = "account")>]
@@ -24,7 +24,7 @@ type BlobValue<'T> internal (account : AWSAccount, bucketName : string, key : st
     [<DataMember(Name = "key")>]
     let key = key
 
-    /// Bucket to blob
+    /// Bucket to blob value
     member __.Bucket = bucketName
 
     /// Key to blob persisting the value

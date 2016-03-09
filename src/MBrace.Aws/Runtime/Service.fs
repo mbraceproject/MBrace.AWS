@@ -103,11 +103,11 @@ type WorkerService (config : Configuration, workerId : string) =
     member this.RegisterAtomProvider(atom : ICloudAtomProvider) = 
         checkStopped () ; customResources <- customResources.Register(atom)
     
-    /// Register a CloudQueueConfiguration instance. Defaults to Service Bus queue implementation with configuration's Service Bus connection string.
+    /// Register a CloudQueueConfiguration instance. Defaults to SQS queue implementation with configuration's SQS connection string.
     member this.RegisterQueueProvider(channel : ICloudQueueProvider) = 
         checkStopped () ; customResources <- customResources.Register(channel)
 
-    /// Register an ICloudChannelProvider instance. Defaults to Service Bus queue implementation with configuration's Service Bus connection string.
+    /// Register an ICloudChannelProvider instance. Defaults to SQS queue implementation with configuration's SQS connection string.
     member this.RegisterDictionaryProvider(dictionary : ICloudDictionaryProvider) = 
         checkStopped () ; customResources <- customResources.Register(dictionary)
 

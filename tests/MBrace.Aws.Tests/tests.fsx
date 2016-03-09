@@ -53,3 +53,24 @@ cloud { let! w = Cloud.CurrentWorker in return Some w }
 |> Cloud.ChoiceEverywhere
 |> cluster.Run
 //let workers = cluster.Run(Cloud.ChoiceEverywhere { let! w = Cloud.CurrentWorker )
+
+let test () = cloud {
+    let! counter = CloudAtom.New 0
+    let worker i = cloud { 
+        if i = 9 then
+            invalidOp "failure"
+        else
+            do! Cloud.Sleep 15000
+            do! CloudAtom.Increment counter |> Local.Ignore
+    }
+
+    try do! Array.init 20 worker |> Cloud.Parallel |> Cloud.Ignore
+    with :? System.InvalidOperationException -> ()
+    return counter
+}
+
+let c = cluster.Run(test())
+
+c.Value
+
+CloudAtom.Increment c |> cluster.RunLocally

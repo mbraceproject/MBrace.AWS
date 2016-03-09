@@ -78,7 +78,7 @@ with
         { AccessKey = creds.AccessKey ; SecretKey = creds.SecretKey }
 
 
-/// Azure Configuration Builder. Used to specify MBrace.AWS cluster storage configuration.
+/// MBrace.AWS Configuration Builder. Used to specify MBrace.AWS cluster storage configuration.
 [<AutoSerializable(true); Sealed; NoEquality; NoComparison>]
 type Configuration(region : AWSRegion, credentials : AWSCredentials, ?resourcePrefix : string) =
     let resourcePrefix = 
@@ -90,15 +90,15 @@ type Configuration(region : AWSRegion, credentials : AWSCredentials, ?resourcePr
         
     let mkName sep name = sprintf "%s%s%s" name sep resourcePrefix
 
-    // Default Service Bus Configuration
+    // Default SQS queue names
     let mutable workItemQueue        = mkName "-" "MBraceWorkItemQueue"
     let mutable workItemTopic        = mkName "-" "MBraceWorkItemTopic"
 
-    // Default Blob Storage Containers
+    // Default S3 bucket names
     let mutable runtimeBucket    = mkName "." "mbraceruntimedata"
     let mutable userDataBucket   = mkName "." "mbraceuserdata"
 
-    // Default Table Storage tables
+    // Default DynamoDB table names
     let mutable userDataTable       = mkName "." "MBraceUserData"
     let mutable runtimeTable        = mkName "." "MBraceRuntimeData"
     let mutable runtimeLogsTable    = mkName "." "MBraceRuntimeLogs"
@@ -123,37 +123,37 @@ type Configuration(region : AWSRegion, credentials : AWSCredentials, ?resourcePr
     /// Specifies wether the cluster should optimize closure serialization. Defaults to true.
     member val OptimizeClosureSerialization = true with get, set
 
-    /// Service Bus work item queue used by the runtime.
+    /// SQS work item queue used by the runtime.
     member __.WorkItemQueue
         with get () = workItemQueue
         and set rq = workItemQueue <- rq
 
-    /// Service Bus work item topic used by the runtime.
+    /// SQS work item topic used by the runtime.
     member __.WorkItemTopic
         with get () = workItemTopic
         and set rt = workItemTopic <- rt
 
-    /// Azure Storage container used by the runtime.
+    /// S3 bucket used by the runtime.
     member __.RuntimeBucket
         with get () = runtimeBucket
         and set rc = Validate.bucketName rc ; runtimeBucket <- rc
 
-    /// Azure Storage container used for user data.
+    /// S3 bucket used for user data.
     member __.UserDataBucket
         with get () = userDataBucket
         and set udb = Validate.bucketName udb ; userDataBucket <- udb
 
-    /// Azure Storage table used by the runtime.
+    /// DynamoDB table used by the runtime.
     member __.RuntimeTable
         with get () = runtimeTable
         and set rt = Validate.tableName rt; runtimeTable <- rt
 
-    /// Azure Storage table used by the runtime for storing logs.
+    /// DynamoDB table used by the runtime for storing logs.
     member __.RuntimeLogsTable
         with get () = runtimeLogsTable
         and set rlt = Validate.tableName rlt ; runtimeLogsTable <- rlt
 
-    /// Azure Storage table used for user data.
+    /// DynamoDB table used for user data.
     member __.UserDataTable
         with get () = userDataTable
         and set udt = Validate.tableName udt ; userDataTable <- udt

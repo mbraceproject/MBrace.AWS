@@ -146,7 +146,7 @@ module private LoggerImpl =
         | Flush of AsyncReplyChannel<unit>
         | Log   of 'Entry
 
-    /// Local agent that writes batches of log entries to table store
+    /// Local agent that writes batches of log entries to DynamoDB
     [<AutoSerializable(false)>]
     type DynamoDBLogWriter<'Entry> (table : TableContext<'Entry>, timespan : TimeSpan) =
         let queue = new Queue<'Entry> ()

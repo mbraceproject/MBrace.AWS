@@ -12,7 +12,7 @@ open MBrace.AWS.Runtime.Arguments
 
 module StandaloneWorker =
 
-    /// Recommended main method for running a standalone Azure worker 
+    /// Recommended main method for running a standalone AWS worker 
     /// with provided command line arguments
     let main (args : string []) : int =
         try

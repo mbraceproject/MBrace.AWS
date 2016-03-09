@@ -133,10 +133,11 @@ type AWSCluster private (manager : ClusterManager, faultPolicy : FaultPolicy opt
     static do ProcessConfiguration.InitAsClient()
     let hashId = manager.ClusterId.Hash
 
-    /// Gets the AWS storage account name used by the cluster
+    /// Gets the AWS S3 account name used by the cluster
     member this.S3Account = manager.Configuration.S3Credentials
-    /// Gets the AWS service bus account name used by the cluster
+    /// Gets the AWS SQS account name used by the cluster
     member this.SQSAccount = manager.Configuration.SQSCredentials
+    /// Gets the AWS DynamoDB account name used by the cluster
     member this.DynamoDBAccount = manager.Configuration.DynamoDBCredentials
     /// Cluster configuration hash identifier
     member this.Hash = hashId
@@ -284,19 +285,6 @@ type AWSCluster private (manager : ClusterManager, faultPolicy : FaultPolicy opt
     static member Connect (config : Configuration, [<O;D(null:obj)>]?clientId : string, [<O;D(null:obj)>]?faultPolicy : FaultPolicy, [<O;D(null:obj)>]?logger : ISystemLogger, [<O;D(null:obj)>]?logLevel : LogLevel) : AWSCluster =
         AWSCluster.ConnectAsync(config, ?clientId = clientId, ?faultPolicy = faultPolicy, ?logger = logger, ?logLevel = logLevel)
         |> Async.RunSync
-
-//    /// <summary>
-//    ///     Connects to an MBrace-on-AWS cluster as identified by provided store and service bus connection strings.
-//    ///     If successful returns a management handle object to the cluster.
-//    /// </summary>
-//    /// <param name="storageConnectionString">AWS Storage connection string.</param>
-//    /// <param name="serviceBusConnectionString">AWS Service Bus connection string.</param>
-//    /// <param name="clientId">MBrace.AWS client instance identifier.</param>
-//    /// <param name="faultPolicy">The default fault policy to be used by the cluster. Defaults to NoRetry.</param>
-//    /// <param name="logger">Custom logger to attach in client.</param>
-//    /// <param name="logLevel">Logger verbosity level.</param>
-//    static member Connect(storageConnectionString : string, serviceBusConnectionString : string, [<O;D(null:obj)>]?clientId : string, [<O;D(null:obj)>]?faultPolicy : FaultPolicy, [<O;D(null:obj)>]?logger : ISystemLogger, [<O;D(null:obj)>]?logLevel : LogLevel) : AWSCluster = 
-//        AWSCluster.Connect(new Configuration(storageConnectionString, serviceBusConnectionString), ?clientId = clientId, ?faultPolicy = faultPolicy, ?logger = logger, ?logLevel = logLevel)
 
     /// <summary>
     ///     Initialize a new local runtime instance with supplied worker count and return a handle.

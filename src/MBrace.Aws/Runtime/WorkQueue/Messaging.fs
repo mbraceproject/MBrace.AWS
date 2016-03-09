@@ -85,16 +85,16 @@ type internal MessagingClient =
              allowNewSifts : bool, 
              send          : WorkItemMessage -> Async<unit>) = async { 
 
-        // Step 1: Persist work item payload to blob store
+        // Step 1: Persist work item payload to S3
         let blobUri = sprintf "workItem/%s/%s" workItem.Process.Id (fromGuid workItem.Id)
         do! S3Persist.PersistClosure<MessagePayload>(clusterId, Single workItem, blobUri, allowNewSifts)
         let! size = S3Persist.GetPersistedClosureSize(clusterId, blobUri)
 
-        // Step 2: create record entry in table store
+        // Step 2: create record entry in DynamoDB
         let record = WorkItemRecord.FromCloudWorkItem(workItem, size)
         let! _ = clusterId.GetRuntimeTable<WorkItemRecord>().PutItemAsync(record, itemDoesNotExist)
 
-        // Step 3: send work item message to service bus queue
+        // Step 3: send work item message to SQS
         let msg : WorkItemMessage = 
             { 
                 Version      = ProcessConfiguration.Version
@@ -118,7 +118,7 @@ type internal MessagingClient =
         // silent discard if empty
         if jobs.Length = 0 then return () else
 
-        // Step 1: persist payload to blob store
+        // Step 1: persist payload to S3
         let headJob = jobs.[0]
         let blobUri = sprintf "workItem/%s/batch/%s" headJob.Process.Id (fromGuid headJob.Id)
         do! S3Persist.PersistClosure<MessagePayload>(clusterId, Batch jobs, blobUri, allowNewSifts = false)
@@ -133,7 +133,7 @@ type internal MessagingClient =
             |> Seq.map table.BatchPutItemsAsync
             |> Async.Parallel
 
-        // Step 3: create work messages and post to service bus queue
+        // Step 3: create work messages and post to S3
         let mkWorkItemMessage (i : int) (workItem : CloudWorkItem) : WorkItemMessage =
             {
                 Version      = ProcessConfiguration.Version
