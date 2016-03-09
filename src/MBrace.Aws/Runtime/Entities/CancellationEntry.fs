@@ -1,7 +1,7 @@
 ﻿namespace MBrace.AWS.Runtime
 
 open System
-open System.Collections.Generic
+open System.Collections.Concurrent
 open System.Runtime.Serialization
 
 open MBrace.Core.Internals
@@ -43,7 +43,7 @@ module private CancellationEntryImpl =
     let private template = RecordTemplate.Define<CancellationEntry>()
 
     let isNotCancelled = template.PrecomputeConditionalExpr <@ fun c -> c.IsCancellationRequested = false @>
-    let cancelOp = template.PrecomputeUpdateExpr <@ fun c -> { c with IsCancellationRequested = true ; Children = [placeHolder] } @>
+    let cancelOp = template.PrecomputeUpdateExpr <@ fun c -> { c with IsCancellationRequested = true } @>
     let addChild = template.PrecomputeUpdateExpr <@ fun ch c -> { c with Children = ch :: c.Children } @>
 
 [<Sealed; DataContract>]
@@ -57,13 +57,13 @@ type internal DynamoDBCancellationEntry (clusterId : ClusterId, uuid : string) =
         member x.UUID: string = uuid
 
         member x.Cancel(): Async<unit> = async {
-            let visited = new HashSet<string>()
+            let table = getTable()
+            let visited = new ConcurrentDictionary<string, unit>()
             let rec walk id = async {
-                if not <| visited.Contains id then
-                    let! e = getTable().UpdateItemAsync(TableKey.Hash id, cancelOp, returnLatest = false)
+                if visited.TryAdd(id, ()) then
+                    let! e = table.UpdateItemAsync(TableKey.Hash id, cancelOp, returnLatest = false)
                     if e.IsCancellationRequested then ()
                     else
-                        let _ = visited.Add id
                         do! e.Children' |> Seq.map walk |> Async.Parallel |> Async.Ignore
             }
 
