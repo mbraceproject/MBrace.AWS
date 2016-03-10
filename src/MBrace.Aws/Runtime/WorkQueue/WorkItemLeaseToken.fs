@@ -20,7 +20,7 @@ open MBrace.AWS.Runtime.Utilities
 
 type internal WorkItemQueueSettings =
     static member VisibilityTimeout = 30000
-    static member RenewInterval = 15000
+    static member RenewInterval = 10000
 
 type internal WorkItemMessage =
     {
@@ -54,20 +54,21 @@ type internal WorkItemLeaseMonitor private (message : SqsDequeueMessage, info : 
         let! action = inbox.TryReceive(timeout = 60)
         match action with
         | None ->
+            do! Async.Sleep WorkItemQueueSettings.RenewInterval
+
             // hide message from other workers for another 1 min
             let! res = message.RenewLock(timeoutMilliseconds = WorkItemQueueSettings.VisibilityTimeout) |> Async.Catch
 
             match res with
             | Choice1Of2 _ -> 
                 logger.Logf LogLevel.Debug "%A : lock renewed" info
-                do! Async.Sleep WorkItemQueueSettings.RenewInterval
                 return! renewLoop inbox
+
             | Choice2Of2 (:? ReceiptHandleIsInvalidException) ->
                 logger.Logf LogLevel.Warning "%A : lock lost" info
 
             | Choice2Of2 exn -> 
                 logger.LogError <| sprintf "%A : lock renew failed with %A" info exn
-                do! Async.Sleep WorkItemQueueSettings.RenewInterval
                 return! renewLoop inbox
 
         | Some Complete ->
