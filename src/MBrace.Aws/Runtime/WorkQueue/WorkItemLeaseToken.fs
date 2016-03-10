@@ -56,7 +56,7 @@ type internal WorkItemLeaseMonitor private (message : SqsDequeueMessage, info : 
         | None ->
             do! Async.Sleep WorkItemQueueSettings.RenewInterval
 
-            // hide message from other workers for another 1 min
+            // hide message from other workers for another 30 seconds
             let! res = message.RenewLock(timeoutMilliseconds = WorkItemQueueSettings.VisibilityTimeout) |> Async.Catch
 
             match res with
