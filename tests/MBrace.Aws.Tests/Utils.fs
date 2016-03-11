@@ -85,7 +85,8 @@ type ClusterSession(config : MBrace.AWS.Configuration, localWorkerCount : int, ?
     let mutable state = None
 
     let attachWorkers (cluster : AWSCluster) =
-        cluster.AttachLocalWorkers(workerCount = localWorkerCount, logLevel = LogLevel.Debug, heartbeatThreshold = heartbeatThreshold, quiet = false)
+        cluster.AttachLocalWorkers(workerCount = localWorkerCount, logLevel = LogLevel.Debug, 
+                    heartbeatThreshold = heartbeatThreshold, quiet = false, maxWorkItems = 16)
 
     member __.Start () =
         lock lockObj (fun () ->

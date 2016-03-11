@@ -3,7 +3,7 @@ NUGET
   remote: https://www.nuget.org/api/v2
   specs:
     Argu (2.1)
-    AWSSDK.Core (3.1.5)
+    AWSSDK.Core (3.1.5.1)
       Microsoft.Net.Http (>= 2.2.29) - framework: portable-net45+win8+wp8+wpa81
       PCLCrypto (>= 1.0.2.15130) - framework: portable-net45+win8+wp8+wpa81
       PCLStorage (>= 1.0.2) - framework: portable-net45+win8+wp8+wpa81
@@ -26,31 +26,31 @@ NUGET
       FSharpVSPowerTools.Core (>= 2.3.0 < 2.4.0)
     FSharpVSPowerTools.Core (2.3.0)
       FSharp.Compiler.Service (>= 2.0.0.3)
-    FsPickler (1.8.0)
-    FsPickler.Json (1.8.0)
-      FsPickler (1.8.0)
+    FsPickler (1.8.1)
+    FsPickler.Json (1.8.1)
+      FsPickler (1.8.1)
       Newtonsoft.Json (>= 6.0.5)
-    MBrace.Core (1.0.19)
-    MBrace.Flow (1.0.19)
-      FSharp.Core
-      MBrace.Core (1.0.19)
+    MBrace.Core (1.1.2)
+    MBrace.Flow (1.1.2)
+      FSharp.Core (>= 3.0.0)
+      MBrace.Core (1.1.2)
       Streams (>= 0.4.0 < 0.5.0)
-    MBrace.Runtime (1.0.19)
+    MBrace.Runtime (1.1.2)
       FsPickler (>= 1.8.0 < 1.9.0)
       FsPickler.Json (>= 1.8.0 < 1.9.0)
-      MBrace.Core (1.0.19)
+      MBrace.Core (1.1.2)
       Vagabond (>= 0.12.7 < 0.13.0)
-    MBrace.Tests (1.0.19)
+    MBrace.Tests (1.1.2)
       FsCheck (>= 2.0.1)
-      MBrace.Core (1.0.19)
-      MBrace.Flow (1.0.19)
+      MBrace.Core (1.1.2)
+      MBrace.Flow (1.1.2)
       NUnit (>= 2.6.0 < 3.0.0)
-    Microsoft.Bcl (1.1.10)
+    Microsoft.Bcl (1.1.10) - framework: net10, net11, net20, net30, net35, net40, net40, portable-net45+win8+wp8+wpa81
       Microsoft.Bcl.Build (>= 1.0.14)
     Microsoft.Bcl.Async (1.0.168) - framework: portable-net45+win8+wp8+wpa81
       Microsoft.Bcl (>= 1.1.8)
-    Microsoft.Bcl.Build (1.0.21) - import_targets: false
-    Microsoft.Net.Http (2.2.29)
+    Microsoft.Bcl.Build (1.0.21) - import_targets: false, framework: net10, net11, net20, net30, net35, net40, net40, portable-net45+win8+wp8+wpa81
+    Microsoft.Net.Http (2.2.29) - framework: net10, net11, net20, net30, net35, net40, net40, portable-net45+win8+wp8+wpa81
       Microsoft.Bcl (>= 1.1.10)
       Microsoft.Bcl.Build (>= 1.0.14)
     Mono.Cecil (0.9.6.1)
@@ -70,7 +70,7 @@ NUGET
       NUnit.Extension.NUnitV2ResultWriter (3.2.0)
       NUnit.Extension.VSProjectLoader (3.2.0)
     Octokit (0.18.0)
-      Microsoft.Net.Http
+      Microsoft.Net.Http  - framework: net10, net11, net20, net30, net35, net40, net40
     PCLCrypto (1.0.86) - framework: portable-net45+win8+wp8+wpa81
       Mono.Security (>= 3.2.3.0 < 4.0) - framework: >= net40
       Validation (>= 2.0.6 < 3.0)

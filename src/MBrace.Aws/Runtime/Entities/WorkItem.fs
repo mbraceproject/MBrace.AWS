@@ -47,6 +47,8 @@ type WorkItemRecord =
         [<FsPicklerJson>]
         LastException : ExceptionDispatchInfo option
 
+        CancellationToken : string option
+
         EnqueueTime : DateTimeOffset
         DequeueTime : DateTimeOffset option
         StartTime : DateTimeOffset option
@@ -59,6 +61,9 @@ with
     static member GetHashKey (procId) = "cloudProcess:" + procId
     static member GetRangeKey (workItemId : Guid) = "workItem:" + workItemId.ToString()
 
+    member __.GetCancellationToken(clusterId : ClusterId) =
+        DynamoDBCancellationToken.FromUUID(clusterId, __.CancellationToken)
+
     static member FromCloudWorkItem(workItem : CloudWorkItem, size : int64) =
         {
             ProcessId = WorkItemRecord.GetHashKey workItem.Process.Id
@@ -67,6 +72,7 @@ with
             Type = workItem.WorkItemType
             Status = WorkItemStatus.Enqueued
             TypeName = PrettyPrinters.Type.prettyPrintUntyped workItem.Type
+            CancellationToken = DynamoDBCancellationToken.ToUUID workItem.CancellationToken
             FaultInfo = FaultInfo.NoFault
             Size = size
             CurrentWorker = None

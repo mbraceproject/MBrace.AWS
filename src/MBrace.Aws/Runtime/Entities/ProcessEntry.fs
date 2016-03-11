@@ -31,8 +31,7 @@ module private ProcessEntryImpl =
             CompletionTime : DateTimeOffset option
             Completed : bool
 
-            [<FsPicklerBinary>]
-            CancellationTokenSource : ICloudCancellationTokenSource
+            CancellationToken : string option
             Dependencies : AssemblyId []
             [<FsPicklerBinary>]
             AdditionalResources : ResourceRegistry option
@@ -55,7 +54,7 @@ module private ProcessEntryImpl =
                 Status = CloudProcessStatus.Created
                 Type = info.ReturnType.Bytes
                 TypeName = info.ReturnTypeName
-                CancellationTokenSource = info.CancellationTokenSource
+                CancellationToken = DynamoDBCancellationToken.ToUUID info.CancellationTokenSource
                 AdditionalResources = info.AdditionalResources
                 ResultUri = None
             }
@@ -65,10 +64,10 @@ module private ProcessEntryImpl =
             return! clusterId.GetRuntimeTable<CloudProcessRecord>().GetItemAsync(key)
         }
 
-        member record.ToCloudProcessInfo() =
+        member record.ToCloudProcessInfo(clusterId : ClusterId) =
             {
                 Name = record.Name
-                CancellationTokenSource = record.CancellationTokenSource
+                CancellationTokenSource = DynamoDBCancellationToken.FromUUID(clusterId, record.CancellationToken)
                 Dependencies = record.Dependencies
                 AdditionalResources = record.AdditionalResources
                 ReturnTypeName = record.TypeName

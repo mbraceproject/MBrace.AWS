@@ -33,7 +33,7 @@ module private CancellationEntryImpl =
             Children : string list
         }
     with
-        static member Init() =
+        static member CreateNew() =
             let id = "cancellationToken:" + guid()
             { Id = id ; IsCancellationRequested = false ; Children = [placeHolder] }
 
@@ -80,21 +80,30 @@ type internal DynamoDBCancellationEntry (clusterId : ClusterId, uuid : string) =
             return record.IsCancellationRequested
         }
 
+
+type internal DynamoDBCancellationToken =
+    static member ToUUID(token : CloudCancellationToken) =
+        let _ = token.ElevateToGlobal()
+        token.GlobalId
+
+    static member FromUUID(clusterId : ClusterId, uuid : string option) =
+        match uuid with
+        | None -> CloudCancellationToken.Canceled
+        | Some uuid ->
+            let entry = new DynamoDBCancellationEntry(clusterId, uuid)
+            CloudCancellationToken.FromEntry entry
+        
+
 [<Sealed; AutoSerializable(true)>]
 type DynamoDBCancellationTokenFactory private (clusterId : ClusterId) =
 
     let getTable() = clusterId.GetRuntimeTable<CancellationEntry>()
 
     interface ICancellationEntryFactory with
-        member x.CreateCancellationEntry(): Async<ICancellationEntry> = async {
-            let entry = CancellationEntry.Init()
-            let! _ = getTable().PutItemAsync(entry)
-            return new DynamoDBCancellationEntry(clusterId, entry.Id) :> ICancellationEntry
-        }
-        
-        member x.TryCreateLinkedCancellationEntry(parents: ICancellationEntry []): Async<ICancellationEntry option> = async {
+
+        member x.TryCreateCancellationEntry(parents: ICancellationEntry []): Async<ICancellationEntry option> = async {
             let table = getTable()
-            let entry = CancellationEntry.Init()
+            let entry = CancellationEntry.CreateNew()
             let updateParent (parent : ICancellationEntry) = async {
                 let key = TableKey.Hash parent.UUID
                 let expr = addChild entry.Id

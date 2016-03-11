@@ -23,14 +23,28 @@ type internal MessagingClient =
              logger        : ISystemLogger, 
              localWorkerId : IWorkerId, 
              dequeue       : unit -> Async<SqsDequeueMessage option>) 
-            : Async<ICloudWorkItemLeaseToken option> = async { 
-        let! res = dequeue()
+            : Async<ICloudWorkItemLeaseToken option> = async {
+
+        // quickly discard messages that have already been canceled
+        let rec dequeueCanceled() = async {
+            let! res = dequeue()
+            match res with
+            | None -> return None
+            | Some msg ->
+                let workInfo = WorkItemMessage.FromDequeuedSqsMessage msg
+                if workInfo.GetCancellationToken(clusterId).IsCancellationRequested then
+                    logger.Logf LogLevel.Debug "%O : discarding canceled work item." workInfo
+                    let! _ = Async.StartChild(msg.Complete())
+                    return! dequeueCanceled()
+                else
+                    return Some(workInfo, msg)
+        }
+
+        let! res = dequeueCanceled()
         match res with
         | None -> return None
-        | Some msg ->
-            let workInfo = WorkItemMessage.FromDequeuedSqsMessage msg
+        | Some (workInfo, msg) ->
             logger.Logf LogLevel.Debug "%O : dequeued" workInfo
-
             logger.Logf LogLevel.Debug "%O : starting lock renew loop" workInfo
             let monitor = WorkItemLeaseMonitor.Start(msg, workInfo, logger)
 
@@ -102,6 +116,7 @@ type internal MessagingClient =
                 WorkItemId   = workItem.Id
                 ProcessId    = workItem.Process.Id
                 TargetWorker = workItem.TargetWorker |> Option.bind (fun x -> Some x.Id)
+                CancellationToken = workItem.CancellationToken |> DynamoDBCancellationToken.ToUUID
                 BatchIndex   = None
             }
 
@@ -141,6 +156,7 @@ type internal MessagingClient =
                 WorkItemId   = workItem.Id
                 ProcessId    = workItem.Process.Id
                 TargetWorker = workItem.TargetWorker |> Option.bind (fun x -> Some x.Id)
+                CancellationToken = workItem.CancellationToken |> DynamoDBCancellationToken.ToUUID
                 BatchIndex   = Some i
             }
 

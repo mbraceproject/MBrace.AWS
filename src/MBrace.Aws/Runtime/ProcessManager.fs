@@ -28,7 +28,8 @@ type CloudProcessManager private (clusterId : ClusterId, logger : ISystemLogger)
             let deleteProc() = async {
                 let procKey = getProcKey procId
                 let! proc = processTable.DeleteItemAsync(procKey)
-                proc.CancellationTokenSource.Cancel()
+                let info = proc.ToCloudProcessInfo(clusterId)
+                info.CancellationTokenSource.Cancel()
                 return ()
             }
 
@@ -70,7 +71,7 @@ type CloudProcessManager private (clusterId : ClusterId, logger : ISystemLogger)
             let! records = processTable.QueryAsync(procHashKeyCondition)
             return records 
                    |> Seq.map(fun r ->
-                        new CloudProcessEntry(clusterId, r.Id, r.ToCloudProcessInfo()) 
+                        new CloudProcessEntry(clusterId, r.Id, r.ToCloudProcessInfo(clusterId)) 
                         :> ICloudProcessEntry) 
                    |> Seq.toArray
         }
@@ -78,7 +79,7 @@ type CloudProcessManager private (clusterId : ClusterId, logger : ISystemLogger)
         member __.TryGetProcessById(procId: string) = async {
             try
                 let! record = processTable.GetItemAsync(getProcKey procId)
-                let entry = new CloudProcessEntry(clusterId, procId, record.ToCloudProcessInfo())
+                let entry = new CloudProcessEntry(clusterId, procId, record.ToCloudProcessInfo(clusterId))
                 return Some (entry :> _)
 
             with :? ResourceNotFoundException -> return None

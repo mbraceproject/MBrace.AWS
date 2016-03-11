@@ -8,6 +8,7 @@ open System.Runtime.Serialization
 
 open Microsoft.FSharp.Control
 
+open MBrace.Core
 open MBrace.Core.Internals
 open MBrace.Runtime
 open MBrace.Runtime.Utils
@@ -30,9 +31,10 @@ type internal WorkItemMessage =
         BatchIndex    : int option
         TargetWorker  : string option
         BlobUri       : string
+        CancellationToken : string option
     }
 
-    override this.ToString() = sprintf "leaseinfo:%A" this.WorkItemId
+    override this.ToString() = sprintf "workItem:%O" this.WorkItemId
 
     member __.TableKey = 
         TableKey.Combined(WorkItemRecord.GetHashKey  __.ProcessId, 
@@ -42,6 +44,9 @@ type internal WorkItemMessage =
 
     static member FromDequeuedSqsMessage(message : SqsDequeueMessage) =
         fromJson<WorkItemMessage> message.Message.Body
+
+    member __.GetCancellationToken(clusterId) = 
+        DynamoDBCancellationToken.FromUUID(clusterId, __.CancellationToken)
 
 type internal LeaseAction =
     | Complete
@@ -173,6 +178,6 @@ type internal WorkItemLeaseToken =
                     TypeName       = workRecord.TypeName
                     FaultInfo      = faultInfo
                     MessageInfo    = info
-                    ProcessInfo    = processRecord.ToCloudProcessInfo()
+                    ProcessInfo    = processRecord.ToCloudProcessInfo clusterId
                }
     }
