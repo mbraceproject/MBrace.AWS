@@ -3,6 +3,7 @@
 open System
 open System.Collections.Generic
 open System.Runtime.Serialization
+open System.Text.RegularExpressions
 
 open MBrace.Core.Internals
 open MBrace.Runtime
@@ -16,6 +17,13 @@ open FSharp.DynamoDB
 
     [<Literal>]
     let private placeHolder = "head"
+
+    let toKey (index:int) = sprintf "item%d" index
+    let private kr = new Regex("item([0-9]+)", RegexOptions.Compiled)
+    let fromKey (key:string) = 
+        let m = kr.Match(key)
+        if m.Success then m.Groups.[1].Value |> int
+        else invalidOp <| sprintf "invalid ResultAggregator key '%s'" key
 
     [<ConstantRangeKey("RangeKey", "ResultAggregator")>]
     type ResultAggregatorEntry =
@@ -35,7 +43,7 @@ open FSharp.DynamoDB
         member __.Uris =
             __.AggregatedUris
             |> Seq.filter (fun i -> i.Key <> placeHolder)
-            |> Seq.sortBy (fun i -> i.Key)
+            |> Seq.sortBy (fun i -> fromKey i.Key)
             |> Seq.map (fun i -> i.Value)
         
 
@@ -85,7 +93,7 @@ type ResultAggregator<'T> internal (clusterId : ClusterId, hashKey : string, siz
         member this.SetResult(index: int, value: 'T, _workerId : IWorkerId): Async<bool> = async { 
             let uri = sprintf "%s/%s" hashKey (guid())
             do! S3Persist.PersistClosure(clusterId, value, uri, allowNewSifts = false)
-            let id = sprintf "item%d" index
+            let id = toKey index
             let! item = getTable().UpdateItemAsync(TableKey.Hash hashKey, 
                                                     addEntry id uri, 
                                                     precondition = entryNotExists id)
