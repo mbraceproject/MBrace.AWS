@@ -9,7 +9,7 @@ open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.DocumentModel
 open Amazon.DynamoDBv2.Model
 
-open FSharp.DynamoDB
+open FSharp.AWS.DynamoDB
 
 open MBrace.Core.Internals
 open MBrace.Runtime.Utils.Retry

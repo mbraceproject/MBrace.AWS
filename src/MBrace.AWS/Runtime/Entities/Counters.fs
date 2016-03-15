@@ -8,7 +8,7 @@ open MBrace.AWS.Runtime
 open MBrace.AWS.Runtime.Utilities
 open MBrace.AWS
 
-open FSharp.DynamoDB
+open FSharp.AWS.DynamoDB
 
 [<AutoOpen>]
 module private CounterImpl =

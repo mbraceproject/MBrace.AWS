@@ -8,7 +8,7 @@ open System.Text.RegularExpressions
 
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
-open FSharp.DynamoDB
+open FSharp.AWS.DynamoDB
 
 open MBrace.Core
 open MBrace.Core.Internals

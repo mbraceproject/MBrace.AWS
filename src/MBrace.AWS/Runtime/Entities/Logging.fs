@@ -15,7 +15,7 @@ open MBrace.Runtime.Utils.PrettyPrinters
 open MBrace.AWS
 open MBrace.AWS.Runtime.Utilities
 
-open FSharp.DynamoDB
+open FSharp.AWS.DynamoDB
 
 [<AutoOpen>]
 module LoggerExtensions =

@@ -4,7 +4,7 @@ open System
 open System.IO
 open System.Threading.Tasks
 
-open FSharp.DynamoDB
+open FSharp.AWS.DynamoDB
 
 open MBrace.Core
 open MBrace.Core.Internals

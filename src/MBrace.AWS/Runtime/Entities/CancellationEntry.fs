@@ -10,7 +10,7 @@ open MBrace.AWS.Runtime
 open MBrace.AWS.Runtime.Utilities
 open MBrace.AWS
 
-open FSharp.DynamoDB
+open FSharp.AWS.DynamoDB
 
 // Implements an DynamoDB based ICloudCancellationEntry:
 // an entity that can be canceled and which supports child entities.

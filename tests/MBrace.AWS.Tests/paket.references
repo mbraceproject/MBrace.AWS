@@ -5,4 +5,4 @@ MBrace.Tests
 AWSSDK.S3
 AWSSDK.DynamoDBv2
 AWSSDK.SQS
-FSharp.DynamoDB
+FSharp.AWS.DynamoDB

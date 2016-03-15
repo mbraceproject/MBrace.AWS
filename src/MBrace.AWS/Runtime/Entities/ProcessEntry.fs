@@ -3,7 +3,7 @@
 open System
 open System.Runtime.Serialization
 
-open FSharp.DynamoDB
+open FSharp.AWS.DynamoDB
 
 open Nessos.FsPickler
 open Nessos.Vagabond

@@ -12,7 +12,7 @@ open Amazon.SQS
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.DataModel
 
-open FSharp.DynamoDB
+open FSharp.AWS.DynamoDB
 
 open MBrace.Runtime.Utils
 

@@ -8,7 +8,7 @@ open Amazon.DynamoDBv2
 open Amazon.S3
 open Amazon.SQS
 
-open FSharp.DynamoDB
+open FSharp.AWS.DynamoDB
 
 open MBrace.Core.Internals
 open MBrace.Runtime

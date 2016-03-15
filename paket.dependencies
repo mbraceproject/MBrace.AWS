@@ -15,6 +15,6 @@ nuget AWSSDK.S3 ~> 3.0
 nuget AWSSDK.DynamoDBv2 ~> 3.0
 nuget AWSSDK.SQS ~> 3.0
 nuget Argu ~> 2.0
-nuget FSharp.DynamoDB prerelease
+nuget FSharp.AWS.DynamoDB prerelease
 
 github fsharp/FAKE modules/Octokit/Octokit.fsx

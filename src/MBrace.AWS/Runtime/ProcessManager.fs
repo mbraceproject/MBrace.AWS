@@ -5,7 +5,7 @@ open System.Runtime.Serialization
 
 open Nessos.FsPickler
 
-open FSharp.DynamoDB
+open FSharp.AWS.DynamoDB
 
 open MBrace.Core
 open MBrace.Core.Internals

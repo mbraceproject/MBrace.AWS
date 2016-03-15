@@ -2,7 +2,7 @@
 
 open System
 
-open FSharp.DynamoDB
+open FSharp.AWS.DynamoDB
 
 open MBrace.Core
 open MBrace.Core.Internals

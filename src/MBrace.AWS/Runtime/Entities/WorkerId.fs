@@ -6,7 +6,7 @@ open MBrace.Runtime
 open MBrace.Runtime.Utils.PerformanceMonitor
 open MBrace.AWS.Runtime.Utilities
 
-open FSharp.DynamoDB
+open FSharp.AWS.DynamoDB
 
 [<AutoSerializable(true)>]
 type WorkerId internal (workerId : string) = 

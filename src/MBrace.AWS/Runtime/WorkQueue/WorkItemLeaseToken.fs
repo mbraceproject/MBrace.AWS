@@ -14,7 +14,7 @@ open MBrace.Runtime
 open MBrace.Runtime.Utils
 
 open Amazon.SQS.Model
-open FSharp.DynamoDB
+open FSharp.AWS.DynamoDB
 
 open MBrace.AWS.Runtime
 open MBrace.AWS.Runtime.Utilities
