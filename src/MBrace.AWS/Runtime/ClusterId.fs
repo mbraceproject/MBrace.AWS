@@ -148,11 +148,12 @@ with
     /// <param name="retryInterval">Retry sleep interval. Defaults to 3000ms.</param>
     member this.InitializeAllStoreResources(?maxRetries : int, ?retryInterval : int) = async {
         let createBucket name = this.S3Account.S3Client.CreateBucketIfNotExistsSafe(name, ?maxRetries = maxRetries, ?retryInterval = retryInterval)
+        let throughput = new ProvisionedThroughput(25L, 25L)
         do!
             [|  
-                this.GetRuntimeTable<DefaultKeySchema>().VerifyTableAsync(createIfNotExists = true)
-                this.GetUserDataTable<DefaultKeySchema>().VerifyTableAsync(createIfNotExists = true)
-                this.GetRuntimeLogsTable<DefaultKeySchema>().VerifyTableAsync(createIfNotExists = true)
+                this.GetRuntimeTable<DefaultKeySchema>().VerifyTableAsync(createIfNotExists = true, provisionedThroughput = throughput)
+                this.GetUserDataTable<DefaultKeySchema>().VerifyTableAsync(createIfNotExists = true, provisionedThroughput = throughput)
+                this.GetRuntimeLogsTable<DefaultKeySchema>().VerifyTableAsync(createIfNotExists = true, provisionedThroughput = throughput)
 
                 createBucket this.RuntimeS3BucketName
                 createBucket this.UserDataS3BucketName

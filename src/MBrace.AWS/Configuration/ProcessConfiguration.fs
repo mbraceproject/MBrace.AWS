@@ -30,6 +30,7 @@ type ProcessConfiguration private () =
     static let initGlobalState workDir populateDirs isClientInstance =
         lock isInitialized (fun () ->
             if not isInitialized.Value then
+                do CustomPicklers.registerCustomPicklers()
                 do ServicePointManager.DefaultConnectionLimit <- 512
                 do ServicePointManager.Expect100Continue <- false
                 do ServicePointManager.UseNagleAlgorithm <- false

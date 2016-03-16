@@ -109,7 +109,6 @@ type WorkerManager private (clusterId : ClusterId, logger : ISystemLogger) =
     interface IWorkerManager with
         member __.DeclareWorkerStatus(workerId : IWorkerId, status : WorkerExecutionStatus) = async {
             logger.LogInfof "Changing worker %O status to %A" workerId status
-
             let! _ = getTable().UpdateItemAsync(getKey workerId, updateExecutionStatus status)
             return ()
         }

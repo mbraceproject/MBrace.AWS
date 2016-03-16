@@ -208,7 +208,6 @@ module private LoggerImpl =
         /// </param>
         static member Create(table : TableContext<'Entry>, ?timespan : TimeSpan) = async {
             let timespan = defaultArg timespan (TimeSpan.FromMilliseconds 500.)
-            do! table.VerifyTableAsync(createIfNotExists = true)
             return new DynamoDBLogWriter<'Entry>(table, timespan)
         }
 
