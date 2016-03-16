@@ -28,6 +28,15 @@ module private SqsConstants =
     // SQS limits you to up to 20 seconds of long polling wait time
     let maxWaitTime = TimeSpan.FromSeconds 20.
 
+[<AutoOpen>]
+module private SqsUtils =
+
+    let (|QueueNotFoundException|_|) (e : Exception) =
+        match e with
+        | :? QueueDoesNotExistException -> Some ()
+        | :? AmazonSQSException as e when e.Message.Contains "queue does not exist" -> Some ()
+        | _ -> None
+
 [<Sealed; AutoSerializable(false)>]
 type SqsDequeueMessage internal (account : IAmazonSQS, queueUri : string, message : Message) =
     let receiptHandle = message.ReceiptHandle // keep receipt copy since property is settable
@@ -189,7 +198,7 @@ type IAmazonSQS with
 
         match res with
         | Choice1Of2 res -> return Some res.QueueUrl
-        | Choice2Of2 (:? QueueDoesNotExistException) -> return None
+        | Choice2Of2 QueueNotFoundException -> return None
         | Choice2Of2 exn -> return! Async.Raise exn
     }
 
@@ -210,7 +219,7 @@ type IAmazonSQS with
                 |> Async.AwaitTaskCorrect
                 |> Async.Ignore
 
-        with :? QueueDoesNotExistException -> ()
+        with QueueNotFoundException -> ()
     }
 
     member client.QueueNameExists (queueName : string) = async {
