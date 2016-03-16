@@ -44,4 +44,4 @@ let mkWebResponsePickler (r:IPicklerResolver) =
 
 
 let registerCustomPicklers() =
-    FsPickler.RegisterPicklerFactory({ new IPicklerFactory<_> with member __.Create r = mkWebResponsePickler r })
+    FsPickler.RegisterPicklerFactory<IWebResponseData> mkWebResponsePickler
