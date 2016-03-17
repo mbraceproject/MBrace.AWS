@@ -13,23 +13,30 @@ NUGET
       AWSSDK.Core (>= 3.1.4.3 < 3.2.0)
     AWSSDK.SQS (3.1.0.6)
       AWSSDK.Core (>= 3.1.4.3 < 3.2.0)
-    FAKE (4.22.3)
+    FAKE (4.22.6)
     FsCheck (2.2.4)
       FSharp.Core (>= 3.1.2.5)
     FSharp.AWS.DynamoDB (0.1.1-beta)
       AWSSDK.DynamoDBv2 (>= 3.1.1.5)
       Unquote (>= 3.1.1)
-    FSharp.Compiler.Service (2.0.0.6)
+    FSharp.Compiler.Service (1.3.1.2)
     FSharp.Core (4.0.0.1)
-    FSharp.Formatting (2.14.0)
-      FSharp.Compiler.Service (>= 2.0.0.3 < 2.1.0)
-      FSharpVSPowerTools.Core (>= 2.3.0 < 2.4.0)
-    FSharpVSPowerTools.Core (2.3.0)
-      FSharp.Compiler.Service (>= 2.0.0.3)
+    FSharp.Formatting (2.10.0)
+      FSharp.Compiler.Service (>= 0.0.87)
+      FSharpVSPowerTools.Core (1.8.0)
+    FSharpVSPowerTools.Core (1.8.0)
+      FSharp.Compiler.Service (>= 0.0.87)
     FsPickler (2.0.0)
     FsPickler.Json (2.0.0)
       FsPickler (2.0.0)
       Newtonsoft.Json (>= 6.0.5)
+    MathNet.Numerics (3.7.1)
+      TaskParallelLibrary (>= 1.0.2856) - framework: net35
+    MathNet.Numerics.FSharp (3.7.1)
+      FSharp.Core (>= 3.1.2.1)
+      MathNet.Numerics (3.7.1)
+    MathNet.Numerics.MKL.Win-x64 (1.8.0)
+      MathNet.Numerics (>= 2.4.0)
     MBrace.Core (1.1.6)
     MBrace.Flow (1.1.6)
       FSharp.Core (>= 3.0.0)
@@ -134,6 +141,7 @@ NUGET
       System.Threading.Tasks (>= 4.0.0) - framework: dnxcore50
     System.Threading.Tasks (4.0.10)
       System.Runtime (>= 4.0.0) - framework: dnxcore50
+    TaskParallelLibrary (1.0.2856) - framework: net35
     Unquote (3.1.1)
     Vagabond (0.12.9)
       FsPickler (>= 2.0.0 < 2.1.0)
@@ -150,5 +158,5 @@ NUGET
 GITHUB
   remote: fsharp/FAKE
   specs:
-    modules/Octokit/Octokit.fsx (fa8d99c82c05e048e918a405a478b62db2e70c56)
+    modules/Octokit/Octokit.fsx (3c2f89312b7b5a2048cb8eab991c7d1708136cc8)
       Octokit

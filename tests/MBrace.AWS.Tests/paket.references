@@ -6,3 +6,4 @@ AWSSDK.S3
 AWSSDK.DynamoDBv2
 AWSSDK.SQS
 FSharp.AWS.DynamoDB
+FSharp.Compiler.Service
