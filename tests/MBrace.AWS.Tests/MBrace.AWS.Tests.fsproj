@@ -70,6 +70,7 @@
     <Compile Include="AtomTests.fs" />
     <Compile Include="QueueTests.fs" />
     <Compile Include="CloudTests.fs" />
+    <Compile Include="RuntimeTests.fs" />
     <Compile Include="CloudFlowTests.fs" />
     <None Include="tests.fsx" />
     <None Include="paket.references" />
