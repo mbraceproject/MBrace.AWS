@@ -22,6 +22,7 @@ open MBrace.AWS.Runtime.Utilities
 type internal WorkItemQueueSettings =
     static member VisibilityTimeout = 30000
     static member RenewInterval = 10000
+    static member DequeueTimeout = 500
 
 type internal WorkItemMessage =
     {

@@ -137,7 +137,7 @@ type internal CloudProcessEntry (clusterId : ClusterId, processId : string, proc
         member this.WaitAsync(): Async<unit> = async {
             let! record = CloudProcessRecord.GetProcessRecord(clusterId, processId)
             // result uri has been populated, hence computation has completed
-            if Option.isNone record.ResultUri then return ()
+            if Option.isSome record.ResultUri then return ()
             else
                 do! Async.Sleep 200
                 return! (this :> ICloudProcessEntry).WaitAsync()

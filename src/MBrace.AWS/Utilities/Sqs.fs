@@ -28,14 +28,11 @@ module private SqsConstants =
     // SQS limits you to up to 20 seconds of long polling wait time
     let maxWaitTime = TimeSpan.FromSeconds 20.
 
-[<AutoOpen>]
-module private SqsUtils =
-
-    let (|QueueNotFoundException|_|) (e : Exception) =
-        match e with
-        | :? QueueDoesNotExistException -> Some ()
-        | :? AmazonSQSException as e when e.Message.Contains "queue does not exist" -> Some ()
-        | _ -> None
+let (|QueueNotFoundException|_|) (e : Exception) =
+    match e with
+    | :? QueueDoesNotExistException -> Some ()
+    | :? AmazonSQSException as e when e.Message.Contains "queue does not exist" -> Some ()
+    | _ -> None
 
 [<Sealed; AutoSerializable(false)>]
 type SqsDequeueMessage internal (account : IAmazonSQS, queueUri : string, message : Message) =
@@ -71,6 +68,7 @@ type SqsDequeueMessage internal (account : IAmazonSQS, queueUri : string, messag
 type IAmazonSQS with
     member client.Enqueue (queueUri : string, msgBody : string, ?attributes) = async {
         let req = new SendMessageRequest(QueueUrl = queueUri, MessageBody = msgBody)
+        req.DelaySeconds <- 0
         attributes |> Option.iter (fun attr -> req.MessageAttributes <- attr)
         let! ct = Async.CancellationToken
         do! client.SendMessageAsync(req, ct) 
@@ -87,6 +85,7 @@ type IAmazonSQS with
             let req = SendMessageBatchRequest(QueueUrl = queueUri)
             group |> Seq.iteri (fun i (body,attrs) -> 
                 let e = new SendMessageBatchRequestEntry(string i, body)
+                e.DelaySeconds <- 0
                 attrs |> Option.iter (fun a -> e.MessageAttributes <- a)
                 req.Entries.Add e)
 
@@ -229,8 +228,8 @@ type IAmazonSQS with
 
     member client.CreateQueueWithName (queueName : string) = async {
         try
-            let req  = CreateQueueRequest(QueueName = queueName)
-            let! ct  = Async.CancellationToken
+            let req = CreateQueueRequest(QueueName = queueName)
+            let! ct = Async.CancellationToken
             let! res =
                 client.CreateQueueAsync(req, ct)
                 |> Async.AwaitTaskCorrect

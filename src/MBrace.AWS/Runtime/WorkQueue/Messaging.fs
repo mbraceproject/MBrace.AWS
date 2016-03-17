@@ -171,10 +171,13 @@ type internal MessagingClient =
 
 /// Queue client implementation
 [<Sealed; AutoSerializable(false)>]
-type internal Queue (clusterId : ClusterId, queueUri, logger : ISystemLogger) = 
+type internal Queue private (clusterId : ClusterId, queueUri : string, logger : ISystemLogger) = 
     let client = clusterId.SQSAccount.SQSClient
     
-    let tryDequeue () = client.TryDequeue(queueUri, visibilityTimeout = WorkItemQueueSettings.VisibilityTimeout)
+    let tryDequeue () = client.TryDequeue(queueUri, 
+                                            visibilityTimeout = WorkItemQueueSettings.VisibilityTimeout,
+                                            timeoutMilliseconds = WorkItemQueueSettings.DequeueTimeout)
+
     let send (msg:WorkItemMessage) =
         let body = msg.ToSqsMessageBody()
         client.Enqueue(queueUri, body)
@@ -209,48 +212,90 @@ type internal Queue (clusterId : ClusterId, queueUri, logger : ISystemLogger) =
         return new Queue(clusterId, queueUri, logger)
     }
 
-[<AutoOpen>]
-module internal TopicUtils =
-    let getQueueName topic workerId = topic + "-" + workerId
-
 /// Topic subscription client implemented as a worker specific SQS queue
 [<Sealed; AutoSerializable(false)>]
-type internal Subscription 
-        (clusterId      : ClusterId, 
-         targetWorkerId : IWorkerId, 
-         logger         : ISystemLogger) =
+type internal Subscription internal (clusterId : ClusterId, workerId : string, logger : ISystemLogger) =
+    static let getQueueName topic workerId = topic + "-" + workerId
 
     let client    = clusterId.SQSAccount.SQSClient
     let topic     = clusterId.WorkItemTopicName
-    let workerId  = targetWorkerId.Id
     let queueName = getQueueName topic workerId
+    let mutable queueUri = None
 
-    // NOTE: the worker specific queue is created on push. 
-    // This is to avoid creating new queues unnecessarily,
-    // hence the need for tryGetQueueUri
-    let tryDequeue () = async {
-        let! qUri = client.TryGetQueueUri queueName
-        match qUri with
-        | None -> return None
-        | Some uri -> return! client.TryDequeue uri
+    let tryGetQueueUri() = async {
+        match queueUri with
+        | Some _ -> return queueUri
+        | None ->
+            let! uri = client.TryGetQueueUri queueName
+            if Option.isSome uri then queueUri <- uri
+            return uri
     }
 
-    member __.TargetWorkerId = targetWorkerId
+    let getQueueUriOrCreate () = async {
+        match queueUri with
+        | Some uri -> return uri
+        | None ->
+            let! uri = client.CreateQueueWithName queueName
+            queueUri <- Some uri
+            return uri
+    }
+
+    member __.WorkerId = workerId
 
     member __.GetMessageCountAsync() = async {
-        let! qUri = client.TryGetQueueUri(queueName)
+        let! qUri = tryGetQueueUri()
         match qUri with
         | None -> return 0
-        | Some uri -> return! client.GetMessageCount uri
+        | Some uri -> 
+            try return! client.GetMessageCount uri
+            with QueueNotFoundException -> return 0
     }
 
-    member __.TryDequeue(currentWorker : IWorkerId) = 
-        MessagingClient.TryDequeue(clusterId, logger, currentWorker, tryDequeue)
+    member __.TryDequeue(currentWorker : IWorkerId) = async {
+        let tryDequeue() = async {
+            let! qUri = tryGetQueueUri()
+            match qUri with
+            | None -> return None
+            | Some uri -> 
+                try 
+                    return! client.TryDequeue(uri,
+                                visibilityTimeout = WorkItemQueueSettings.VisibilityTimeout,
+                                timeoutMilliseconds = WorkItemQueueSettings.DequeueTimeout)
+                with QueueNotFoundException -> return None
+        }
+        
+        return! MessagingClient.TryDequeue(clusterId, logger, currentWorker, tryDequeue)
+    }
+
+    member __.Enqueue(msg : WorkItemMessage) = async {
+        try
+            let! queueUri = getQueueUriOrCreate()
+            do! client.Enqueue(queueUri, msg.ToSqsMessageBody())
+        with QueueNotFoundException ->
+            queueUri <- None
+            do! __.Enqueue(msg)
+    }
+
+    member __.EnqueueBatch(msgs : seq<WorkItemMessage>) = async {
+        let bodies = msgs |> Seq.map (fun m -> m.ToSqsMessageBody(), None) |> Seq.toArray
+        let rec aux () = async {
+            try
+                let! queueUri = getQueueUriOrCreate()
+                do! client.EnqueueBatch(queueUri, bodies)
+            with QueueNotFoundException ->
+                queueUri <- None
+                do! aux ()
+        }
+
+        do! aux ()
+    }
 
     member __.DequeueAllMessagesBatch() = async {
-        let! uri = client.TryGetQueueUri(queueName)
+        let! uri = tryGetQueueUri()
         match uri with
-        | Some queueUri -> return! client.DequeueAll(queueUri, visibilityTimeout = WorkItemQueueSettings.VisibilityTimeout)
+        | Some queueUri -> 
+            try return! client.DequeueAll(queueUri, visibilityTimeout = WorkItemQueueSettings.VisibilityTimeout)
+            with QueueNotFoundException -> return [||]
         | _ -> return [||]
     }
 
@@ -258,39 +303,28 @@ type internal Subscription
 
 /// Topic client implementation as a worker specific SQS queue
 [<Sealed; AutoSerializable(false)>]
-type internal Topic (clusterId : ClusterId, logger : ISystemLogger) = 
-    let client = clusterId.SQSAccount.SQSClient
-    let topic   = clusterId.WorkItemTopicName
-    
-    let getQueueUriOrCreate (msg : WorkItemMessage) = async {
-        // since this internal class is only called by the WorkItemQueue
-        // we can safely assume that TargetWorker is Some in this case
-        let workerId = Option.get msg.TargetWorker
-        let queueName = getQueueName topic workerId
-        let! _, uri = client.EnsureQueueNameExists(queueName)
-        return uri
-    }
+type internal Topic private (clusterId : ClusterId, logger : ISystemLogger) = 
+
+    let getSubscription = concurrentMemoize (fun id -> new Subscription(clusterId, id, logger))
 
     let enqueue (msg : WorkItemMessage) = async {
-        let! queueUri = getQueueUriOrCreate msg
-        let body = msg.ToSqsMessageBody()
-        do! client.Enqueue(queueUri, body)
+        let subscription = getSubscription (Option.get msg.TargetWorker)
+        do! subscription.Enqueue(msg)
     }
 
     let enqueueBatch (msgs : seq<WorkItemMessage>) = async {
         do!
             msgs
             |> Seq.groupBy (fun m -> Option.get m.TargetWorker)
-            |> Seq.map (fun (_, msgs) -> async {
-                let! queueUri = getQueueUriOrCreate (Seq.head msgs)
-                let bodies = msgs |> Seq.map (fun m -> let b = m.ToSqsMessageBody() in b, None)
-                do! client.EnqueueBatch(queueUri, bodies) })
+            |> Seq.map (fun (id, msgs) -> async {
+                let subscription = getSubscription id
+                do! subscription.EnqueueBatch(msgs) })
             |> Async.Parallel
             |> Async.Ignore
     }
 
     member this.GetSubscription(subscriptionId : IWorkerId) = 
-        new Subscription(clusterId, subscriptionId, logger)
+        getSubscription subscriptionId.Id
         
     member this.EnqueueBatch(jobs : CloudWorkItem []) : Async<unit> = 
         MessagingClient.EnqueueBatch(clusterId, logger, jobs, enqueueBatch)
@@ -298,13 +332,5 @@ type internal Topic (clusterId : ClusterId, logger : ISystemLogger) =
     member this.Enqueue(workItem : CloudWorkItem, allowNewSifts : bool) = 
         MessagingClient.Enqueue(clusterId, logger, workItem, allowNewSifts, enqueue)
 
-    member __.Delete(workerId : IWorkerId) = async {
-        let queueName = getQueueName topic workerId.Id
-        let! queueUri = client.TryGetQueueUri(queueName)
-        match queueUri with
-        | Some queueUri -> do! client.DeleteQueueUri(queueUri)
-        | None -> return ()
-    }
-
-    static member Create(clusterId, logger : ISystemLogger) = 
+    static member Create(clusterId : ClusterId, logger : ISystemLogger) = 
         new Topic(clusterId, logger)
