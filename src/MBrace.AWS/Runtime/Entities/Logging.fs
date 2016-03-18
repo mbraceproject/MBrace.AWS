@@ -216,10 +216,14 @@ module private LoggerImpl =
         }
 
 
+    /// Log polling state for specific source
     type private LogPollState =
         {
+            /// Max recorded message id
             mutable MaxRecordedId : int64
+            /// Last recorded date for specific source
             mutable LastDate : DateTimeOffset
+            /// Missing message id's that are less than the current max recorded id
             OutstandingEntries : HashSet<int64>
         }
 
