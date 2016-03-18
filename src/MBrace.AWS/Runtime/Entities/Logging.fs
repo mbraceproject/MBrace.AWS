@@ -37,24 +37,22 @@ module private LoggerImpl =
     let mkCloudLogHashKey (procId : string) = 
         sprintf "%s%s" cloudlogPrefix procId
 
-    let mkRangeKey (loggerUUID : Guid) (id : int64) = 
-        sprintf "%s-%x" (loggerUUID.ToString("N")) id
+    let mkRangeKey (uuid:Guid) (id:int64) =
+        sprintf "%s-%x" (uuid.ToString("N")) id
 
-    let inline tryParseRangeKey 
-            (uuid     : byref<string>) 
-            (id       : byref<int64>) 
-            (rangeKey : string) =
-        ignore uuid // squash strange unused argument warning by the F# compiler
-        let tokens = rangeKey.Split('-')
-        match tokens with
+    let inline tryParseRangeKey (uuid : byref<string>) (id : byref<int64>) (rangeKey : string) =
+        match rangeKey.Split('-') with
         | [| uuid'; id' |] ->
             uuid <- uuid'
             Int64.TryParse(id', NumberStyles.AllowHexSpecifier, null, &id)
         | _ -> false
 
+    /// DynamoDB log entry identifier
     type IDynamoLogEntry =
-        abstract LogTime : DateTimeOffset
+        /// Uniquely identifies process that generated the log entry
         abstract RangeKey : string
+        /// Time of logged entry
+        abstract LogTime : DateTimeOffset
 
     type SystemLogRecord =
         {
@@ -218,23 +216,46 @@ module private LoggerImpl =
         }
 
 
+    type private LogPollState =
+        {
+            mutable MaxRecordedId : int64
+            mutable LastDate : DateTimeOffset
+            OutstandingEntries : HashSet<int64>
+        }
+
     /// Defines a local polling agent for subscribing table log events
     [<AutoSerializable(false)>]
     type DynamoDBLogPoller<'Entry when 'Entry :> IDynamoLogEntry> private (fetch : DateTimeOffset option -> Async<'Entry[]>, interval : TimeSpan) =
         let event = new Event<'Entry> ()
-        let loggerInfo = new Dictionary<string, int64> ()
-        let isNewLogEntry (e : 'Entry) =
-            let mutable uuid = null
-            let mutable id = 0L
-            if tryParseRangeKey &uuid &id e.RangeKey then
-                let mutable lastId = 0L
-                let ok = loggerInfo.TryGetValue(uuid, &lastId)
-                if ok && id <= lastId then false
+        let loggerInfo = new Dictionary<string, LogPollState> (10)
+        let isNewLogEntry (e : 'Entry, uuid : string, id : int64) =
+            let pollState = 
+                let ok, s = loggerInfo.TryGetValue uuid
+                if ok then s 
                 else
-                    loggerInfo.[uuid] <- id
-                    true
-            else
-                false
+                    let s = { MaxRecordedId = -1L ; OutstandingEntries = HashSet<int64> () ; LastDate = DateTimeOffset.MinValue }
+                    loggerInfo.Add(uuid, s)
+                    s
+
+            match id - pollState.MaxRecordedId with
+            | diff when diff > 0L ->
+                // mark any incoming log entry id's that have yet to appear in the table
+                for i = 1 to int (diff - 1L) do 
+                    let _ = pollState.OutstandingEntries.Add(pollState.MaxRecordedId + int64 i)
+                    ()
+
+                pollState.MaxRecordedId <- id
+                pollState.LastDate <- e.LogTime
+                true
+
+            | diff when diff < 0L -> pollState.OutstandingEntries.Remove id
+            | _ -> false
+
+        let cleanup (minDate : DateTimeOffset) =
+            for kv in loggerInfo do
+                if kv.Value.LastDate < minDate then 
+                    let _ = loggerInfo.Remove(kv.Key)
+                    ()
 
         let rec pollLoop (threshold : DateTimeOffset option) = async {
             do! Async.Sleep (int interval.TotalMilliseconds)
@@ -247,17 +268,31 @@ module private LoggerImpl =
 
             | Choice1Of2 logs ->
                 let mutable isEmpty = true
-                let mutable minDate = DateTimeOffset()
+                let mutable minDate = DateTimeOffset.MinValue
+                let processedLogs =
+                    logs
+                    |> Seq.choose(fun l ->
+                        let mutable loggerId = Unchecked.defaultof<_>
+                        let mutable msgId = Unchecked.defaultof<_>
+                        if tryParseRangeKey &loggerId &msgId l.RangeKey then Some(l,loggerId,msgId)
+                        else None)
+                    |> Seq.sortBy (fun (l,loggerId,msgId) -> l.LogTime, loggerId, msgId)
+                    |> Seq.filter isNewLogEntry
+                    |> Seq.map (fun (l,_,_) -> l)
+
                 do 
-                    for l in logs |> Seq.sortBy (fun l -> l.LogTime, l.RangeKey) |> Seq.filter isNewLogEntry do
-                        isEmpty <- false
+                    for l in processedLogs do
+                        if isEmpty then
+                            minDate <- l.LogTime
+                            isEmpty <- false
+
                         try event.Trigger l with _ -> ()
-                        if minDate < l.LogTime then minDate <- l.LogTime
 
                 if isEmpty then
                     return! pollLoop threshold
                 else
-                    let threshold = minDate - interval - interval - interval - interval
+                    let threshold = minDate - interval.MultiplyBy(5)
+//                    cleanup threshold
                     return! pollLoop (Some threshold)
         }
 

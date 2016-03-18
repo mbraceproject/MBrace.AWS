@@ -56,6 +56,9 @@ module Utils =
         ProcessConfiguration.JsonSerializer.UnPickleOfString<'T>(json)
 
 
+    type TimeSpan with
+        member ts.MultiplyBy(factor : int) = new TimeSpan(int64 factor * ts.Ticks)
+
     type IDictionary<'K, 'V> with
         member d.TryFind k =
             let ok, found = d.TryGetValue k
