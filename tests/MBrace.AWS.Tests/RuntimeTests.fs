@@ -205,7 +205,7 @@ type ``AWS Runtime Tests`` (config : Configuration, localWorkers : int) =
 
 
     [<Test>]
-    member __.``2. Fault Tolerance : faulted process status `` () =
+    member __.``2. Fault Tolerance : faulted process status`` () =
         repeat repeats (fun () ->
             let runtime = session.Cluster
             let f = runtime.Store.CloudAtom.Create(false)

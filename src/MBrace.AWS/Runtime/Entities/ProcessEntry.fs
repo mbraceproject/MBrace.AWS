@@ -221,6 +221,7 @@ type internal CloudProcessEntry (clusterId : ClusterId, processId : string, proc
                 let status = 
                     match result with 
                     | Completed _ -> CloudProcessStatus.Completed
+                    | Exception edi when edi.IsFaultException -> CloudProcessStatus.Faulted
                     | Exception _ -> CloudProcessStatus.UserException
                     | Cancelled _ -> CloudProcessStatus.Canceled
 
