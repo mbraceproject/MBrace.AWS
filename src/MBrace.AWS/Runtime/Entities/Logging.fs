@@ -292,7 +292,7 @@ module private LoggerImpl =
                     return! pollLoop threshold
                 else
                     let threshold = minDate - interval.MultiplyBy(5)
-//                    cleanup threshold
+                    cleanup threshold
                     return! pollLoop (Some threshold)
         }
 
