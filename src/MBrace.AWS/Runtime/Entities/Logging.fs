@@ -3,6 +3,7 @@
 open System
 open System.Collections.Generic
 open System.Collections.Concurrent
+open System.Globalization
 open System.Runtime.Serialization
 open System.Text.RegularExpressions
 open System.Threading
@@ -37,7 +38,7 @@ module private LoggerImpl =
         sprintf "%s%s" cloudlogPrefix procId
 
     let mkRangeKey (loggerUUID : Guid) (id : int64) = 
-        sprintf "%s-%010d" (loggerUUID.ToString("N")) id
+        sprintf "%s-%x" (loggerUUID.ToString("N")) id
 
     let inline tryParseRangeKey 
             (uuid     : byref<string>) 
@@ -48,7 +49,7 @@ module private LoggerImpl =
         match tokens with
         | [| uuid'; id' |] ->
             uuid <- uuid'
-            Int64.TryParse(id', &id)
+            Int64.TryParse(id', NumberStyles.AllowHexSpecifier, null, &id)
         | _ -> false
 
     type IDynamoLogEntry =
@@ -86,10 +87,10 @@ module private LoggerImpl =
         /// </summary>
         /// <param name="worker">Table partition key.</param>
         /// <param name="entry">Input log entry.</param>
-        static member FromLogEntry(loggerId : string, entry : SystemLogEntry) =
+        static member FromLogEntry(loggerId : string, uuid : Guid, msgId : int64, entry : SystemLogEntry) =
             {
                 HashKey = mkSystemLogHashKey loggerId
-                RangeKey = guid()
+                RangeKey = mkRangeKey uuid msgId
                 Message = entry.Message
                 LogTime = entry.DateTime
                 LogLevel = entry.LogLevel
@@ -130,10 +131,10 @@ module private LoggerImpl =
         /// <param name="workItem">Work item generating the log entry.</param>
         /// <param name="workerId">Worker identifier generating the log entry.</param>
         /// <param name="message">User log message.</param>
-        static member Create(workItem : CloudWorkItem, worker : IWorkerId, message : string) =
+        static member Create(workItem : CloudWorkItem, uuid : Guid, msgId : int64, worker : IWorkerId, message : string) =
             {
                 HashKey = mkCloudLogHashKey workItem.Process.Id
-                RangeKey = guid()
+                RangeKey = mkRangeKey uuid msgId
                 Message = message
                 LogTime = DateTimeOffset.Now
                 WorkerId = worker.Id
@@ -142,13 +143,17 @@ module private LoggerImpl =
             }
 
     [<AutoSerializable(false)>]
-    type TableLoggerMessage<'Entry> =
+    type TableLoggerMessage<'LogItem> =
         | Flush of AsyncReplyChannel<unit>
-        | Log   of 'Entry
+        | Log   of 'LogItem
 
     /// Local agent that writes batches of log entries to DynamoDB
     [<AutoSerializable(false)>]
-    type DynamoDBLogWriter<'Entry> (table : TableContext<'Entry>, timespan : TimeSpan) =
+    type DynamoDBLogWriter<'LogItem, 'Entry when 'Entry :> IDynamoLogEntry>
+                                 (mkEntry : Guid -> int64 -> 'LogItem -> 'Entry, 
+                                    table : TableContext<'Entry>, timespan : TimeSpan) =
+        let uuid = Guid.NewGuid()
+        let mutable index = 0L
         let queue = new Queue<'Entry> ()
 
         let flush () = async {
@@ -165,9 +170,8 @@ module private LoggerImpl =
                 queue.Clear()
         }
 
-        let rec loop
-                (lastWrite : DateTime) 
-                (inbox : MailboxProcessor<TableLoggerMessage<'Entry>>) = 
+        let rec loop (lastWrite : DateTime) 
+                    (inbox : MailboxProcessor<TableLoggerMessage<'LogItem>>) = 
             async {
                 let! msg = inbox.TryReceive(100)
                 match msg with
@@ -179,7 +183,9 @@ module private LoggerImpl =
                     channel.Reply()
                     return! loop DateTime.Now inbox
                 | Some(Log(log)) ->
-                    queue.Enqueue log
+                    let entry = mkEntry uuid index log
+                    index <- index + 1L
+                    queue.Enqueue entry
                     return! loop lastWrite inbox
                 | _ ->
                     return! loop lastWrite inbox
@@ -191,7 +197,7 @@ module private LoggerImpl =
                         cancellationToken = cts.Token)
 
         /// Appends a new entry to the write queue.
-        member __.LogEntry(entry : 'Entry) = agent.Post (Log entry)
+        member __.LogEntry(entry : 'LogItem) = agent.Post (Log entry)
 
         interface IDisposable with
             member __.Dispose () = 
@@ -206,9 +212,9 @@ module private LoggerImpl =
         /// <param name="timespan">
         ///     Timespan after which any log should be persisted.
         /// </param>
-        static member Create(table : TableContext<'Entry>, ?timespan : TimeSpan) = async {
+        static member Create(mkEntry, table : TableContext<'Entry>, ?timespan : TimeSpan) = async {
             let timespan = defaultArg timespan (TimeSpan.FromMilliseconds 500.)
-            return new DynamoDBLogWriter<'Entry>(table, timespan)
+            return new DynamoDBLogWriter<'LogEntry, 'Entry>(mkEntry, table, timespan)
         }
 
 
@@ -293,15 +299,12 @@ type DynamoDBSystemLogManager (clusterId : ClusterId) =
     /// </summary>
     /// <param name="loggerId">Logger identifier.</param>
     member __.CreateLogWriter(loggerId : string) = async {
-        let! writer = DynamoDBLogWriter<SystemLogRecord>.Create(table)
+        let mkLogRecord uuid id entry = SystemLogRecord.FromLogEntry(loggerId, uuid, id, entry)
+        let! writer = DynamoDBLogWriter<_, _>.Create(mkLogRecord, table)
         return {
             new IRemoteSystemLogger with
-                member __.LogEntry(e : SystemLogEntry) =
-                    let record = SystemLogRecord.FromLogEntry(loggerId, e)
-                    writer.LogEntry record
-
-                member __.Dispose() =
-                    Disposable.dispose writer
+                member __.LogEntry(e : SystemLogEntry) = writer.LogEntry e
+                member __.Dispose() = Disposable.dispose writer
         }
     }
         
@@ -463,15 +466,12 @@ type DynamoDBCloudLogManager (clusterId : ClusterId) =
 
     interface ICloudLogManager with
         member this.CreateWorkItemLogger(worker: IWorkerId, workItem: CloudWorkItem): Async<ICloudWorkItemLogger> = async {
-            let! writer = DynamoDBLogWriter<CloudLogRecord>.Create(table)
+            let mkEntry uuid id msg = CloudLogRecord.Create(workItem, uuid, id, worker, msg)
+            let! writer = DynamoDBLogWriter<_,_>.Create(mkEntry, table)
             return {
                 new ICloudWorkItemLogger with
-                    member __.Log(message : string) =
-                        let record = CloudLogRecord.Create(workItem, worker, message)
-                        writer.LogEntry record
-
-                    member __.Dispose() =
-                        Disposable.dispose writer
+                    member __.Log(message : string) = writer.LogEntry message
+                    member __.Dispose() = Disposable.dispose writer
             }
         }
         

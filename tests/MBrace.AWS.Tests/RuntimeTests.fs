@@ -87,7 +87,7 @@ type ``AWS Runtime Tests`` (config : Configuration, localWorkers : int) =
 
             do! Cloud.Sleep 5000
             do! Cloud.Parallel [for i in 1 .. 20 -> workItem i] |> Cloud.Ignore
-            do! Cloud.Sleep 2000
+            do! Cloud.Sleep 5000
         }
 
         let ra = new ResizeArray<CloudLogEntry>()
