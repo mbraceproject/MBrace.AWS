@@ -255,12 +255,6 @@ module private LoggerImpl =
             | diff when diff < 0L -> pollState.OutstandingEntries.Remove id
             | _ -> false
 
-        let cleanup (minDate : DateTimeOffset) =
-            for kv in loggerInfo do
-                if kv.Value.LastDate < minDate then 
-                    let _ = loggerInfo.Remove(kv.Key)
-                    ()
-
         let rec pollLoop (threshold : DateTimeOffset option) = async {
             do! Async.Sleep (int interval.TotalMilliseconds)
             let! logs = fetch threshold |> Async.Catch
@@ -296,7 +290,6 @@ module private LoggerImpl =
                     return! pollLoop threshold
                 else
                     let threshold = minDate - interval.MultiplyBy(5)
-                    cleanup threshold
                     return! pollLoop (Some threshold)
         }
 
