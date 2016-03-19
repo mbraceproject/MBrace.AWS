@@ -122,7 +122,7 @@ type ClusterManager =
         logger.LogInfof "Creating MBrace storage primitives"
         let fileStore = S3FileStore.Create(clusterId.S3Account, defaultBucket = clusterId.UserDataS3BucketName)
         let atomProvider = DynamoDBAtomProvider.Create(clusterId.DynamoDBAccount, defaultTable = clusterId.UserDataTableName)
-//        let dictionaryProvider = TableDictionaryProvider.Create(clusterId.StorageAccount)
+        let dictionaryProvider = DynamoDBDictionaryProvider.Create(clusterId.DynamoDBAccount, clusterId.UserDataTableName)
         let queueProvider = SQSCloudQueueProvider.Create(clusterId.SQSAccount)
         let serializer = FsPicklerBinarySerializer()
         let jsonSerializer = FsPicklerJsonSerializer()
@@ -143,7 +143,7 @@ type ClusterManager =
             yield fileStore :> ICloudFileStore
             yield cloudValueProvider :> ICloudValueProvider
             yield atomProvider :> ICloudAtomProvider
-//            yield dictionaryProvider :> ICloudDictionaryProvider
+            yield dictionaryProvider :> ICloudDictionaryProvider
             yield queueProvider :> ICloudQueueProvider
             yield serializer :> ISerializer
             yield jsonSerializer :> ITextSerializer

@@ -40,7 +40,10 @@ let mkWebResponsePickler (r:IPicklerResolver) =
               member x.StatusCode: Net.HttpStatusCode = statusCode
         }
 
-    Pickler.FromPrimitives(reader, writer, cacheByRef = true, useWithSubtypes = true)
+    let cloner _ v = v
+    let visitor _ _ = ()
+
+    Pickler.FromPrimitives(reader, writer, cloner, visitor, cacheByRef = true, useWithSubtypes = true)
 
 
 let registerCustomPicklers() =

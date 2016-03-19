@@ -74,6 +74,7 @@
     <Compile Include="Utilities\Sqs.fs" />
     <Compile Include="Store\S3FileStore.fs" />
     <Compile Include="Store\DynamoDBAtom.fs" />
+    <Compile Include="Store\DynamoDBCloudDictionary.fs" />
     <Compile Include="Store\SQSQueue.fs" />
     <Compile Include="Runtime\ClusterId.fs" />
     <Compile Include="Runtime\Persist.fs" />

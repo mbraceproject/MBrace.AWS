@@ -66,9 +66,6 @@
   <Import Project="..\..\.paket\paket.targets" />
   <ItemGroup>
     <Compile Include="Utils.fs" />
-    <Compile Include="StoreTests.fs" />
-    <Compile Include="AtomTests.fs" />
-    <Compile Include="QueueTests.fs" />
     <Compile Include="CloudTests.fs" />
     <Compile Include="RuntimeTests.fs" />
     <Compile Include="VagabondTests.fs" />
@@ -76,6 +73,10 @@
     <None Include="tests.fsx" />
     <None Include="paket.references" />
     <Content Include="App.config" />
+    <Compile Include="StoreTests\StoreTests.fs" />
+    <Compile Include="StoreTests\AtomTests.fs" />
+    <Compile Include="StoreTests\QueueTests.fs" />
+    <Compile Include="StoreTests\DictionaryTests.fs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />

@@ -34,7 +34,7 @@ type ``Local DynamoDB Atom Tests`` () =
     let run x = Async.RunSync x
 
     [<TestFixtureTearDown>]
-    member __.``Clean up leftover buckets``() =
+    member __.``Clean up leftover tables``() =
         ddbAtomProvider.ClearTablesAsync() |> run
 
     override __.Run(wf : Cloud<'T>) = imem.RunSynchronously wf

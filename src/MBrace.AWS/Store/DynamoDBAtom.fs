@@ -29,9 +29,7 @@ module private DynamoDBAtomUtils =
 
             ETag : string
 
-            TimeStamp : DateTimeOffset
-
-            Revision : int64
+            Timestamp : DateTimeOffset
         }
 
     let atomEntry = RecordTemplate.Define<AtomEntry> ()
@@ -43,8 +41,7 @@ module private DynamoDBAtomUtils =
                     <@ fun (data:MemoryStream) time etag r -> 
                             { r with 
                                 Data = data
-                                Revision = r.Revision + 1L
-                                TimeStamp = time
+                                Timestamp = time
                                 ETag = etag } @>
 
 
@@ -62,11 +59,6 @@ module private DynamoDBAtomUtils =
         ProcessConfiguration.BinarySerializer.Serialize(m, value, leaveOpen = true)
         m.Position <- 0L
         m
-
-    let createTableFaultPolicy =
-        Policy(fun retries exn ->
-            if retries < 10 && StoreException.Conflict exn then Some(TimeSpan.FromSeconds 2.)
-            else None)
 
     let mkConditionalRetryPolicy maxRetries = 
         Policy(fun retries exn ->
@@ -144,8 +136,7 @@ type DynamoDBAtom<'T> internal (tableName : string, account : AWSAccount, hashKe
                     let newEntry = 
                         { oldEntry with 
                             Data = m
-                            TimeStamp = DateTimeOffset.Now
-                            Revision = oldEntry.Revision + 1L
+                            Timestamp = DateTimeOffset.Now
                             ETag = guid()
                         }
 
@@ -230,11 +221,7 @@ type DynamoDBAtomProvider private (account : AWSAccount, defaultTable : string, 
             let! table = TableContext.CreateAsync<AtomEntry>(account.DynamoDBClient, tableName, createIfNotExists = true)
 
             let m = serialize initValue
-
-            let entry = 
-                { HashKey = atomId ; ETag = guid() ; Data = m ;
-                    TimeStamp = DateTimeOffset.Now ; Revision = 0L ; }
-
+            let entry = { HashKey = atomId ; ETag = guid() ; Data = m ; Timestamp = DateTimeOffset.Now }
             let! _ = table.PutItemAsync(entry)
 
             return new DynamoDBAtom<'T>(tableName, account, atomId) :> CloudAtom<'T>
