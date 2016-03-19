@@ -73,7 +73,7 @@
     <None Include="tests.fsx" />
     <None Include="paket.references" />
     <Content Include="App.config" />
-    <Compile Include="StoreTests\StoreTests.fs" />
+    <Compile Include="StoreTests\FileStoreTests.fs" />
     <Compile Include="StoreTests\AtomTests.fs" />
     <Compile Include="StoreTests\QueueTests.fs" />
     <Compile Include="StoreTests\DictionaryTests.fs" />

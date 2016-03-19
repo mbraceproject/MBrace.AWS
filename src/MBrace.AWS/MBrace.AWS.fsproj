@@ -72,10 +72,10 @@
     <Compile Include="Utilities\BlobValue.fs" />
     <Compile Include="Utilities\Table.fs" />
     <Compile Include="Utilities\Sqs.fs" />
-    <Compile Include="Store\S3FileStore.fs" />
-    <Compile Include="Store\DynamoDBAtom.fs" />
-    <Compile Include="Store\DynamoDBCloudDictionary.fs" />
-    <Compile Include="Store\SQSQueue.fs" />
+    <Compile Include="Store\FileStore.fs" />
+    <Compile Include="Store\Atom.fs" />
+    <Compile Include="Store\Dictionary.fs" />
+    <Compile Include="Store\Queue.fs" />
     <Compile Include="Runtime\ClusterId.fs" />
     <Compile Include="Runtime\Persist.fs" />
     <Compile Include="Runtime\Entities\Counters.fs" />
