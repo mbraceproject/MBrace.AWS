@@ -25,10 +25,10 @@ module private TableKeySchema =
             [<RangeKey>] RangeKey : string
         }
 
-    let keySchema = RecordTemplate.Define<DefaultKeySchema>().KeySchema
+    let keySchema = RecordTemplate.Define<DefaultKeySchema>().PrimaryKey
 
     let verify (ctx : TableContext<'T>) =
-        if ctx.KeySchema <> keySchema then
+        if ctx.PrimaryKey <> keySchema then
             invalidArg (string typeof<'T>) "invalid key schema"
         ctx
 
