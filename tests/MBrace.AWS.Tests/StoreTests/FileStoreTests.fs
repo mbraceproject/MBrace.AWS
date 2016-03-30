@@ -24,10 +24,8 @@ type ``Local S3 FileStore Tests`` () =
 
     static do init()
 
-    let account = getAWSTestAccount()
-
     let bucketPrefix = sprintf "testmbrace%04x" <| System.Random().Next(int System.UInt16.MaxValue)
-    let s3store = S3FileStore.Create(account, bucketPrefix = bucketPrefix)
+    let s3store = S3FileStore.Create(getAWSRegion(), getAWSCredentials(), bucketPrefix = bucketPrefix)
     let store = s3store :> ICloudFileStore
     let serializer = new FsPicklerBinarySerializer(useVagabond = false)
     let imem = ThreadPoolRuntime.Create(fileStore = store, serializer = serializer, memoryEmulation = MemoryEmulation.Copied)
@@ -84,3 +82,25 @@ type ``Local S3 FileStore Tests`` () =
 
         finally
             store.DeleteFile file |> run
+
+[<AbstractClass; TestFixture>]
+type ``Cluster CloudFileStore Tests``(config : Configuration, localWorkers : int) = 
+    inherit ``CloudFileStore Tests``(parallelismFactor = 5)
+    let session = new ClusterSession(config, localWorkers)
+    
+    [<TestFixtureSetUp>]
+    member __.Init() = session.Start()
+    
+    [<TestFixtureTearDown>]
+    member __.Fini() = session.Stop()
+    
+    override __.Run wf = session.Cluster.Run wf
+    override __.RunLocally wf = session.Cluster.RunLocally wf
+    override __.FileStore = session.Cluster.Store.CloudFileSystem.Store
+    override __.Serializer = session.Cluster.Store.Serializer.Serializer
+    override __.IsCaseSensitive = true
+
+
+[<TestFixture; Category("Standalone Cluster")>]
+type ``CloudFileStore Tests - Standalone Cluster - Remote Storage``() = 
+    inherit ``Cluster CloudFileStore Tests``(getMBraceAWSConfig None, 4)

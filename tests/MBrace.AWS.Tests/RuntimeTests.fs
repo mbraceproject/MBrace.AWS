@@ -227,4 +227,4 @@ type ``AWS Runtime Tests`` (config : Configuration, localWorkers : int) =
 
 [<Category("Standalone Cluster")>]
 type ``Runtime Tests - Standalone Cluster - Remote Storage`` () =
-    inherit ``AWS Runtime Tests``(getMBraceConfig None, 4)
+    inherit ``AWS Runtime Tests``(getMBraceAWSConfig None, 4)

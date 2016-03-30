@@ -6,6 +6,7 @@ open System.IO
 open System.Runtime.Serialization
 open System.Text.RegularExpressions
 
+open Amazon.Runtime
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.Model
 open FSharp.AWS.DynamoDB
@@ -13,6 +14,7 @@ open FSharp.AWS.DynamoDB
 open MBrace.Core
 open MBrace.Core.Internals
 open MBrace.Runtime.Utils.Retry
+open MBrace.AWS
 open MBrace.AWS.Runtime
 open MBrace.AWS.Runtime.Utilities
 
@@ -168,7 +170,7 @@ type DynamoDBAtomProvider private (account : AWSAccount, defaultTable : string, 
     /// <param name="account">AWS account to be used by the provider.</param>
     /// <param name="defaultTable">Default table container.</param>
     /// <param name="provisionedThroughput">DynamoDB provision throughput. Defaults to 20.</param>
-    static member Create (account : AWSAccount, ?defaultTable : string, ?tablePrefix : string, ?provisionedThroughput : int64) =
+    static member internal Create (account : AWSAccount, ?defaultTable : string, ?tablePrefix : string, ?provisionedThroughput : int64) =
         let tablePrefix =
             match tablePrefix with
             | None -> "cloudAtom"
@@ -183,6 +185,18 @@ type DynamoDBAtomProvider private (account : AWSAccount, defaultTable : string, 
             | _ -> getRandomTableName tablePrefix
 
         new DynamoDBAtomProvider(account, defaultTable, tablePrefix, provisionedThroughput)
+
+    /// <summary>
+    /// Creates an AWS DynamoDB-based atom provider that
+    /// connects to provided DynamoDB table.
+    /// </summary>
+    /// <param name="region">AWS region to be used by the provider.</param>
+    /// <param name="credentials">AWS credentials to be used by the provider.</param>
+    /// <param name="defaultTable">Default table container.</param>
+    /// <param name="provisionedThroughput">DynamoDB provision throughput. Defaults to 20.</param>
+    static member Create (region : AWSRegion, credentials : AWSCredentials, ?defaultTable : string, ?tablePrefix : string, ?provisionedThroughput : int64) =
+        let account = AWSAccount.Create(region, credentials)
+        DynamoDBAtomProvider.Create(account, ?defaultTable = defaultTable, ?tablePrefix = tablePrefix, ?provisionedThroughput = provisionedThroughput)
 
     /// Table prefix used in random table name generation
     member __.TablePrefix = tablePrefix

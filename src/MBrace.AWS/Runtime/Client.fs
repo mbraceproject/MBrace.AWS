@@ -8,6 +8,7 @@ open System.Diagnostics
 open System.IO
 open System.Net
 
+open Amazon.Runtime
 open Nessos.FsPickler
 
 open MBrace.Core
@@ -48,11 +49,11 @@ type S3Storage =
     /// <summary>
     ///     Creates an S3 client object from given credentials
     /// </summary>
-    /// <param name="credentials">AWS credentials string.</param>
     /// <param name="region">AWS region identifier.</param>
+    /// <param name="credentials">AWS credentials object.</param>
     /// <param name="serializer">Serializer for use with store. Defaults to FsPickler binary serializer.</param>
-    static member FromCredentials(credentials : AWSCredentials, region : AWSRegion, [<O;D(null:obj)>]?serializer:ISerializer) : CloudFileSystem =
-        let account = AWSAccount.Create(credentials.Credentials, region.RegionEndpoint)
+    static member FromCredentials(region : AWSRegion, credentials : AWSCredentials, [<O;D(null:obj)>]?serializer:ISerializer) : CloudFileSystem =
+        let account = AWSAccount.Create(region, credentials)
         let s3Store = MBrace.AWS.Store.S3FileStore.Create(account)
         let serializer = match serializer with Some s -> s | None -> new FsPicklerBinarySerializer() :> _
         new CloudFileSystem(s3Store, serializer)

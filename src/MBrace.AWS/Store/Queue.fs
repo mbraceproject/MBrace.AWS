@@ -4,6 +4,7 @@ open System
 open System.Text.RegularExpressions
 open System.Runtime.Serialization
 
+open Amazon.Runtime
 open Amazon.SQS
 open Amazon.SQS.Model
 
@@ -11,6 +12,7 @@ open MBrace.Core
 open MBrace.Core.Internals
 open MBrace.Runtime.Utils.PrettyPrinters
 
+open MBrace.AWS
 open MBrace.AWS.Runtime
 open MBrace.AWS.Runtime.Utilities
 
@@ -105,9 +107,24 @@ type SQSCloudQueueProvider private (account : AWSAccount, queuePrefix : string) 
     [<DataMember(Name = "QueuePrefix")>]
     let queuePrefix = queuePrefix
 
-    static member Create(account : AWSAccount, ?queuePrefix : string) = 
+    /// <summary>
+    ///     Creates a new SQS cloudqueue provider instance with supplied account and queue prefix
+    /// </summary>
+    /// <param name="account">Account info</param>
+    /// <param name="queuePrefix">Queue prefix</param>
+    static member internal Create(account : AWSAccount, ?queuePrefix : string) = 
         let queuePrefix = defaultArg queuePrefix "mbrace"
         new SQSCloudQueueProvider(account, queuePrefix)
+
+    /// <summary>
+    ///     Creates a new SQS cloudqueue provider instance with supplied account and queue prefix
+    /// </summary>
+    /// <param name="region">AWS region to be used by the provider.</param>
+    /// <param name="credentials">AWS credentials to be used by the provider.</param>
+    /// <param name="queuePrefix">Queue prefix</param>
+    static member Create(region : AWSRegion, credentials : AWSCredentials, ?queuePrefix : string) =
+        let account = AWSAccount.Create(region, credentials)
+        SQSCloudQueueProvider.Create(account, ?queuePrefix = queuePrefix)
 
 
     /// <summary>

@@ -39,41 +39,24 @@ module Utils =
         | null | "" -> defaultValue
         | ev -> ev
 
-    let getTestRegion () = 
+    let getAWSRegion () = 
         match getEnvironmentVariable "MBrace.AWS.Tests.Region" with
-        | null | "" -> RegionEndpoint.EUCentral1
-        | region -> RegionEndpoint.GetBySystemName region
+        | null | "" -> AWSRegion.EUCentral1
+        | region -> AWSRegion.Parse region
 
-    let getAWSProfile () = getEnvironmentVariableOrDefault "MBrace.AWS.Test.ProfileName" "default"
-    let tryGetAWSCredentials () = 
+    let getAWSProfileName () = getEnvironmentVariableOrDefault "MBrace.AWS.Test.ProfileName" "default"
+    let getAWSCredentials () =
         match getEnvironmentVariable "MBrace.AWS.Test.Credentials" with
-        | null | "" -> None
-        | creds -> 
-            let toks = creds.Split(',')
-            let creds = new BasicAWSCredentials(toks.[0], toks.[1]) :> Amazon.Runtime.AWSCredentials
-            Some creds
+        | null | "" -> MBraceAWSCredentials.FromCredentialsStore(getAWSProfileName())
+        | creds -> let toks = creds.Split(',') in new MBraceAWSCredentials(toks.[0], toks.[1])
 
-    let getAWSTestAccount () =
-        let region = getTestRegion()
-        match tryGetAWSCredentials() with
-        | Some creds -> AWSAccount.Create(creds, region)
-        | None -> AWSAccount.Create(getAWSProfile(), region)
-
-    let getMBraceConfig id =
-        let rp = 
-            match id with
+    let getMBraceAWSConfig predixId =
+        let prefixId = 
+            match predixId with
             | None -> sprintf "tests%04d" <| Random().Next(0, 10000)
             | Some id -> id
 
-        let acc = getAWSTestAccount()
-        // TODO : fix API mess
-        let region = AWSRegion.Parse acc.Region.SystemName
-        let credentials = 
-            let c = acc.Credentials.GetCredentials()
-            { AccessKey = c.AccessKey ; SecretKey = c.SecretKey }
-
-        new Configuration(AWSRegion.Parse acc.Region.SystemName, credentials, rp)
-        
+        new Configuration(getAWSRegion(), getAWSCredentials(), prefixId)
 
 
 type ClusterSession(config : MBrace.AWS.Configuration, localWorkerCount : int, ?heartbeatThreshold : TimeSpan) =

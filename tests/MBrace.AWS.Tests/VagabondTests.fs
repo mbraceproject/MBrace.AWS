@@ -120,7 +120,7 @@ type ``Vagabond AWS Tests (FSI)``(localWorkerCount : int) =
         fsi.EvalInteraction "open MBrace.Flow"
         fsi.EvalInteraction "open MBrace.AWS"
         fsi.EvalInteraction "open MBrace.AWS.Tests"
-        fsi.EvalInteraction <| sprintf "let config = getMBraceConfig None"
+        fsi.EvalInteraction <| sprintf "let config = getMBraceAWSConfig None"
         fsi.EvalInteraction <| sprintf "let session = new ClusterSession(config, %d)" localWorkerCount
         fsi.EvalInteraction "session.Start()"
         fsi.EvalInteraction "let cluster = session.Cluster"

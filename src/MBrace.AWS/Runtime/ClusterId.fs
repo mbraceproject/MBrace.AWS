@@ -171,9 +171,9 @@ with
         {
             ResourcePrefix       = configuration.ResourcePrefix
                                  
-            S3Account            = AWSAccount.Create(configuration.S3Credentials.Credentials, configuration.S3Region.RegionEndpoint)
-            DynamoDBAccount      = AWSAccount.Create(configuration.DynamoDBCredentials.Credentials, configuration.DynamoDBRegion.RegionEndpoint)
-            SQSAccount           = AWSAccount.Create(configuration.SQSCredentials.Credentials, configuration.SQSRegion.RegionEndpoint)
+            S3Account            = AWSAccount.Create(configuration.S3Region.RegionEndpoint, configuration.S3Credentials)
+            DynamoDBAccount      = AWSAccount.Create(configuration.DynamoDBRegion.RegionEndpoint, configuration.DynamoDBCredentials)
+            SQSAccount           = AWSAccount.Create(configuration.SQSRegion.RegionEndpoint, configuration.SQSCredentials)
                                  
             WorkItemQueueName    = configuration.WorkItemQueue
             WorkItemTopicName    = configuration.WorkItemTopic

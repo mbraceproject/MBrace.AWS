@@ -4,6 +4,7 @@ open System
 open System.Runtime.Serialization
 
 open Amazon
+open Amazon.Util
 open Amazon.Runtime
 
 open MBrace.AWS.Runtime
@@ -60,27 +61,40 @@ type AWSRegion (region : RegionEndpoint) =
     /// The US West (Oregon) endpoint.
     static member USWest2 = mk RegionEndpoint.USWest2
 
-/// Serializable AWS credentials record
-[<NoEquality; NoComparison>]
-type AWSCredentials = 
-    {
-        /// AWS account Access Key
-        AccessKey :string
-        /// AWS account Secret Key
-        SecretKey : string
-    }
-with
-    member internal __.Credentials = new BasicAWSCredentials(__.AccessKey, __.SecretKey) :> Amazon.Runtime.AWSCredentials
+/// Serializable AWS credentials container class
+[<Sealed; DataContract>]
+type MBraceAWSCredentials (accessKey : string, secretKey : string) =
+    inherit Amazon.Runtime.AWSCredentials()
 
-    static member FromCredentialStore(?profileName : string) =
+    let [<DataMember(Name = "AccessKey")>] accessKey = accessKey
+    let [<DataMember(Name = "SecretKey")>] secretKey = secretKey
+
+    member __.AccessKey = accessKey
+    member __.SecretKey = secretKey
+
+    override __.GetCredentials() = new ImmutableCredentials(accessKey, secretKey, null)
+    override __.GetCredentialsAsync() = System.Threading.Tasks.Task.Run __.GetCredentials
+
+    new (immutableCredentials : ImmutableCredentials) =
+        new MBraceAWSCredentials(immutableCredentials.AccessKey, immutableCredentials.SecretKey)
+
+    new (credentials : AWSCredentials) =
+        new MBraceAWSCredentials(credentials.GetCredentials())
+
+    /// <summary>
+    ///     Recover a set of credentials using the local credentials store
+    /// </summary>
+    /// <param name="profileName">Credential store profile name.</param>
+    static member FromCredentialsStore(?profileName : string) =
         let profileName = defaultArg profileName "default"
-        let creds = Amazon.Util.ProfileManager.GetAWSCredentials(profileName).GetCredentials()
-        { AccessKey = creds.AccessKey ; SecretKey = creds.SecretKey }
+        let creds = ProfileManager.GetAWSCredentials profileName
+        new MBraceAWSCredentials(creds)
 
 
 /// MBrace.AWS Configuration Builder. Used to specify MBrace.AWS cluster storage configuration.
 [<AutoSerializable(true); Sealed; NoEquality; NoComparison>]
 type Configuration(region : AWSRegion, credentials : AWSCredentials, ?resourcePrefix : string) =
+    let credentials = MBraceAWSCredentials(credentials)
     let resourcePrefix = 
         match resourcePrefix with
         | Some rp -> Validate.hostname rp ; rp
@@ -160,5 +174,5 @@ type Configuration(region : AWSRegion, credentials : AWSCredentials, ?resourcePr
 
     /// Create a configuration object by reading credentials from the local store
     static member FromCredentialsStore(region : AWSRegion, ?profileName : string, ?resourcePrefix : string) =
-        let credentials = AWSCredentials.FromCredentialStore(?profileName = profileName)
+        let credentials = MBraceAWSCredentials.FromCredentialsStore(?profileName = profileName)
         new Configuration(region, credentials, ?resourcePrefix = resourcePrefix)

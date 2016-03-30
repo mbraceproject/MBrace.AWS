@@ -7,11 +7,13 @@ open System.IO
 open System.Runtime.Serialization
 open System.Text.RegularExpressions
 
+open Amazon.Runtime
 open Amazon.S3
 open Amazon.S3.Model
 
 open MBrace.Core.Internals
 open MBrace.Runtime.Utils.Retry
+open MBrace.AWS
 open MBrace.AWS.Runtime
 open MBrace.AWS.Runtime.Utilities
 
@@ -105,18 +107,30 @@ type S3FileStore private (account : AWSAccount, defaultBucket : string, bucketPr
         }
 
     /// <summary>
-    ///     Creates an MBrace CloudFileStore implementation targeting Amazon S3s
+    ///     Creates an MBrace CloudFileStore implementation targeting Amazon S3
     /// </summary>
     /// <param name="account">AwsAccount to be used.</param>
     /// <param name="defaultBucket">Default S3 Bucket to be used. Will auto-generate name if not specified.</param>
     /// <param name="bucketPrefix">Prefix for randomly generated S3 buckets. Defaults to "mbrace".</param>
-    static member Create(account : AWSAccount, ?defaultBucket : string, ?bucketPrefix : string) =
+    static member internal Create(account : AWSAccount, ?defaultBucket : string, ?bucketPrefix : string) =
         let bucketPrefix = defaultArg bucketPrefix "mbrace"
         do validateBucketPrefix bucketPrefix
         let defaultBucket = match defaultBucket with Some b -> b | None -> getRandomBucketName bucketPrefix
         let s3p = S3Path.Parse(S3Path.Combine("/", defaultBucket))
 //        if not s3p.IsBucket then invalidArg "defaultBucket" <| sprintf "supplied path '%s' is not a valid S3 bucket." defaultBucket
         new S3FileStore(account, s3p.FullPath, bucketPrefix)
+
+    /// <summary>
+    ///     Creates an MBrace CloudFileStore implementation targeting Amazon S3
+    /// </summary>
+    /// <param name="region">AWS region to be used.</param>
+    /// <param name="credentials">AWS credentials object.</param>
+    /// <param name="defaultBucket">Default S3 Bucket to be used. Will auto-generate name if not specified.</param>
+    /// <param name="bucketPrefix">Prefix for randomly generated S3 buckets. Defaults to "mbrace".</param>
+    static member Create(region : AWSRegion, credentials : AWSCredentials, ?defaultBucket, ?bucketPrefix) =
+        let account = AWSAccount.Create(region, credentials)
+        S3FileStore.Create(account, ?defaultBucket = defaultBucket, ?bucketPrefix = bucketPrefix)
+        
 
     /// Bucket prefix used in random bucket generation
     member __.BucketPrefix = bucketPrefix

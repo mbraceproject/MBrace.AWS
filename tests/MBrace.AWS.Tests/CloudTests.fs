@@ -49,4 +49,4 @@ type ``AWS Cloud Tests`` (config : Configuration, localWorkers : int) =
 
 [<Category("Standalone Cluster")>]
 type ``Cloud Tests - Standalone Cluster`` () =
-    inherit ``AWS Cloud Tests``(getMBraceConfig None, 4)
+    inherit ``AWS Cloud Tests``(getMBraceAWSConfig None, 4)

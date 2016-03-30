@@ -40,4 +40,4 @@ type ``AWS CloudFlow Tests`` (config : Configuration, localWorkers : int) =
 
 [<Category("Standalone Cluster")>]
 type ``CloudFlow Tests - Standalone Cluster - Remote Storage`` () =
-    inherit ``AWS CloudFlow Tests``(getMBraceConfig None, 4)
+    inherit ``AWS CloudFlow Tests``(getMBraceAWSConfig None, 4)

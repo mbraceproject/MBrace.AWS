@@ -24,10 +24,8 @@ type ``Local DynamoDB Atom Tests`` () =
 
     static do init()
 
-    let account = getAWSTestAccount()
-
     let tablePrefix = sprintf "testmbrace-%s" <| System.Guid.NewGuid().ToString("N")
-    let ddbAtomProvider = DynamoDBAtomProvider.Create(account, tablePrefix = tablePrefix)
+    let ddbAtomProvider = DynamoDBAtomProvider.Create(getAWSRegion(), getAWSCredentials(), tablePrefix = tablePrefix)
     let serializer = new FsPicklerBinarySerializer(useVagabond = false)
     let imem = ThreadPoolRuntime.Create(atomProvider = ddbAtomProvider, serializer = serializer, memoryEmulation = MemoryEmulation.Copied)
 
@@ -41,3 +39,24 @@ type ``Local DynamoDB Atom Tests`` () =
     override __.RunLocally(wf : Cloud<'T>) = imem.RunSynchronously wf
     override __.IsSupportedNamedLookup = true
     override __.Repeats = 2
+
+[<AbstractClass; TestFixture>]
+type ``Cluster CloudAtom Tests``(config : Configuration, localWorkers : int) = 
+    inherit ``CloudAtom Tests``(parallelismFactor = 5)
+    let session = new ClusterSession(config, localWorkers)
+    
+    [<TestFixtureSetUp>]
+    member __.Init() = session.Start()
+    
+    [<TestFixtureTearDown>]
+    member __.Fini() = session.Stop()
+    
+    override __.Run wf = session.Cluster.Run wf
+    override __.RunLocally wf = session.Cluster.RunLocally wf
+    override __.IsSupportedNamedLookup = true
+    override __.Repeats = 2
+
+
+[<TestFixture; Category("Standalone Cluster")>]
+type ``CloudAtom Tests - Standalone Cluster - Remote Storage``() = 
+    inherit ``Cluster CloudAtom Tests``(getMBraceAWSConfig None, 4)

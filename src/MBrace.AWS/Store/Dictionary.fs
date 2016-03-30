@@ -7,12 +7,14 @@ open System.IO
 open System.Runtime.Serialization
 open System.Text.RegularExpressions
 
+open Amazon.Runtime
 open FSharp.AWS.DynamoDB
 
 open MBrace.Core
 open MBrace.Core.Internals
 open MBrace.Runtime
 open MBrace.Runtime.Utils.Retry
+open MBrace.AWS
 open MBrace.AWS.Runtime
 open MBrace.AWS.Runtime.Utilities
 
@@ -257,10 +259,19 @@ type DynamoDBDictionaryProvider private (account : AWSAccount, tableName : strin
     ///     Creates a TableDirectionaryProvider instance using provided Azure storage account.
     /// </summary>
     /// <param name="account">Azure storage account.</param>
-    static member Create(account : AWSAccount, ?tableName : string) =
+    static member internal Create(account : AWSAccount, ?tableName : string) =
         ignore account.Credentials // ensure that connection string is present in the current context
         let tableName = match tableName with None -> getRandomTableName "cloudDict" | Some tn -> Validate.tableName tn; tn
         new DynamoDBDictionaryProvider(account, tableName)
+
+    /// <summary>
+    ///     Creates a TableDirectionaryProvider instance using provided Azure storage account.
+    /// </summary>
+    /// <param name="region">AWS region to be used by the provider.</param>
+    /// <param name="credentials">AWS credentials to be used by the provider.</param>
+    static member Create(region : AWSRegion, credentials : AWSCredentials, ?tableName : string) =
+        let account = AWSAccount.Create(region, credentials)
+        DynamoDBDictionaryProvider.Create(account, ?tableName = tableName)
 
     interface ICloudDictionaryProvider with
         member x.Id = tableName

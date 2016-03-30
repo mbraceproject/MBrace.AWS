@@ -10,7 +10,7 @@
 #r "MBrace.Runtime.dll"
 #r "MBrace.AWS.dll"
 
-
+open System
 open Amazon
 open Amazon.Runtime
 open Amazon.S3
@@ -26,13 +26,23 @@ open MBrace.AWS.Store
 AWSWorker.LocalExecutable <- __SOURCE_DIRECTORY__ + "/../../bin/mbrace.awsworker.exe"
 let config = Configuration.FromCredentialsStore(AWSRegion.EUCentral1, resourcePrefix = "tests4820")
 
-let cluster = AWSCluster.InitOnCurrentMachine(config, workerCount = 1, logger = ConsoleLogger())
+let cluster = AWSCluster.InitOnCurrentMachine(config, workerCount = 2, logger = ConsoleLogger(), heartbeatThreshold = TimeSpan.FromSeconds 20.)
 //let cluster = AWSCluster.Connect(config, logger = ConsoleLogger())
 cluster.Reset(reactivate = false, force = true)
 
+cluster.AttachLocalWorkers(1)
+
+proc
+
+let w = cluster.Workers.[0]
+
+let proc = cluster.CreateProcess(Cloud.Sleep 10000, target = w)
+
 cluster.Run(cloud { return 42 })
 
-cluster.CullNonResponsiveWorkers(System.TimeSpan.FromSeconds 5.)
+cluster.CullNonResponsiveWorkers(TimeSpan.FromSeconds 5.)
+
+cluster.ShowProcesses()
 
 let proc = cluster.CreateProcess(cloud { return! Cloud.Parallel [for i in 1 .. 1000 -> cloud { return i }]})
 
@@ -65,22 +75,30 @@ c.Value
 CloudAtom.Increment c |> cluster.RunLocally
 
 
-let test () = cloud {
-    let! counter = CloudAtom.New 0
-    let worker i j = cloud {
-        if i = 0 && j = 0 then
-            invalidOp "failure"
-        else
-            do! Cloud.Sleep 30000
-            do! CloudAtom.Increment counter |> Local.Ignore
+let workflow = cloud {
+    let workItem i = local {
+        for j in 1 .. 100 do
+            do! Cloud.Logf "Work item %d, iteration %d" i j
     }
 
-    let cluster i = Array.init 10 (worker i) |> Cloud.Parallel |> Cloud.Ignore
-    try do! Array.init 10 cluster |> Cloud.Parallel |> Cloud.Ignore
-    with :? System.InvalidOperationException -> ()
-    return counter
-} 
+    do! Cloud.Sleep 5000
+    do! Cloud.Parallel [for i in 1 .. 20 -> workItem i] |> Cloud.Ignore
+    do! Cloud.Sleep 5000
+}
 
+let ra = new ResizeArray<CloudLogEntry>()
+let job = cluster.CreateProcess(workflow)
+//job.GetLogs().Length
+let d = job.Logs.Subscribe(fun e -> ra.Add(e))
+
+ra.Count
+
+let proc = cluster.GetProcessById job.Id
+let ra = new ResizeArray<CloudLogEntry>()
+proc.Logs.Subscribe(fun e -> ra.Add(e))
+ra.Count
+
+job.GetLogs().Length
 
 let cv = cluster.Run(test())
 
@@ -171,3 +189,22 @@ module GenericList =
 
 ml |> GenericList.iter { new Iterator with 
                             member __.Iter<'T> (t : 'T) = printfn "%O" t }
+
+
+
+let workflow = cloud {
+    for j in 1 .. 100 do
+        do! Cloud.Logf "Work item %d, iteration %d" 0 j
+//    let workItem i = local {
+//    }
+//
+//    do! Cloud.Sleep 5000
+//    do! Cloud.Parallel [for i in 1 .. 20 -> workItem i] |> Cloud.Ignore
+//    do! Cloud.Sleep 2000
+}
+
+let proc = cluster.CreateProcess(workflow)
+
+proc.ShowLogs()
+
+proc.Logs.Subscribe(printfn "%A")

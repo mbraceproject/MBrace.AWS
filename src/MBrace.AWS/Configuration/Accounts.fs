@@ -15,12 +15,13 @@ open Amazon.DynamoDBv2.DataModel
 open FSharp.AWS.DynamoDB
 
 open MBrace.Runtime.Utils
+open MBrace.AWS
 
 [<AutoSerializable(false); NoEquality; NoComparison>]
 type private AWSAccountData = 
     {
         Region          : RegionEndpoint
-        Credentials     : ImmutableCredentials
+        Credentials     : MBraceAWSCredentials
         S3Client        : AmazonS3Client
         DynamoDBClient  : AmazonDynamoDBClient
         SQSClient       : AmazonSQSClient
@@ -35,7 +36,7 @@ type AWSAccount private (accountData : AWSAccountData) =
     static let initAccountData (region : RegionEndpoint) (credentials : AWSCredentials) =
         {
             Region = region
-            Credentials = credentials.GetCredentials()
+            Credentials = MBraceAWSCredentials(credentials)
             S3Client = new AmazonS3Client(credentials, region)
             DynamoDBClient = new AmazonDynamoDBClient(credentials, region)
             SQSClient = new AmazonSQSClient(credentials, region)
@@ -75,11 +76,11 @@ type AWSAccount private (accountData : AWSAccountData) =
 
     /// AWS account profile identifier
     member __.ProfileName = profileName
-    member private __.RegionName = regionName
+    member __.RegionName = regionName
     /// AWS account access Key
     member __.AccessKey = getAccountData().Credentials.AccessKey
     /// Credentials for AWS account
-    member __.Credentials = let c = getAccountData().Credentials in new BasicAWSCredentials(c.AccessKey, c.SecretKey) :> AWSCredentials
+    member __.Credentials = getAccountData().Credentials
     /// Region endpoint identifier for account
     member __.Region = getAccountData().Region
     /// Amazon S3 Client instance for account
@@ -109,11 +110,12 @@ type AWSAccount private (accountData : AWSAccountData) =
     override __.ToString() = __.StructuredFormatDisplay
 
     /// <summary>
-    ///     Creates a new AWS credentials with provided credentials and region endpoint.
+    ///     Creates a new AWS credentials with provided profile name and region endpoint.
+    ///     Credentials will be recovered from the local profile manager.
     /// </summary>
-    /// <param name="credentials">AWS credentials for account.</param>
     /// <param name="region">Region endpoint.</param>
-    static member Create(credentials : AWSCredentials, region : RegionEndpoint) =
+    /// <param name="profileName">Profile name to recover credentials from,</param>
+    static member Create(region : RegionEndpoint, credentials : AWSCredentials) =
         let initAccountData _ = initAccountData region credentials
 
         let accountData = localRegistry.GetOrAdd(mkKey (credentials.GetCredentials().AccessKey) region, initAccountData)
@@ -123,8 +125,7 @@ type AWSAccount private (accountData : AWSAccountData) =
     ///     Creates a new AWS credentials with provided profile name and region endpoint.
     ///     Credentials will be recovered from the local profile manager.
     /// </summary>
-    /// <param name="profileName">Profile name to recover credentials from,</param>
     /// <param name="region">Region endpoint.</param>
-    static member Create(profileName : string, region : RegionEndpoint) =
-        let credentials = ProfileManager.GetAWSCredentials profileName
-        AWSAccount.Create(credentials, region)
+    /// <param name="profileName">Profile name to recover credentials from,</param>
+    static member Create(region : AWSRegion, credentials : AWSCredentials) =
+        AWSAccount.Create(region.RegionEndpoint, credentials)

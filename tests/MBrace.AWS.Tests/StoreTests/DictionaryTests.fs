@@ -17,10 +17,8 @@ type ``Local DynamoDB Dictionary Tests`` () =
 
     static do init()
 
-    let account = getAWSTestAccount()
-
     let tableName = sprintf "testmbrace-%04d" <| System.Random().Next(0, 10000)
-    let ddbDictionaryProvider = DynamoDBDictionaryProvider.Create(account, tableName = tableName)
+    let ddbDictionaryProvider = DynamoDBDictionaryProvider.Create(getAWSRegion(), getAWSCredentials(), tableName = tableName)
     let serializer = new FsPicklerBinarySerializer(useVagabond = false)
     let imem = ThreadPoolRuntime.Create(dictionaryProvider = ddbDictionaryProvider, serializer = serializer, memoryEmulation = MemoryEmulation.Copied)
 
@@ -36,7 +34,7 @@ type ``Local DynamoDB Dictionary Tests`` () =
     override __.IsInMemoryFixture = true
 
 [<AbstractClass; TestFixture>]
-type ``Azure CloudDictionary Tests``(config : Configuration, localWorkers : int) = 
+type ``Cluster CloudDictionary Tests``(config : Configuration, localWorkers : int) = 
     inherit ``CloudDictionary Tests``(parallelismFactor = 5)
     let session = new ClusterSession(config, localWorkers)
     
@@ -54,4 +52,4 @@ type ``Azure CloudDictionary Tests``(config : Configuration, localWorkers : int)
 
 [<TestFixture; Category("Standalone Cluster")>]
 type ``CloudDictionary Tests - Standalone Cluster - Remote Storage``() = 
-    inherit ``Azure CloudDictionary Tests``(getMBraceConfig None, 4)
+    inherit ``Cluster CloudDictionary Tests``(getMBraceAWSConfig None, 4)

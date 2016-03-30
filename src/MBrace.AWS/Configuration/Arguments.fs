@@ -128,7 +128,7 @@ type ArgumentConfiguration =
             match cfg.Configuration with
             | None -> ()
             | Some config ->
-                let inline ec (creds : AWSCredentials) = creds.AccessKey, creds.SecretKey
+                let inline ec (creds : MBraceAWSCredentials) = creds.AccessKey, creds.SecretKey
                 let inline er (r : AWSRegion) = r.SystemName
                 yield Credentials (ec config.DefaultCredentials)
                 yield Region (er config.DefaultRegion)
@@ -175,11 +175,11 @@ type ArgumentConfiguration =
         let defaultRegion = parseResult.PostProcessResult(<@ Region @>, AWSRegion.Parse)
         let credentials =
             match parseResult.TryGetResult <@ Credentials @> with
-            | Some(ak, sk) -> { AccessKey = ak ; SecretKey = sk }
+            | Some(ak, sk) -> new MBraceAWSCredentials(ak, sk)
             | None ->
-                match parseResult.TryPostProcessResult(<@ Profile @>, fun pf -> AWSCredentials.FromCredentialStore pf) with
+                match parseResult.TryPostProcessResult(<@ Profile @>, fun pf -> MBraceAWSCredentials.FromCredentialsStore pf) with
                 | Some creds -> creds
-                | None -> AWSCredentials.FromCredentialStore |> parseResult.Catch
+                | None -> MBraceAWSCredentials.FromCredentialsStore |> parseResult.Catch
 
         let config = new Configuration(defaultRegion, credentials, ?resourcePrefix = clusterId)
 
@@ -189,8 +189,8 @@ type ArgumentConfiguration =
         iterRegion <@ SQS_Region @> (fun r -> config.SQSRegion <- r)
 
         let iterCreds c c' f = 
-            parseResult.IterResult(c, fun (ak,sk) -> f { AccessKey = ak ; SecretKey = sk })
-            parseResult.IterResult(c', fun p -> f (AWSCredentials.FromCredentialStore p))
+            parseResult.IterResult(c, fun (ak,sk) -> f (MBraceAWSCredentials(ak, sk)))
+            parseResult.IterResult(c', fun p -> f (MBraceAWSCredentials.FromCredentialsStore p))
 
         iterCreds <@ DynamoDB_Credentials @> <@ DynamoDB_Profile @> (fun c -> config.DynamoDBCredentials <- c)
         iterCreds <@ S3_Credentials @> <@ S3_Profile @> (fun c -> config.S3Credentials <- c)
