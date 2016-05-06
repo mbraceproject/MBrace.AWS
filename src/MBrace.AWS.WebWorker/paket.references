@@ -1,8 +1,6 @@
 AWSSDK.Core
 FSharp.Core
 
-Microsoft.CodeDom.Providers.DotNetCompilerPlatform
-Microsoft.Net.Compilers
 Microsoft.Owin.Host.SystemWeb
 Microsoft.Owin
 Owin
