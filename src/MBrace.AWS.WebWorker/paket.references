@@ -1,0 +1,14 @@
+AWSSDK.Core
+FSharp.Core
+
+Microsoft.ApplicationInsights
+Microsoft.ApplicationInsights.Agent.Intercept
+Microsoft.ApplicationInsights.DependencyCollector
+Microsoft.ApplicationInsights.JavaScript
+Microsoft.ApplicationInsights.PerfCounterCollector
+Microsoft.ApplicationInsights.Web
+Microsoft.ApplicationInsights.WindowsServer
+Microsoft.ApplicationInsights.WindowsServer.TelemetryChannel
+Microsoft.CodeDom.Providers.DotNetCompilerPlatform
+Microsoft.Net.Compilers
+Microsoft.Owin.Host.SystemWeb

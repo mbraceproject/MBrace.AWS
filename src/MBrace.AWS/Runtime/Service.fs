@@ -13,6 +13,7 @@ open MBrace.Runtime.Utils
 open MBrace.AWS
 open MBrace.AWS.Runtime
 open MBrace.AWS.Runtime.Utilities
+open System.Threading.Tasks
 
 /// MBrace worker service execution status
 type ServiceStatus =
@@ -146,7 +147,7 @@ type WorkerService (config : Configuration, workerId : string) =
     }
 
     /// Asynchronously starts the service with specified configuration
-    member this.StartAsTask() = this.StartAsync() |> Async.StartAsTask
+    member this.StartAsTask() = this.StartAsync() |> Async.StartAsTask :> Task
 
     /// Synchronously starts the worker service with specified configuration
     member this.Start() = Async.RunSync(this.StartAsync())

@@ -2,6 +2,7 @@ redirects: on
 source https://nuget.org/api/v2
 
 nuget FSharp.Formatting
+nuget Microsoft.Net.Compilers 1.0.0 framework: >= net452
 nuget NUnit 
 nuget NUnit.Runners
 nuget NuGet.CommandLine
@@ -22,5 +23,16 @@ nuget AWSSDK.DynamoDBv2 ~> 3.0
 nuget AWSSDK.SQS ~> 3.0
 nuget Argu ~> 2.0
 nuget FSharp.AWS.DynamoDB prerelease
+
+nuget Microsoft.ApplicationInsights 2.0.0 framework: >= net452
+nuget Microsoft.ApplicationInsights.Agent.Intercept 1.2.1 framework: >= net452
+nuget Microsoft.ApplicationInsights.DependencyCollector 2.0.0 framework: >= net452
+nuget Microsoft.ApplicationInsights.JavaScript 0.22.9-build00167 framework: >= net452
+nuget Microsoft.ApplicationInsights.PerfCounterCollector 2.0.0 framework: >= net452
+nuget Microsoft.ApplicationInsights.Web 2.0.0 framework: >= net452
+nuget Microsoft.ApplicationInsights.WindowsServer 2.0.0 framework: >= net452
+nuget Microsoft.ApplicationInsights.WindowsServer.TelemetryChannel 2.0.0 framework: >= net452
+nuget Microsoft.CodeDom.Providers.DotNetCompilerPlatform 1.0.0 framework: >= net452
+nuget Microsoft.Owin.Host.SystemWeb
 
 github fsharp/FAKE modules/Octokit/Octokit.fsx

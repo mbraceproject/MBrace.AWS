@@ -10,6 +10,9 @@ open MBrace.Runtime
 open MBrace.Runtime.Store
 open MBrace.Runtime.Utils
 
+type internal OAttribute = System.Runtime.InteropServices.OptionalAttribute
+type internal DAttribute = System.Runtime.InteropServices.DefaultParameterValueAttribute
+
 /// Configuration registry for current process.
 type ProcessConfiguration private () =
     static let isInitialized = ref false
@@ -68,8 +71,6 @@ type ProcessConfiguration private () =
                         omitHeader    = true, 
                         typeConverter = VagabondRegistry.Instance.TypeConverter)
 
-                version <- typeof<ProcessConfiguration>.Assembly.GetName().Version
-
                 isInitialized := true
         )
 
@@ -109,7 +110,8 @@ type ProcessConfiguration private () =
 
     /// MBrace.AWS compiled version
     static member Version = 
-        checkInitialized()
+        if version = null then
+            version <- typeof<ProcessConfiguration>.Assembly.GetName().Version
         version
 
     /// Initializes process state for use as client

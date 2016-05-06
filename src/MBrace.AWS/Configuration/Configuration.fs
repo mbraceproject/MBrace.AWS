@@ -93,7 +93,7 @@ type MBraceAWSCredentials (accessKey : string, secretKey : string) =
 
 /// MBrace.AWS Configuration Builder. Used to specify MBrace.AWS cluster storage configuration.
 [<AutoSerializable(true); Sealed; NoEquality; NoComparison>]
-type Configuration(region : AWSRegion, credentials : AWSCredentials, ?resourcePrefix : string) =
+type Configuration(region : AWSRegion, credentials : AWSCredentials, [<O;D(null)>]?resourcePrefix : string) =
     let credentials = MBraceAWSCredentials(credentials)
     let resourcePrefix = 
         match resourcePrefix with
@@ -173,6 +173,6 @@ type Configuration(region : AWSRegion, credentials : AWSCredentials, ?resourcePr
         and set udt = Validate.tableName udt ; userDataTable <- udt
 
     /// Create a configuration object by reading credentials from the local store
-    static member FromCredentialsStore(region : AWSRegion, ?profileName : string, ?resourcePrefix : string) =
+    static member FromCredentialsStore(region : AWSRegion, [<O;D(null)>]?profileName : string, [<O;D(null)>]?resourcePrefix : string) =
         let credentials = MBraceAWSCredentials.FromCredentialsStore(?profileName = profileName)
         new Configuration(region, credentials, ?resourcePrefix = resourcePrefix)
