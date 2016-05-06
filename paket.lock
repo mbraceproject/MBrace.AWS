@@ -49,24 +49,6 @@ NUGET
       MBrace.Core (1.1.8)
       MBrace.Flow (1.1.8)
       NUnit (>= 2.6 < 3.0)
-    Microsoft.ApplicationInsights (2.0) - framework: >= net452
-    Microsoft.ApplicationInsights.Agent.Intercept (1.2.1) - framework: >= net452
-    Microsoft.ApplicationInsights.DependencyCollector (2.0) - framework: >= net452
-      Microsoft.ApplicationInsights (2.0) - framework: >= net40
-      Microsoft.ApplicationInsights.Agent.Intercept (>= 1.2.1) - framework: >= net40
-    Microsoft.ApplicationInsights.JavaScript (0.22.9-build00167) - framework: >= net452
-    Microsoft.ApplicationInsights.PerfCounterCollector (2.0) - framework: >= net452
-      Microsoft.ApplicationInsights (2.0) - framework: >= net45
-    Microsoft.ApplicationInsights.Web (2.0) - framework: >= net452
-      Microsoft.ApplicationInsights (2.0) - framework: >= net40
-      Microsoft.ApplicationInsights.WindowsServer (>= 2.0) - framework: >= net40
-    Microsoft.ApplicationInsights.WindowsServer (2.0) - framework: >= net452
-      Microsoft.ApplicationInsights (2.0) - framework: >= net40
-      Microsoft.ApplicationInsights.DependencyCollector (>= 2.0) - framework: >= net40
-      Microsoft.ApplicationInsights.PerfCounterCollector (>= 2.0) - framework: >= net40
-      Microsoft.ApplicationInsights.WindowsServer.TelemetryChannel (2.0) - framework: >= net40
-    Microsoft.ApplicationInsights.WindowsServer.TelemetryChannel (2.0) - framework: >= net452
-      Microsoft.ApplicationInsights (2.0) - framework: >= net40
     Microsoft.Bcl (1.1.10) - framework: net10, net11, net20, net30, net35, net40, net40-full
       Microsoft.Bcl.Build (>= 1.0.14)
     Microsoft.Bcl.Build (1.0.21) - import_targets: false, framework: net10, net11, net20, net30, net35, net40, net40-full
