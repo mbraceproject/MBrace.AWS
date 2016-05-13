@@ -23,6 +23,8 @@ nuget AWSSDK.SQS ~> 3.0
 nuget Argu ~> 2.0
 nuget FSharp.AWS.DynamoDB prerelease
 
+nuget Owin version_in_path: true
+nuget Microsoft.Owin version_in_path: true
 nuget Microsoft.Owin.Host.SystemWeb
 
 github fsharp/FAKE modules/Octokit/Octokit.fsx
