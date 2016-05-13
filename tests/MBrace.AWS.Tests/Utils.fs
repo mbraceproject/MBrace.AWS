@@ -40,13 +40,13 @@ module Utils =
         | ev -> ev
 
     let getAWSRegion () = 
-        match getEnvironmentVariable "MBrace.AWS.Tests.Region" with
+        match getEnvironmentVariable "MBraceAWSTestRegion" with
         | null | "" -> AWSRegion.EUCentral1
         | region -> AWSRegion.Parse region
 
-    let getAWSProfileName () = getEnvironmentVariableOrDefault "MBrace.AWS.Test.ProfileName" "default"
+    let getAWSProfileName () = getEnvironmentVariableOrDefault "MBraceAWSTestProfileName" "default"
     let getAWSCredentials () =
-        match getEnvironmentVariable "MBrace.AWS.Test.Credentials" with
+        match getEnvironmentVariable "MBraceAWSTestCredentials" with
         | null | "" -> MBraceAWSCredentials.FromCredentialsStore(getAWSProfileName())
         | creds -> let toks = creds.Split(',') in new MBraceAWSCredentials(toks.[0], toks.[1])
 
