@@ -13,6 +13,12 @@ export MBraceAWSTestProfile="default" # default profile name
 export MBraceAWSTestCredentials="<access key>,<secret key>" # your access & secret keys for accessing DynamoDB
 ```
 
+### Deploying an MBrace.AWS
+
+There are currently 2 ways to deploy an MBrace.AWS cluster
+* Standalone Deployments: Use `MBrace.AWS.StandaloneWorker` to manually deploy a cluster on-premises or a cloud VM.
+* Elastic Beanstalk: Use the `MBrace.AWS.WebWorker` implementation to deploy a cluster using AWS Elastic Beanstalk.
+
 ### Build Status
 
 * Windows [![Build status](https://ci.appveyor.com/api/projects/status/agctped28mcs1ukk?svg=true)](https://ci.appveyor.com/project/nessos/mbrace-aws)
