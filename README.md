@@ -13,7 +13,7 @@ export MBraceAWSTestProfile="default" # default profile name
 export MBraceAWSTestCredentials="<access key>,<secret key>" # your access & secret keys for accessing DynamoDB
 ```
 
-### Deploying an MBrace.AWS
+### Deploying an MBrace.AWS Cluster
 
 There are currently 2 ways to deploy an MBrace.AWS cluster
 * Standalone Deployments: Use `MBrace.AWS.StandaloneWorker` to manually deploy a cluster on-premises or a cloud VM.
