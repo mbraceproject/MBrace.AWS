@@ -38,26 +38,42 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MBrace.AWS.WebWorker", "src
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug_WebWorker|Any CPU = Debug_WebWorker|Any CPU
 		Debug|Any CPU = Debug|Any CPU
+		Release_WebWorker|Any CPU = Release_WebWorker|Any CPU
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C9BEFEC9-2A83-4C19-9420-658BA0077E0E}.Debug_WebWorker|Any CPU.ActiveCfg = Debug|Any CPU
+		{C9BEFEC9-2A83-4C19-9420-658BA0077E0E}.Debug_WebWorker|Any CPU.Build.0 = Debug|Any CPU
 		{C9BEFEC9-2A83-4C19-9420-658BA0077E0E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{C9BEFEC9-2A83-4C19-9420-658BA0077E0E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C9BEFEC9-2A83-4C19-9420-658BA0077E0E}.Release_WebWorker|Any CPU.ActiveCfg = Release|Any CPU
+		{C9BEFEC9-2A83-4C19-9420-658BA0077E0E}.Release_WebWorker|Any CPU.Build.0 = Release|Any CPU
 		{C9BEFEC9-2A83-4C19-9420-658BA0077E0E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C9BEFEC9-2A83-4C19-9420-658BA0077E0E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E7BBBE5E-616E-4F85-94CE-E912CB342E9F}.Debug_WebWorker|Any CPU.ActiveCfg = Debug|Any CPU
+		{E7BBBE5E-616E-4F85-94CE-E912CB342E9F}.Debug_WebWorker|Any CPU.Build.0 = Debug|Any CPU
 		{E7BBBE5E-616E-4F85-94CE-E912CB342E9F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{E7BBBE5E-616E-4F85-94CE-E912CB342E9F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E7BBBE5E-616E-4F85-94CE-E912CB342E9F}.Release_WebWorker|Any CPU.ActiveCfg = Release|Any CPU
+		{E7BBBE5E-616E-4F85-94CE-E912CB342E9F}.Release_WebWorker|Any CPU.Build.0 = Release|Any CPU
 		{E7BBBE5E-616E-4F85-94CE-E912CB342E9F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E7BBBE5E-616E-4F85-94CE-E912CB342E9F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B36C97D0-928B-4CB0-9F70-79BA47F4C920}.Debug_WebWorker|Any CPU.ActiveCfg = Debug|Any CPU
+		{B36C97D0-928B-4CB0-9F70-79BA47F4C920}.Debug_WebWorker|Any CPU.Build.0 = Debug|Any CPU
 		{B36C97D0-928B-4CB0-9F70-79BA47F4C920}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{B36C97D0-928B-4CB0-9F70-79BA47F4C920}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B36C97D0-928B-4CB0-9F70-79BA47F4C920}.Release_WebWorker|Any CPU.ActiveCfg = Release|Any CPU
+		{B36C97D0-928B-4CB0-9F70-79BA47F4C920}.Release_WebWorker|Any CPU.Build.0 = Release|Any CPU
 		{B36C97D0-928B-4CB0-9F70-79BA47F4C920}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B36C97D0-928B-4CB0-9F70-79BA47F4C920}.Release|Any CPU.Build.0 = Release|Any CPU
+		{196A1319-020E-4CC7-80DF-34CA2EBA60E2}.Debug_WebWorker|Any CPU.ActiveCfg = Debug|Any CPU
+		{196A1319-020E-4CC7-80DF-34CA2EBA60E2}.Debug_WebWorker|Any CPU.Build.0 = Debug|Any CPU
 		{196A1319-020E-4CC7-80DF-34CA2EBA60E2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{196A1319-020E-4CC7-80DF-34CA2EBA60E2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{196A1319-020E-4CC7-80DF-34CA2EBA60E2}.Release_WebWorker|Any CPU.ActiveCfg = Release|Any CPU
+		{196A1319-020E-4CC7-80DF-34CA2EBA60E2}.Release_WebWorker|Any CPU.Build.0 = Release|Any CPU
 		{196A1319-020E-4CC7-80DF-34CA2EBA60E2}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{196A1319-020E-4CC7-80DF-34CA2EBA60E2}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
