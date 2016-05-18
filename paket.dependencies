@@ -2,9 +2,9 @@ redirects: on
 source https://nuget.org/api/v2
 
 nuget FSharp.Formatting
-nuget NUnit 
-nuget NUnit.Runners
-nuget NuGet.CommandLine
+nuget NUnit ~> 2.0
+nuget NUnit.Runners ~> 2.0
+nuget NuGet.CommandLine ~> 2.0
 nuget FAKE
 nuget SourceLink.Fake
 nuget MBrace.Core ~> 1.1.2

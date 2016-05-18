@@ -3,7 +3,7 @@ using System.Reflection;
 
 [assembly: AssemblyTitleAttribute("MBrace.AWS.WebWorker")]
 [assembly: AssemblyProductAttribute("MBrace.AWS")]
-[assembly: AssemblyDescriptionAttribute("AWS backend for MBrace")]
+[assembly: AssemblyDescriptionAttribute("AWS PaaS bindings for MBrace")]
 [assembly: AssemblyVersionAttribute("0.0.1")]
 [assembly: AssemblyFileVersionAttribute("0.0.1")]
 namespace System {
