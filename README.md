@@ -21,7 +21,8 @@ There are currently 2 ways to deploy an MBrace.AWS cluster
 
 ### Build Status
 
-* Windows [![Build status](https://ci.appveyor.com/api/projects/status/agctped28mcs1ukk?svg=true)](https://ci.appveyor.com/project/nessos/mbrace-aws)
+* .NET/Windows [![Build status](https://ci.appveyor.com/api/projects/status/agctped28mcs1ukk?svg=true)](https://ci.appveyor.com/project/nessos/mbrace-aws)
+* Mono/Linux [![Build Status](https://travis-ci.org/mbraceproject/MBrace.AWS.png?branch=master)](https://travis-ci.org/mbraceproject/MBrace.AWS/branches)
 
 
 ### Maintainers
