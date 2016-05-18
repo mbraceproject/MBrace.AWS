@@ -318,6 +318,6 @@ type ``Vagabond AWS Tests (FSI)``(localWorkerCount : int) =
             fsi.EvalInteraction code'
 
 
-[<TestFixture; Category("AppVeyor"); Category("Standalone Cluster")>]
+[<TestFixture; Category("Vagabond"); Category("Standalone Cluster")>]
 type ``Vagabond Tests (FSI) - Standalone Cluster - Remote Storage``() =
-    inherit ``Vagabond AWS Tests (FSI)``(if isAppVeyorInstance then 1 else 2)
+    inherit ``Vagabond AWS Tests (FSI)``(if isCIInstance then 1 else 2)
