@@ -27,7 +27,6 @@ type ServiceStatus =
 type WorkerService (config : Configuration, workerId : string) =
     do Validate.tableName workerId
     do Validate.queueName workerId
-    do Validate.bucketName workerId
     let mutable useAppDomainIsolation   = true
     let mutable customResources         = ResourceRegistry.Empty
     let mutable configuration           = FsPickler.Clone config
