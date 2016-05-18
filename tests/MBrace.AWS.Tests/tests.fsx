@@ -28,4 +28,7 @@ let config = Configuration.FromCredentialsStore(AWSRegion.EUCentral1)
 
 let cluster = AWSCluster.InitOnCurrentMachine(config, workerCount = 2, logger = ConsoleLogger(), heartbeatThreshold = TimeSpan.FromSeconds 20.)
 //let cluster = AWSCluster.Connect(config, logger = ConsoleLogger())
-cluster.Reset(reactivate = false, force = true)
+//cluster.Reset(reactivate = false, force = true, deleteUserData = true)
+
+
+cluster.Run(Cloud.ParallelEverywhere Cloud.CurrentWorker)

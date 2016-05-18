@@ -227,6 +227,7 @@ type IAmazonSQS with
     }
 
     member client.CreateQueueWithName (queueName : string) = async {
+        Validate.queueName queueName
         try
             let req = CreateQueueRequest(QueueName = queueName)
             let! ct = Async.CancellationToken

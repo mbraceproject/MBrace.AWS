@@ -57,3 +57,17 @@ module Validate =
             sprintf "Invalid DynamoDB table name '%s', see %s" 
                     tableName "http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Limits.html"
             |> invalidArg "tableName"
+
+
+    // SQS Name limitations, see: https://aws.amazon.com/sqs/faqs/
+    let private queueNameRegex = Regex("^[a-zA-Z0-9\-_]+$", RegexOptions.Compiled)
+    let tryQueueName (queueName : string) =
+        if queueName.Length > 80 then false
+        elif not <| validate queueNameRegex queueName then false
+        else true
+
+    let queueName queueName =
+        if not <| tryQueueName queueName then
+            sprintf "Invalid SQS queue name '%s', see %s" 
+                    queueName "https://aws.amazon.com/sqs/faqs/"
+            |> invalidArg "queueName"
