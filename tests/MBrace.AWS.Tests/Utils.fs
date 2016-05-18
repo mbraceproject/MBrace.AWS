@@ -91,7 +91,8 @@ type ClusterSession(config : MBrace.AWS.Configuration, localWorkerCount : int, ?
             | Some r -> 
                 if localWorkerCount > 0 then 
                     r.KillAllLocalWorkers()
-                    r.Reset(deleteUserData = true, deleteRuntimeState = true, deleteQueues = true, deleteLogs = true, force = true, reactivate = false)
+
+                r.Reset(deleteUserData = true, deleteRuntimeState = true, deleteQueues = true, deleteLogs = true, force = true, reactivate = false)
 
                 state <- None)
 

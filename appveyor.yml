@@ -1,4 +1,10 @@
 version: 0.0.1.{build}
 init:
   - git config --global core.autocrlf input
-test: off
+
+test:
+  assemblies:
+    - MBrace.AWS.Tests.dll
+
+  categories:
+    - AppVeyor
