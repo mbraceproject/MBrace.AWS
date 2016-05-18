@@ -166,6 +166,7 @@ type ``Vagabond AWS Tests (FSI)``(localWorkerCount : int) =
 
     [<Test>]
     member __.``04. Updating data dependency across interactions`` () =
+        if runsOnMono.Value then () else
         let fsi = FsiSession.Value
 
         "let mutable x = 0" |> fsi.EvalInteraction
@@ -185,6 +186,7 @@ type ``Vagabond AWS Tests (FSI)``(localWorkerCount : int) =
 
     [<Test>]
     member __.``06. Cross-slice Quotation literal`` () =
+        if runsOnMono.Value then () else
         let fsi = FsiSession.Value
 
         fsi.EvalInteraction "let x = 41"
