@@ -28,6 +28,10 @@ module StandaloneWorker =
                 | Some n -> n
 
             let svc = new WorkerService(config, workerId)
+
+#if DEBUG
+            svc.LogLevel <- LogLevel.Info
+#endif
             if not cli.Quiet then
                 ignore <| svc.AttachLogger(ConsoleLogger(showDate = true, useColors = true))
 
