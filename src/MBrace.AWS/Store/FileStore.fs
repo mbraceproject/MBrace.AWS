@@ -95,7 +95,7 @@ type S3FileStore private (account : AWSAccount, defaultBucket : string, bucketPr
                 let! _result = account.S3Client.PutBucketAsync(s3p.Bucket, ct) |> Async.AwaitTaskCorrect
                 ()
 
-            if buckOpt |> Option.forall (fun b -> (DateTime.UtcNow - b.CreationDate).Duration() < TimeSpan.FromMinutes 1.) then
+            if buckOpt |> Option.forall (fun b -> (DateTime.Now - b.CreationDate).Duration() < TimeSpan.FromMinutes 1.) then
                 // addresses an issue where S3 erroneously reports that bucket does not exist even if it has been created
                 // the workflow below will typically trigger this error, forcing a retry of the operation after a delay
                 let! ct = Async.CancellationToken
