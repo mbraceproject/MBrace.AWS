@@ -143,7 +143,7 @@ Target "RunTests" (fun _ ->
 
 Target "SourceLink" (fun _ ->
     let baseUrl = sprintf "%s/%s/{0}/%%var2%%" gitRaw project
-    !! "src/**/*.??proj"
+    !! "src/**/*.fsproj"
     |> Seq.iter (fun projFile ->
         let proj = VsProj.LoadRelease projFile 
         SourceLink.Index proj.CompilesNotLinked proj.OutputFilePdb __SOURCE_DIRECTORY__ baseUrl
@@ -181,7 +181,7 @@ Target "Release" DoNothing
   ==> "RunTests"
   ==> "Default"
 
-"Default" 
+"Build" 
 #if MONO
 #else
   =?> ("SourceLink", Pdbstr.tryFind().IsSome )

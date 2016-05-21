@@ -1,23 +1,56 @@
 type project
 owners
-    Yan Cui
+    Yan Cui, Eirik Tsarpalis
 authors 
-    Yan Cui
+    Yan Cui, Eirik Tsarpalis
+summary
+    AWS PaaS bindings for MBrace
+description
+    An MBrace cluster implementation on top of AWS PaaS.
+	Bundles a standalone executable for setup of local worker instances.
 projectUrl
-    http://github.com/theburningmonk/MBrace.AWS
+    http://github.com/mbraceproject/MBrace.AWS
 iconUrl
-    https://raw.githubusercontent.com/theburningmonk/MBrace.AWS/master/docs/files/img/logo.png
+    https://avatars2.githubusercontent.com/u/9674757
 licenseUrl
-    http://github.com/theburningmonk/MBrace.AWS/blob/master/LICENSE.txt
+    http://github.com/mbraceproject/MBrace.AWS/blob/master/LICENSE.txt
 requireLicenseAcceptance
     false
 copyright
-    Copyright 2015
+    Copyright 2016
 tags
-    mbrace fsharp aws
-summary
-    AWS backend for MBrace
-description
-    AWS backend for MBrace
+    F#, cloud, mapreduce, distributed, aws
+references
+	MBrace.AWS.dll
+files
+	../../nuget/MBrace.AWS.fsx ==>
+	../../packages/FSharp.Core/lib/net40/FSharp.Core.dll ==> tools
+	../../packages/FSharp.Core/lib/net40/FSharp.Core.sigdata ==> tools
+	../../packages/FSharp.Core/lib/net40/FSharp.Core.optdata ==> tools
+	../../packages/FSharp.Core/lib/net40/FSharp.Core.xml ==> tools
+	../../bin/Newtonsoft.Json.dll ==> tools
+    ../../bin/FsPickler.dll ==> tools
+    ../../bin/FsPickler.Json.dll ==> tools
+	../../bin/Mono.Cecil.dll ==> tools
+	../../bin/Vagabond.AssemblyParser.dll ==> tools
+	../../bin/Vagabond.dll ==> tools
+	../../bin/Argu.dll ==> tools
+	../../bin/Unquote.dll ==> tools
+	../../bin/FSharp.AWS.DynamoDB.dll ==> tools
+	../../bin/AWSSDK.Core.dll ==> tools
+	../../bin/AWSSDK.DynamoDBv2.dll ==> tools
+	../../bin/AWSSDK.S3.dll ==> tools
+	../../bin/AWSSDK.SQS.dll ==> tools
+    ../../bin/MBrace.Core.dll ==> tools
+	../../bin/MBrace.Core.pdb ==> tools
+	../../bin/MBrace.Core.xml ==> tools
+    ../../bin/MBrace.Runtime.dll ==> tools
+	../../bin/MBrace.Runtime.pdb ==> tools
+	../../bin/MBrace.Runtime.xml ==> tools
+    ../../bin/MBrace.AWS.dll ==> tools
+	../../bin/MBrace.AWS.pdb ==> tools
+	../../bin/MBrace.AWS.xml ==> tools
+	../../bin/mbrace.awsworker.exe ==> tools
+	../../bin/mBrace.awsworker.exe.config ==> tools
 
 
