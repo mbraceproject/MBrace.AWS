@@ -22,7 +22,7 @@ module StandaloneWorker =
             let workerId = 
                 match cli.WorkerId with
                 | None -> 
-                    let hostName = System.Net.Dns.GetHostName()
+                    let hostName = System.Net.Dns.GetHostName().Replace('.','-')
                     let id = if hostName.Length > 40 then hostName.Substring(0, 40) else hostName
                     sprintf "%s-p%d" id proc.Id
                 | Some n -> n
