@@ -8,7 +8,7 @@ module Validate =
 
     let inline private validate (r : Regex) (input : string) = r.IsMatch input
 
-    let private hostNameRegex = Regex("^[a-z0-9]+$", RegexOptions.Compiled)
+    let private hostNameRegex = Regex("^[a-z0-9\-]+$", RegexOptions.Compiled)
     let hostname (hostname : string) =
         if not <| validate hostNameRegex hostname then 
             sprintf "'%s' is not a valid DNS hostname." hostname
