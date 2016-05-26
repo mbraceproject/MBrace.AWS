@@ -30,5 +30,6 @@ let cluster = AWSCluster.InitOnCurrentMachine(config, workerCount = 2, logger = 
 //let cluster = AWSCluster.Connect(config, logger = ConsoleLogger())
 //cluster.Reset(reactivate = false, force = true, deleteUserData = true)
 
+cluster.ShowWorkers()
 
 cluster.Run(Cloud.ParallelEverywhere Cloud.CurrentWorker)
