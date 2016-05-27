@@ -18,6 +18,7 @@ open MBrace.ThreadPool
 
 open MBrace.AWS
 open MBrace.AWS.Runtime
+open MBrace.AWS.Runtime.Utilities
 open MBrace.AWS.Store
 
 #nowarn "445"
@@ -57,6 +58,56 @@ module Utils =
             | Some id -> id
 
         new Configuration(getAWSRegion(), getAWSCredentials(), prefixId)
+
+
+    type AWSCluster with
+        member cluster.NukeS3BucketsAsync(?bucketNameFilter : string -> bool) = async {
+            let bucketNameFilter = defaultArg bucketNameFilter (fun b -> b.ToLower().StartsWith "mbrace")
+            let! ct = Async.CancellationToken
+            let! response = cluster.S3Client.ListBucketsAsync(ct) |> Async.AwaitTaskCorrect
+            do! response.Buckets 
+                |> Seq.filter (fun b -> bucketNameFilter b.BucketName)
+                |> Seq.map (fun b -> cluster.S3Client.DeleteBucketAsyncSafe(b.BucketName))
+                |> Async.Parallel
+                |> Async.Ignore
+        }
+
+        member cluster.NukeDynamoDBTablesAsync(?tableNameFilter : string -> bool) = async {
+            let tableNameFilter = defaultArg tableNameFilter (fun tn -> tn.ToLower().StartsWith "mbrace")
+            let! ct = Async.CancellationToken
+            let! response = cluster.DynamoDBClient.ListTablesAsync(ct) |> Async.AwaitTaskCorrect
+            do! response.TableNames
+                |> Seq.filter tableNameFilter
+                |> Seq.map cluster.DynamoDBClient.DeleteTableAsyncSafe
+                |> Async.Parallel
+                |> Async.Ignore
+        }
+
+        member cluster.NukeSqsQueuesAsync(?queueNameFilter : string -> bool) = async {
+            let queueNameFilter = defaultArg queueNameFilter (fun qn -> qn.ToLower().StartsWith "mbrace")
+            let! ct = Async.CancellationToken
+            let! response = cluster.SQSClient.ListQueuesAsync("", ct) |> Async.AwaitTaskCorrect
+            do!
+                response.QueueUrls 
+                |> Seq.filter (fun uri -> uri.Split('/') |> Array.last |> queueNameFilter)
+                |> Seq.map (fun uri -> cluster.SQSClient.DeleteQueueUri uri)
+                |> Async.Parallel
+                |> Async.Ignore
+        }
+            
+        member cluster.NukeS3Buckets(?bucketNameFilter : string -> bool) = 
+            cluster.NukeS3BucketsAsync(?bucketNameFilter = bucketNameFilter) |> Async.RunSync
+
+        member cluster.NukeDynamoDBTables(?tableNameFilter : string -> bool) =
+            cluster.NukeDynamoDBTablesAsync(?tableNameFilter = tableNameFilter) |> Async.RunSync
+
+        member cluster.NukeSqsQueues(?queueNameFilter : string -> bool) =
+            cluster.NukeSqsQueuesAsync(?queueNameFilter = queueNameFilter) |> Async.RunSync
+
+        member cluster.NukeAllResources(?nameFilter : string -> bool) =
+            cluster.NukeS3Buckets(?bucketNameFilter = nameFilter)
+            cluster.NukeDynamoDBTables(?tableNameFilter = nameFilter)
+            cluster.NukeSqsQueues(?queueNameFilter = nameFilter)
 
 
 type ClusterSession(config : MBrace.AWS.Configuration, localWorkerCount : int, ?heartbeatThreshold : TimeSpan) =

@@ -134,14 +134,15 @@ type AWSCluster private (manager : ClusterManager, faultPolicy : FaultPolicy opt
     static do ProcessConfiguration.InitAsClient()
     let hashId = manager.ClusterId.Hash
 
-    /// Gets the AWS S3 account name used by the cluster
-    member this.S3Account = manager.Configuration.S3Credentials
-    /// Gets the AWS SQS account name used by the cluster
-    member this.SQSAccount = manager.Configuration.SQSCredentials
-    /// Gets the AWS DynamoDB account name used by the cluster
-    member this.DynamoDBAccount = manager.Configuration.DynamoDBCredentials
     /// Cluster configuration hash identifier
     member this.Hash = hashId
+
+    /// Gets the AWSSDK S3 client instance used by the cluster
+    member this.S3Client = manager.ClusterId.S3Account.S3Client
+    /// Gets the AWSSDK SQS client instance used by the cluster
+    member this.SQSClient = manager.ClusterId.SQSAccount.SQSClient
+    /// Gets the AWSSDK DynamoDB client instance used by the cluster
+    member this.DynamoDBClient = manager.ClusterId.DynamoDBAccount.DynamoDBClient
 
     /// Gets a copy of the configuration object used for the runtime
     [<DebuggerBrowsable(DebuggerBrowsableState.Never)>]

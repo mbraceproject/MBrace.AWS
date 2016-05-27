@@ -32,7 +32,7 @@ type FsPicklerJsonAttribute() =
         ProcessConfiguration.JsonSerializer.UnPickleOfString<'T> pickle
 
 [<AutoOpen>]
-module internal TableUtils =
+module TableUtils =
 
     type IAmazonDynamoDB with
         member ddb.DeleteTableAsyncSafe(tableName : string) = async {
