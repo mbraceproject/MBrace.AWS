@@ -115,6 +115,7 @@ type DynamoDBDictionary<'T> internal (tableName : string, dictId : string, accou
         member __.GetEnumerator() = getSeq().GetEnumerator()
         
     interface CloudDictionary<'T> with
+        member this.Id: string = dictId
         member x.IsKnownCount: bool = false
         member x.IsMaterialized : bool = false
         member x.IsKnownSize: bool = false
@@ -190,8 +191,6 @@ type DynamoDBDictionary<'T> internal (tableName : string, dictId : string, accou
                 |> Async.Parallel
                 |> Async.Ignore
         }
-        
-        member this.Id: string = sprintf "table:%s, id:%s" tableName dictId
         
         member this.RemoveAsync(key: string): Async<bool> = async {
             try 

@@ -328,10 +328,11 @@ module S3Utils =
                         request.Objects.Add(new KeyVersion(Key = o.Key))
 
                     let! _response = s3.DeleteObjectsAsync(request, ct) |> Async.AwaitTaskCorrect
+                    do! Async.Sleep 1000
+                    do! s3.DeleteBucketAsyncSafe(bucketName)
+                else
+                    let! _ = s3.DeleteBucketAsync(bucketName, ct) |> Async.AwaitTaskCorrect
                     return ()
-
-                let! _ = s3.DeleteBucketAsync(bucketName, ct) |> Async.AwaitTaskCorrect
-                return ()
 
             | Choice2Of2 e when StoreException.NotFound e -> ()
             | Choice2Of2 e -> do! Async.Raise e
