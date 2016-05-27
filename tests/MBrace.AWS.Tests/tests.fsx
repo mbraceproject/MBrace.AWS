@@ -27,7 +27,7 @@ AWSWorker.LocalExecutable <- __SOURCE_DIRECTORY__ + "/../../bin/mbrace.awsworker
 
 let region = AWSRegion.EUCentral1
 let credentials = MBraceAWSCredentials.FromCredentialsStore()
-let credentials = MBraceAWSCredentials.FromEnvironmentVariables()
+//let credentials = MBraceAWSCredentials.FromEnvironmentVariables()
 let config = Configuration.Define(region, credentials)
 
 let cluster = AWSCluster.InitOnCurrentMachine(config, workerCount = 2, logger = ConsoleLogger(), heartbeatThreshold = TimeSpan.FromSeconds 20.)
