@@ -7,6 +7,7 @@ open Amazon
 open Amazon.Util
 open Amazon.Runtime
 
+open MBrace.Runtime.Utils
 open MBrace.AWS.Runtime
 
 /// Serializable wrapper for AWS RegionEndpoint
@@ -82,18 +83,42 @@ type MBraceAWSCredentials (accessKey : string, secretKey : string) =
         new MBraceAWSCredentials(credentials.GetCredentials())
 
     /// <summary>
-    ///     Recover a set of credentials using the local credentials store
+    ///     Recover a set of credentials using the local credentials store.
     /// </summary>
-    /// <param name="profileName">Credential store profile name.</param>
+    /// <param name="profileName">Credential store profile name. Defaults to 'default' profile.</param>
     static member FromCredentialsStore(?profileName : string) =
         let profileName = defaultArg profileName "default"
         let creds = ProfileManager.GetAWSCredentials profileName
         new MBraceAWSCredentials(creds)
 
+    /// <summary>
+    ///     Recovers a credentials instance from the local environment
+    ///     using the the 'AWS_ACCESS_KEY_ID' and 'AWS_SECRET_ACCESS_KEY' variables.
+    /// </summary>
+    static member FromEnvironmentVariables() =
+        let accessKeyName = "AWS_ACCESS_KEY_ID"
+        let secretKeyName = "AWS_SECRET_ACCESS_KEY"
+
+        let getEnv (envName:string) =
+            let aux found target =
+                if String.IsNullOrWhiteSpace found then Environment.GetEnvironmentVariable(envName, target)
+                else found
+
+            Array.fold aux null [|
+                EnvironmentVariableTarget.Process; 
+                EnvironmentVariableTarget.User; 
+                EnvironmentVariableTarget.Machine |]
+
+        match getEnv accessKeyName, getEnv secretKeyName with
+        | null, null -> sprintf "Undefined environment variables '%s' and '%s'" accessKeyName secretKeyName |> invalidOp
+        | null, _ -> sprintf "Undefined environment variable '%s'" accessKeyName |> invalidOp
+        | _, null -> sprintf "Undefined environment variable '%s'" secretKeyName |> invalidOp
+        | aK, sK  -> new MBraceAWSCredentials(aK, sK)
+
 
 /// MBrace.AWS Configuration Builder. Used to specify MBrace.AWS cluster storage configuration.
 [<AutoSerializable(true); Sealed; NoEquality; NoComparison>]
-type Configuration(region : AWSRegion, credentials : AWSCredentials, [<O;D(null)>]?resourcePrefix : string) =
+type Configuration private (region : AWSRegion, credentials : AWSCredentials, ?resourcePrefix : string) =
     let credentials = MBraceAWSCredentials(credentials)
     let resourcePrefix = 
         match resourcePrefix with
@@ -172,7 +197,12 @@ type Configuration(region : AWSRegion, credentials : AWSCredentials, [<O;D(null)
         with get () = userDataTable
         and set udt = Validate.tableName udt ; userDataTable <- udt
 
-    /// Create a configuration object by reading credentials from the local store
-    static member FromCredentialsStore(region : AWSRegion, [<O;D(null)>]?profileName : string, [<O;D(null)>]?resourcePrefix : string) =
-        let credentials = MBraceAWSCredentials.FromCredentialsStore(?profileName = profileName)
+    /// <summary>
+    ///     Defines an initial MBrace.AWS configuration object using specified initial paramters.
+    ///     The resulting configuration object uniquely identifies an MBrace.AWS cluster entity.
+    /// </summary>
+    /// <param name="region">AWS region identifier.</param>
+    /// <param name="credentials">AWS credentials used by the cluster.</param>
+    /// <param name="resourcePrefix">Resource prefix used by the cluster.</param>
+    static member Define(region : AWSRegion, credentials : AWSCredentials, [<O;D(null)>]?resourcePrefix : string) =
         new Configuration(region, credentials, ?resourcePrefix = resourcePrefix)

@@ -57,7 +57,7 @@ module Utils =
             | None -> sprintf "tests%04d" <| Random().Next(0, 10000)
             | Some id -> id
 
-        new Configuration(getAWSRegion(), getAWSCredentials(), prefixId)
+        Configuration.Define(getAWSRegion(), getAWSCredentials(), prefixId)
 
 
     type AWSCluster with

@@ -23,6 +23,7 @@ type private AWSArguments =
     // Global parameters
     | Resource_Prefix of string
     | Credentials of accessKey:string * secretKey:string
+    | [<AltCommandLine("-E")>] Use_Environment_Credentials
     | Profile of profileName:string
     | [<Mandatory>] Region of region:string
     // S3 parameters
@@ -63,7 +64,8 @@ type private AWSArguments =
             | Working_Directory _ -> "Specify the working directory for the worker."
             | Worker_Id _ -> "Specify worker name identifier."
             | Credentials _ -> "Specify the default AWS credentials for the worker."
-            | Profile _ -> "Specify a default AWS profile name for the worker."
+            | Profile _ -> "Specify a default AWS credentials profile name for the worker."
+            | Use_Environment_Credentials _ -> "Recover AWS credentials from the 'AWS_ACCESS_KEY_ID' and 'AWS_SECRET_ACCESS_KEY' environment variables."
             | Region _ -> "Specify the default AWS region for the worker."
             | S3_Credentials _ -> "Specify an alternate set of AWS credentials for use with S3."
             | S3_Profile _ -> "Specify an alternate AWS profile name for use with S3."
@@ -179,9 +181,10 @@ type ArgumentConfiguration =
             | None ->
                 match parseResult.TryPostProcessResult(<@ Profile @>, fun pf -> MBraceAWSCredentials.FromCredentialsStore pf) with
                 | Some creds -> creds
-                | None -> MBraceAWSCredentials.FromCredentialsStore |> parseResult.Catch
+                | None when parseResult.Contains <@ Use_Environment_Credentials @> -> MBraceAWSCredentials.FromEnvironmentVariables()
+                | None -> parseResult.Raise("No AWS credentials specified for process", 2, showUsage = false)
 
-        let config = new Configuration(defaultRegion, credentials, ?resourcePrefix = clusterId)
+        let config = Configuration.Define(defaultRegion, credentials, ?resourcePrefix = clusterId)
 
         let iterRegion c f = parseResult.IterResult(c, f << AWSRegion.Parse)
         iterRegion <@ DynamoDB_Region @> (fun r -> config.DynamoDBRegion <- r)
