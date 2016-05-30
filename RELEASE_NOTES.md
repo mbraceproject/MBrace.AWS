@@ -1,3 +1,6 @@
+#### 0.1.3-alpha - May 30 2016
+* Minor bugfix
+
 #### 0.1.2-alpha - May 30 2016
 * Minor bugfix
 
