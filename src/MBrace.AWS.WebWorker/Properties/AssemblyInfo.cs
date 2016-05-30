@@ -4,11 +4,11 @@ using System.Reflection;
 [assembly: AssemblyTitleAttribute("MBrace.AWS.WebWorker")]
 [assembly: AssemblyProductAttribute("MBrace.AWS")]
 [assembly: AssemblyDescriptionAttribute("AWS PaaS bindings for MBrace")]
-[assembly: AssemblyVersionAttribute("0.0.1")]
-[assembly: AssemblyFileVersionAttribute("0.0.1")]
+[assembly: AssemblyVersionAttribute("0.1.0")]
+[assembly: AssemblyFileVersionAttribute("0.1.0")]
 namespace System {
     internal static class AssemblyVersionInformation {
-        internal const string Version = "0.0.1";
-        internal const string InformationalVersion = "0.0.1";
+        internal const string Version = "0.1.0";
+        internal const string InformationalVersion = "0.1.0";
     }
 }
