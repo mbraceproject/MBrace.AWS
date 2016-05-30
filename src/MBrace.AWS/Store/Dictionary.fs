@@ -76,7 +76,7 @@ module private DynamoDBDictionaryUtils =
 
     let infiniteConditionalRetryPolicy = mkConditionalRetryPolicy None
 
-/// MBrace CloudDictionary implementation on top of Azure Table Store.
+/// MBrace CloudDictionary implementation on top of AWS Table Store.
 [<AutoSerializable(true) ; Sealed; DataContract>]
 type DynamoDBDictionary<'T> internal (tableName : string, dictId : string, account : AWSAccount) = 
     
@@ -226,7 +226,7 @@ type DynamoDBDictionary<'T> internal (tableName : string, dictId : string, accou
             with _ -> return None
         }
 
-/// CloudDictionary provider implementation on top of Azure table store.
+/// CloudDictionary provider implementation on top of AWS table store.
 [<Sealed; DataContract>]
 type DynamoDBDictionaryProvider private (account : AWSAccount, tableName : string) =
     
@@ -255,16 +255,16 @@ type DynamoDBDictionaryProvider private (account : AWSAccount, tableName : strin
     }
 
     /// <summary>
-    ///     Creates a TableDirectionaryProvider instance using provided Azure storage account.
+    ///     Creates a TableDirectionaryProvider instance using provided AWS storage account.
     /// </summary>
-    /// <param name="account">Azure storage account.</param>
+    /// <param name="account">AWS storage account.</param>
     static member internal Create(account : AWSAccount, ?tableName : string) =
         ignore account.Credentials // ensure that connection string is present in the current context
         let tableName = match tableName with None -> getRandomTableName "cloudDict" | Some tn -> Validate.tableName tn; tn
         new DynamoDBDictionaryProvider(account, tableName)
 
     /// <summary>
-    ///     Creates a TableDirectionaryProvider instance using provided Azure storage account.
+    ///     Creates a TableDirectionaryProvider instance using provided AWS storage account.
     /// </summary>
     /// <param name="region">AWS region to be used by the provider.</param>
     /// <param name="credentials">AWS credentials to be used by the provider.</param>
