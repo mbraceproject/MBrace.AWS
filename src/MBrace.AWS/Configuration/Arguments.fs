@@ -181,7 +181,7 @@ type ArgumentConfiguration =
             | None ->
                 match parseResult.TryPostProcessResult(<@ Profile @>, fun pf -> MBraceAWSCredentials.FromCredentialsStore pf) with
                 | Some creds -> creds
-                | None when parseResult.Contains <@ Use_Environment_Credentials @> -> MBraceAWSCredentials.FromEnvironmentVariables()
+                | None when parseResult.Contains <@ Use_Environment_Credentials @> -> parseResult.Catch(MBraceAWSCredentials.FromEnvironmentVariables, showUsage = false)
                 | None -> parseResult.Raise("No AWS credentials specified for process", 2, showUsage = false)
 
         let config = Configuration.Define(defaultRegion, credentials, ?resourcePrefix = clusterId)
