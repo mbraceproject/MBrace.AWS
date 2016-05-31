@@ -131,7 +131,7 @@ type WorkerManager private (clusterId : ClusterId, logger : ISystemLogger) =
         }
         
         member this.SubscribeWorker(workerId : IWorkerId, info : WorkerInfo) = async {
-            logger.LogInfof "Subscribing worker %O" clusterId
+            logger.LogInfof "Subscribing worker %O" workerId
 
             let joined = DateTimeOffset.Now
             let record =
