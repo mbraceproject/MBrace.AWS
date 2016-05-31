@@ -72,9 +72,6 @@ type MBraceAWSCredentials (accessKey : string, secretKey : string) =
     let [<DataMember(Name = "AccessKey")>] accessKey = accessKey
     let [<DataMember(Name = "SecretKey")>] secretKey = secretKey
 
-    static let awsCredentialsRegex =
-        new Regex("\[(\S+)\]\s+aws_access_key_id=(\S+)\s+aws_secret_access_key=(\S+)", RegexOptions.Compiled)
-
     member __.AccessKey = accessKey
     member __.SecretKey = secretKey
 
@@ -100,9 +97,10 @@ type MBraceAWSCredentials (accessKey : string, secretKey : string) =
             if not <| File.Exists credsFile then
                 sprintf "Could not locate stored credentials profile '%s'." profileName |> invalidOp
 
+            let text = File.ReadAllText credsFile
+
             let matchingProfile =
-                File.ReadAllText credsFile
-                |> awsCredentialsRegex.Matches
+                Regex.Matches(text, "\[(\S+)\]\s+aws_access_key_id=(\S+)\s+aws_secret_access_key=(\S+)")
                 |> Seq.cast<Match>
                 |> Seq.map (fun m -> m.Groups.[1].Value, m.Groups.[2].Value, m.Groups.[3].Value)
                 |> Seq.tryFind (fun (pf,_,_) -> pf = profileName)
