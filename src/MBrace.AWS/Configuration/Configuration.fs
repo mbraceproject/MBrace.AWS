@@ -1,6 +1,8 @@
 ﻿namespace MBrace.AWS
 
 open System
+open System.IO
+open System.Text.RegularExpressions
 open System.Runtime.Serialization
 
 open Amazon
@@ -70,6 +72,9 @@ type MBraceAWSCredentials (accessKey : string, secretKey : string) =
     let [<DataMember(Name = "AccessKey")>] accessKey = accessKey
     let [<DataMember(Name = "SecretKey")>] secretKey = secretKey
 
+    static let awsCredentialsRegex =
+        new Regex("\[(\S+)\]\s+aws_access_key_id=(\S+)\s+aws_secret_access_key=(\S+)", RegexOptions.Compiled)
+
     member __.AccessKey = accessKey
     member __.SecretKey = secretKey
 
@@ -88,8 +93,23 @@ type MBraceAWSCredentials (accessKey : string, secretKey : string) =
     /// <param name="profileName">Credential store profile name. Defaults to 'default' profile.</param>
     static member FromCredentialsStore(?profileName : string) =
         let profileName = defaultArg profileName "default"
-        let creds = ProfileManager.GetAWSCredentials profileName
-        new MBraceAWSCredentials(creds)
+        let ok, creds = ProfileManager.TryGetAWSCredentials(profileName)
+        if ok then new MBraceAWSCredentials(creds)
+        else
+            let credsFile = Path.Combine(getHomePath(), ".aws", "credentials")
+            if not <| File.Exists credsFile then
+                sprintf "Could not locate stored credentials profile '%s'." profileName |> invalidOp
+
+            let matchingProfile =
+                File.ReadAllText credsFile
+                |> awsCredentialsRegex.Matches
+                |> Seq.cast<Match>
+                |> Seq.map (fun m -> m.Groups.[1].Value, m.Groups.[2].Value, m.Groups.[3].Value)
+                |> Seq.tryFind (fun (pf,_,_) -> pf = profileName)
+
+            match matchingProfile with
+            | None -> sprintf "Could not locate stored credentials profile '%s'." profileName |> invalidOp
+            | Some (_,aK,sK) -> new MBraceAWSCredentials(aK, sK)
 
     /// <summary>
     ///     Recovers a credentials instance from the local environment
