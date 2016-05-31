@@ -22,6 +22,7 @@ NUGET
     FsPickler.Json (2.1)
       FsPickler (2.1)
       Newtonsoft.Json (>= 6.0.5)
+    log4net (2.0.5)
     MathNet.Numerics (3.7.1)
     MathNet.Numerics.FSharp (3.7.1)
       FSharp.Core (>= 3.1.2.1)

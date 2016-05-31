@@ -111,6 +111,7 @@ type ``Vagabond AWS Tests (FSI)``(localWorkerCount : int) =
                 "MBrace.AWS.dll"
                 "MBrace.AWS.Tests.dll"
 
+                "../packages/log4net/lib/net45-full/log4net.dll"
                 "../packages/MathNet.Numerics/lib/net40/MathNet.Numerics.dll"
                 "../packages/MathNet.Numerics.FSharp/lib/net40/MathNet.Numerics.FSharp.dll"
             ]
