@@ -64,9 +64,10 @@ with
         let hash = FsPickler.ComputeHash this
         System.Convert.ToBase64String hash.Hash
 
-
     member this.Id = 
         sprintf "AWS runtime [hashId:%s]" this.Hash
+
+    override this.ToString() = this.Hash
 
     interface IRuntimeId with 
         member this.Id = this.Id
