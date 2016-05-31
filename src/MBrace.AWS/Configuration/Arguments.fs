@@ -24,8 +24,8 @@ type private AWSArguments =
     | Resource_Prefix of string
     | Credentials of accessKey:string * secretKey:string
     | [<AltCommandLine("-E")>] Use_Environment_Credentials
-    | Profile of profileName:string
-    | [<Mandatory>] Region of region:string
+    | [<AltCommandLine("-P")>] Profile of profileName:string
+    | [<AltCommandLine("-R")>][<Mandatory>] Region of region:string
     // S3 parameters
     | S3_Credentials of accessKey:string * secretKey:string
     | S3_Profile of profileName:string
