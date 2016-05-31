@@ -11,9 +11,10 @@ AWS PaaS bindings for MBrace
 
 Depending on your platform, you can build and run tests running `build.bat` or `build.cmd`. To successfully run unit tests, you need to have credentials set to your default profile in your local credentials store. Alternative, you could set the following environment variables:
 ```bash
-export MBraceAWSTestRegion="eu-central-1" # default region is eu-central-1
-export MBraceAWSTestProfile="default" # default profile name
-export MBraceAWSTestCredentials="<access key>,<secret key>" # your access & secret keys for accessing DynamoDB
+export AWS_REGION="eu-central-1"                   # defaults to eu-central-1
+export AWS_CREDENTIAL_STORE_PROFILE=<profile name> # uses "default" if unset
+export AWS_ACCESS_KEY_ID=<your access key>         # your account's access key
+export AWS_SECRET_ACCESS_KEY=<your secret key>     # your account's secret key
 ```
 
 ### Deploying an MBrace.AWS Cluster

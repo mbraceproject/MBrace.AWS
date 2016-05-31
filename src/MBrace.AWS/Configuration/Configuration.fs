@@ -88,7 +88,7 @@ type MBraceAWSCredentials (accessKey : string, secretKey : string) =
     ///     Recover a set of credentials using the local credentials store.
     /// </summary>
     /// <param name="profileName">Credential store profile name. Defaults to 'default' profile.</param>
-    static member FromCredentialsStore(?profileName : string) =
+    static member FromCredentialsStore([<O;D(null)>]?profileName : string) =
         let profileName = defaultArg profileName "default"
         let ok, creds = ProfileManager.TryGetAWSCredentials(profileName)
         if ok then new MBraceAWSCredentials(creds)
