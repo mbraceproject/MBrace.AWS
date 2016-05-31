@@ -1,3 +1,7 @@
+#### 0.1.5-alpha - May 30 2016
+* Support fetching profiles from ~/.aws/credentials
+* Vagabond bugfix
+
 #### 0.1.4-alpha - May 30 2016
 * Minor bugfix
 
