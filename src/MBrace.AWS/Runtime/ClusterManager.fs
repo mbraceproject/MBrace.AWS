@@ -129,7 +129,7 @@ type ClusterManager =
 
         let cloudValueProvider =
             let fs = fileStore :> ICloudFileStore
-            let prefix = fs.Combine(fs.DefaultDirectory, "cloudValue")
+            let prefix = fs.Combine(clusterId.RuntimeS3BucketName, "cloudValue")
             let cloudValueStore = fs.WithDefaultDirectory prefix
             let mkCache () = ProcessConfiguration.ObjectCache
             let mkLocalCachingStore () = (ProcessConfiguration.FileStore :> ICloudFileStore).WithDefaultDirectory "cloudValueCache"
@@ -158,7 +158,7 @@ type ClusterManager =
         logger.LogInfo "Creating assembly manager"
         let assemblyManager =
             let fs = fileStore :> ICloudFileStore
-            let vagabondPrefix = fs.Combine(fs.DefaultDirectory, "vagabond")
+            let vagabondPrefix = fs.Combine(clusterId.RuntimeS3BucketName, "vagabond")
             let ignoredAssemblies = [| Assembly.GetExecutingAssembly() |]
             let config = StoreAssemblyManagerConfiguration.Create(fileStore, serializer, container = vagabondPrefix, ignoredAssemblies = ignoredAssemblies, compressAssemblies = true)
             StoreAssemblyManager.Create(config, localLogger = logger)
