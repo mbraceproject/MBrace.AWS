@@ -1,3 +1,7 @@
+#### 0.1.6-alpha - Jun 1 2016
+* AWS Credential fetching bugfix
+* Update to latest MBrace.Core
+
 #### 0.1.5-alpha - May 30 2016
 * Support fetching profiles from ~/.aws/credentials
 * Vagabond bugfix
