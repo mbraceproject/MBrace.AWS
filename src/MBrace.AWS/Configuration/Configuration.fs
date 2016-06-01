@@ -100,7 +100,7 @@ type MBraceAWSCredentials (accessKey : string, secretKey : string) =
             let text = File.ReadAllText credsFile
 
             let matchingProfile =
-                Regex.Matches(text, "\[(\S+)\]\s+aws_access_key_id=(\S+)\s+aws_secret_access_key=(\S+)")
+                Regex.Matches(text, "\[(\S+)\]\s+aws_access_key_id\s*=\s*(\S+)\s+aws_secret_access_key\s*=\s*(\S+)")
                 |> Seq.cast<Match>
                 |> Seq.map (fun m -> m.Groups.[1].Value, m.Groups.[2].Value, m.Groups.[3].Value)
                 |> Seq.tryFind (fun (pf,_,_) -> pf = profileName)
