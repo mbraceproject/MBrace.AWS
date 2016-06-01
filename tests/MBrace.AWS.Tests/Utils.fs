@@ -13,6 +13,7 @@ open MBrace.Core.Internals
 open MBrace.Core.Tests
 
 open MBrace.Runtime
+open MBrace.Runtime.Utils
 open MBrace.Runtime.Components
 open MBrace.ThreadPool
 
@@ -27,21 +28,14 @@ open MBrace.AWS.Store
 module Utils =
 
     let init() = ProcessConfiguration.InitAsClient()
-
-    let getEnvironmentVariable (envName:string) =
-        let aux found target =
-            if String.IsNullOrWhiteSpace found then Environment.GetEnvironmentVariable(envName, target)
-            else found
-
-        Array.fold aux null [|EnvironmentVariableTarget.Process; EnvironmentVariableTarget.User; EnvironmentVariableTarget.Machine|]
         
     let getEnvironmentVariableOrDefault envName defaultValue = 
-        match getEnvironmentVariable envName with
+        match Environment.ResolveEnvironmentVariable envName with
         | null | "" -> defaultValue
         | ev -> ev
 
     let getAWSRegion () = 
-        match getEnvironmentVariable "AWS_REGION" with
+        match Environment.ResolveEnvironmentVariable "AWS_REGION" with
         | null | "" -> AWSRegion.EUCentral1
         | region -> AWSRegion.Parse region
 

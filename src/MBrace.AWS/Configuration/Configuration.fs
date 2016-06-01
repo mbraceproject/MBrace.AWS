@@ -72,6 +72,11 @@ type MBraceAWSCredentials (accessKey : string, secretKey : string) =
     let [<DataMember(Name = "AccessKey")>] accessKey = accessKey
     let [<DataMember(Name = "SecretKey")>] secretKey = secretKey
 
+    // simple recognizer for aws credentials file syntax
+    // c.f. http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html
+    static let profileRegex =
+        Regex("\[(\S+)\]\s+aws_access_key_id\s*=\s*(\S+)\s+aws_secret_access_key\s*=\s*(\S+)", RegexOptions.Compiled)
+
     member __.AccessKey = accessKey
     member __.SecretKey = secretKey
 
@@ -100,7 +105,7 @@ type MBraceAWSCredentials (accessKey : string, secretKey : string) =
             let text = File.ReadAllText credsFile
 
             let matchingProfile =
-                Regex.Matches(text, "\[(\S+)\]\s+aws_access_key_id\s*=\s*(\S+)\s+aws_secret_access_key\s*=\s*(\S+)")
+                profileRegex.Matches text
                 |> Seq.cast<Match>
                 |> Seq.map (fun m -> m.Groups.[1].Value, m.Groups.[2].Value, m.Groups.[3].Value)
                 |> Seq.tryFind (fun (pf,_,_) -> pf = profileName)
@@ -116,16 +121,7 @@ type MBraceAWSCredentials (accessKey : string, secretKey : string) =
     static member FromEnvironmentVariables() =
         let accessKeyName = "AWS_ACCESS_KEY_ID"
         let secretKeyName = "AWS_SECRET_ACCESS_KEY"
-
-        let getEnv (envName:string) =
-            let aux found target =
-                if String.IsNullOrWhiteSpace found then Environment.GetEnvironmentVariable(envName, target)
-                else found
-
-            Array.fold aux null [|
-                EnvironmentVariableTarget.Process; 
-                EnvironmentVariableTarget.User; 
-                EnvironmentVariableTarget.Machine |]
+        let getEnv x = Environment.ResolveEnvironmentVariable x
 
         match getEnv accessKeyName, getEnv secretKeyName with
         | null, null -> sprintf "Undefined environment variables '%s' and '%s'" accessKeyName secretKeyName |> invalidOp

@@ -4,8 +4,8 @@ source https://nuget.org/api/v2
 
 nuget NUnit ~> 2.0
 nuget NUnit.Runners ~> 2.0
-nuget MBrace.Core ~> 1.2.0
-nuget MBrace.Runtime ~> 1.2.0
+nuget MBrace.Core ~> 1.2.6
+nuget MBrace.Runtime ~> 1.2.6
 nuget MBrace.Tests
 nuget FSharp.Compiler.Service
 nuget MathNet.Numerics ~> 3.7.0
