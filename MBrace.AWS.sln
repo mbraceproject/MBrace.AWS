@@ -39,6 +39,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "resource", "resource", "{55
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MBrace.AWS.WebWorker", "src\MBrace.AWS.WebWorker\MBrace.AWS.WebWorker.csproj", "{196A1319-020E-4CC7-80DF-34CA2EBA60E2}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "MBrace.AWS.EB", "src\MBrace.AWS.EB\MBrace.AWS.EB.fsproj", "{079257FC-694F-4D46-A233-428C8FB2181D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug_WebWorker|Any CPU = Debug_WebWorker|Any CPU
@@ -77,6 +79,14 @@ Global
 		{196A1319-020E-4CC7-80DF-34CA2EBA60E2}.Release_WebWorker|Any CPU.ActiveCfg = Release|Any CPU
 		{196A1319-020E-4CC7-80DF-34CA2EBA60E2}.Release_WebWorker|Any CPU.Build.0 = Release|Any CPU
 		{196A1319-020E-4CC7-80DF-34CA2EBA60E2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{079257FC-694F-4D46-A233-428C8FB2181D}.Debug_WebWorker|Any CPU.ActiveCfg = Debug|Any CPU
+		{079257FC-694F-4D46-A233-428C8FB2181D}.Debug_WebWorker|Any CPU.Build.0 = Debug|Any CPU
+		{079257FC-694F-4D46-A233-428C8FB2181D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{079257FC-694F-4D46-A233-428C8FB2181D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{079257FC-694F-4D46-A233-428C8FB2181D}.Release_WebWorker|Any CPU.ActiveCfg = Release|Any CPU
+		{079257FC-694F-4D46-A233-428C8FB2181D}.Release_WebWorker|Any CPU.Build.0 = Release|Any CPU
+		{079257FC-694F-4D46-A233-428C8FB2181D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{079257FC-694F-4D46-A233-428C8FB2181D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -87,5 +97,6 @@ Global
 		{B36C97D0-928B-4CB0-9F70-79BA47F4C920} = {87B587B4-3081-4DA2-8D56-D8827F5D571D}
 		{55EEE23E-3717-4AEA-AFD5-1E90EB9BC5DE} = {BF60BC93-E09B-4E5F-9D85-95A519479D54}
 		{196A1319-020E-4CC7-80DF-34CA2EBA60E2} = {87B587B4-3081-4DA2-8D56-D8827F5D571D}
+		{079257FC-694F-4D46-A233-428C8FB2181D} = {87B587B4-3081-4DA2-8D56-D8827F5D571D}
 	EndGlobalSection
 EndGlobal

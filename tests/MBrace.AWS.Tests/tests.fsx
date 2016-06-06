@@ -9,6 +9,7 @@
 #r "MBrace.Core.dll"
 #r "MBrace.Runtime.dll"
 #r "MBrace.AWS.dll"
+#r "MBrace.AWS.Tests.dll"
 
 open System
 open Amazon
@@ -37,3 +38,7 @@ let cluster = AWSCluster.InitOnCurrentMachine(config, workerCount = 2, logger = 
 cluster.ShowWorkers()
 
 cluster.Run(Cloud.ParallelEverywhere Cloud.CurrentWorker)
+
+open MBrace.AWS.Tests
+
+cluster.NukeAllResources()

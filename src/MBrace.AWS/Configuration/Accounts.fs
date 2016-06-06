@@ -36,7 +36,7 @@ type AWSAccount private (accountData : AWSAccountData) =
     static let initAccountData (region : RegionEndpoint) (credentials : AWSCredentials) =
         {
             Region = region
-            Credentials = MBraceAWSCredentials(credentials)
+            Credentials = new MBraceAWSCredentials(credentials)
             S3Client = new AmazonS3Client(credentials, region)
             DynamoDBClient = new AmazonDynamoDBClient(credentials, region)
             SQSClient = new AmazonSQSClient(credentials, region)

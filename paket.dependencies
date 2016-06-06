@@ -17,6 +17,7 @@ nuget AWSSDK.Core
 nuget AWSSDK.S3 ~> 3.0
 nuget AWSSDK.DynamoDBv2 ~> 3.0
 nuget AWSSDK.SQS ~> 3.0
+nuget AWSSDK.ElasticBeanstalk ~> 3.0
 nuget Argu ~> 2.0
 nuget FSharp.AWS.DynamoDB prerelease
 
