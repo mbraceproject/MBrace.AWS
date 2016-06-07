@@ -9,18 +9,29 @@ let credentials = MBraceAWSCredentials.FromCredentialsStore()
 
 let client = new AmazonElasticBeanstalkClient(credentials, Amazon.RegionEndpoint.EUCentral1)
 
+let appName = "mbrace-docker"
+let envName = "mbrace-docker"
 
-let car = new CreateApplicationRequest("mbrace-docker-2")
+let car = new CreateApplicationRequest(appName)
+car.Description <- appName
 
 let app = client.CreateApplication(car)
+app
 
-let ct = new CreateConfigurationTemplateRequest("mbrace-docker-2", "mbrace-docker-2")
+////--------------------------------------------------
 
-ct.EnvironmentId <- "mbrace-docker-2"
+let env = new CreateEnvironmentRequest(appName, envName)
+//let res = client.ListAvailableSolutionStacks()
+//res.SolutionStacks |> Seq.filter (fun s -> s.ToLower().Contains "running docker") |> Seq.toArray
+env.SolutionStackName <- "64bit Amazon Linux 2016.03 v2.1.0 running Docker 1.9.1"
+env.Tier <- new EnvironmentTier(Name = "Worker", Type = "SQS/HTTP")
+env.OptionSettings.Add <| new ConfigurationOptionSetting("aws:autoscaling:asg", "MinSize", "4")
+env.OptionSettings.Add <| new ConfigurationOptionSetting("aws:autoscaling:asg", "MaxSize", "4")
+env.OptionSettings.Add <| new ConfigurationOptionSetting("aws:elasticbeanstalk:application:environment", "AWS_ACCESS_KEY_ID", "my_aws_key_text")
+env.OptionSettings.Add <| new ConfigurationOptionSetting("aws:elasticbeanstalk:application:environment", "AWS_SECRET_ACCESS_KEY", "my_aws_key_text")
 
-client.CreateConfigurationTemplate(ct)
+let resp = client.CreateEnvironment(env)
 
-//let env = new CreateEnvironmentRequest("mbrace-docker-2", "mbrace-docker-2-env")
-//let resp = client.CreateEnvironment(env)
-//
-//env.OptionSettings.Add (new Confi)
+resp.Resources
+
+client.DeleteApplication(new DeleteApplicationRequest(appName))
