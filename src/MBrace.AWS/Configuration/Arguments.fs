@@ -12,14 +12,14 @@ open MBrace.Runtime
 /// Argu configuration schema
 type private AWSArguments =
     // General-purpose arguments
-    | [<AltCommandLine("-w")>] Worker_Id of string
-    | [<AltCommandLine("-m")>] Max_Work_Items of int
-    | Heartbeat_Interval of float
-    | Heartbeat_Threshold of float
+    | [<AltCommandLine("-w")>] Worker_Id of id:string
+    | [<AltCommandLine("-m")>] Max_Work_Items of num:int
+    | Heartbeat_Interval of seconds:float
+    | Heartbeat_Threshold of seconds:float
     | [<AltCommandLine("-q")>] Quiet
-    | [<AltCommandLine("-L")>] Log_Level of int
-    | [<AltCommandLine("-l")>] Log_File of string
-    | Working_Directory of string
+    | [<AltCommandLine("-L")>] Log_Level of level:int
+    | [<AltCommandLine("-l")>] Log_File of path:string
+    | Working_Directory of path:string
     // Global parameters
     | Resource_Prefix of string
     | Credentials of accessKey:string * secretKey:string
@@ -41,15 +41,15 @@ type private AWSArguments =
     // Cluster configuration parameters
     | Optimize_Closure_Serialization of bool
     // SQS Params
-    | Runtime_Queue of string
-    | Runtime_Topic of string
+    | Runtime_Queue of name:string
+    | Runtime_Topic of name:string
     // S3 Params
-    | Runtime_Bucket of string
-    | User_Data_Bucket of string
+    | Runtime_Bucket of name:string
+    | User_Data_Bucket of name:string
     // DynamoDB params
-    | Runtime_Table of string
-    | Runtime_Logs_Table of string
-    | User_Data_Table of string
+    | Runtime_Table of name:string
+    | Runtime_Logs_Table of name:string
+    | User_Data_Table of name:string
 
     interface IArgParserTemplate with
         member arg.Usage =
@@ -86,7 +86,7 @@ type private AWSArguments =
             | User_Data_Table _ -> "Specifies the table name used for writing user logs."
 
 
-let private argParser = ArgumentParser.Create<AWSArguments>()
+let private argParser = ArgumentParser.Create<AWSArguments>(errorHandler = new ProcessExiter())
 
 /// Configuration object encoding command line parameters for an MBrace.AWS process
 type ArgumentConfiguration = 
@@ -158,11 +158,11 @@ type ArgumentConfiguration =
                 yield User_Data_Table config.UserDataTable
         ]
 
-        argParser.PrintCommandLineFlat args
+        argParser.PrintCommandLineArgumentsFlat args
 
     /// Parses command line arguments to a configuration object using Argu.
     static member FromCommandLineArguments(args : string []) =
-        let parseResult = argParser.Parse(args, errorHandler = new ProcessExiter())
+        let parseResult = argParser.Parse(args)
 
         let maxWorkItems = parseResult.TryPostProcessResult(<@ Max_Work_Items @>, fun i -> if i < 0 then failwith "must be positive." elif i > 1024 then failwith "exceeds 1024 limit." else i)
         let quiet = parseResult.Contains <@ Quiet @>
@@ -182,7 +182,7 @@ type ArgumentConfiguration =
                 match parseResult.TryPostProcessResult(<@ Profile @>, fun pf -> MBraceAWSCredentials.FromCredentialsStore pf) with
                 | Some creds -> creds
                 | None when parseResult.Contains <@ Use_Environment_Credentials @> -> parseResult.Catch(MBraceAWSCredentials.FromEnvironmentVariables, showUsage = false)
-                | None -> parseResult.Raise("No AWS credentials specified for process", 2, showUsage = false)
+                | None -> parseResult.Raise("No AWS credentials specified for process", showUsage = false)
 
         let config = Configuration.Define(defaultRegion, credentials, ?resourcePrefix = clusterId)
 

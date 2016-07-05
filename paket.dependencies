@@ -17,7 +17,7 @@ nuget AWSSDK.Core
 nuget AWSSDK.S3 ~> 3.0
 nuget AWSSDK.DynamoDBv2 ~> 3.0
 nuget AWSSDK.SQS ~> 3.0
-nuget Argu ~> 2.0
+nuget Argu ~> 3.0
 nuget FSharp.AWS.DynamoDB prerelease
 
 nuget Owin version_in_path: true
