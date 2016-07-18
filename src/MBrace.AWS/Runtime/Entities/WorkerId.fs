@@ -3,7 +3,6 @@
 open System
 
 open MBrace.Runtime
-open MBrace.Runtime.Utils.PerformanceMonitor
 open MBrace.AWS.Runtime.Utilities
 
 open FSharp.AWS.DynamoDB

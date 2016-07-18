@@ -3,6 +3,7 @@
 open System
 open System.Threading
 
+open Swensen.Unquote.Assertions
 open NUnit.Framework
 
 open MBrace.Core
@@ -37,19 +38,19 @@ type ``AWS Runtime Tests`` (config : Configuration, localWorkers : int) =
 
     [<Test>]
     member __.``1. Runtime : Get worker count`` () =
-        run (Cloud.GetWorkerCount()) |> shouldEqual (session.Cluster.Workers |> Seq.length)
+        test <@ run (Cloud.GetWorkerCount()) = session.Cluster.Workers.Length @>
 
     [<Test>]
     member __.``1. Runtime : Get current worker`` () =
-        run Cloud.CurrentWorker |> shouldBe (fun _ -> true)
+        run Cloud.CurrentWorker |> ignore
 
     [<Test>]
     member __.``1. Runtime : Get task id`` () =
-        run (Cloud.GetCloudProcessId()) |> shouldBe (fun _ -> true)
+        run (Cloud.GetCloudProcessId()) |> ignore
 
     [<Test>]
     member __.``1. Runtime : Get work item id`` () =
-        run (Cloud.GetWorkItemId()) |> shouldBe (fun _ -> true)
+        run (Cloud.GetWorkItemId()) |> ignore
 
     [<Test>]
     member __.``1. Runtime : Worker Log Observable`` () =
@@ -59,14 +60,14 @@ type ``AWS Runtime Tests`` (config : Configuration, localWorkers : int) =
         use d = worker.SystemLogs.Subscribe ra.Add
         cluster.Run(cloud { return () }, target = worker)
         System.Threading.Thread.Sleep 2000
-        ra.Count |> shouldBe (fun i -> i > 0)
+        test <@ ra.Count > 0 @>
 
     [<Test>]
     member __.``1. Runtime : Additional resources`` () =
         let cluster = session.Cluster
-        let res = (42, "forty-two")
-        cluster.Run(Cloud.GetResource<int * string>(), additionalResources = resource { yield res })
-        |> shouldEqual res
+        let value = (42, "forty-two")
+        let result = cluster.Run(Cloud.GetResource<int * string>(), additionalResources = resource { yield value })
+        test <@ result = value @>
 
     [<Test>]
     member __.``1. Runtime : Cluster Log Observable`` () =
@@ -75,7 +76,7 @@ type ``AWS Runtime Tests`` (config : Configuration, localWorkers : int) =
         use d = cluster.SystemLogs.Subscribe ra.Add
         cluster.Run(Cloud.ParallelEverywhere(cloud { return 42 }) |> Cloud.Ignore)
         System.Threading.Thread.Sleep 2000
-        ra.Count |> shouldBe (fun i -> i >= cluster.Workers.Length)
+        test <@ ra.Count >= cluster.Workers.Length @>
 
     [<Test>]
     member __.``1. Runtime : CloudProcess Log Observable`` () =
@@ -94,7 +95,8 @@ type ``AWS Runtime Tests`` (config : Configuration, localWorkers : int) =
         let job = session.Cluster.CreateProcess(workflow)
         use d = job.Logs.Subscribe(fun e -> ra.Add(e))
         do job.Result
-        ra |> Seq.filter (fun e -> e.Message.Contains "Work item") |> Seq.length |> shouldEqual 2000
+        let logCount = ra |> Seq.filter (fun e -> e.Message.Contains "Work item") |> Seq.length 
+        test <@ logCount = 2000 @>
 
     [<Test>]
     member __.``2. Fault Tolerance : Custom fault policy`` () =
@@ -107,7 +109,7 @@ type ``AWS Runtime Tests`` (config : Configuration, localWorkers : int) =
             }, faultPolicy = FaultPolicy.NoRetry)
             while not f.Value do Thread.Sleep 1000
             session.Chaos()
-            Choice.protect (fun () -> t.Result) |> Choice.shouldFailwith<_, FaultException>)
+            raises<FaultException> <@ t.Result @>)
 
     [<Test>]
     member __.``2. Fault Tolerance : Custom fault policy nested`` () =
@@ -126,7 +128,7 @@ type ``AWS Runtime Tests`` (config : Configuration, localWorkers : int) =
             let t = cluster.CreateProcess(computation (), faultPolicy = FaultPolicy.InfiniteRetries())
             while not f.Value do Thread.Sleep 1000
             session.Chaos()
-            Choice.protect (fun () -> t.Result) |> Choice.shouldFailwith<_, FaultException>)
+            raises<FaultException> <@ t.Result @>)
 
     [<Test>]
     member __.``2. Fault Tolerance : targeted workers`` () =
@@ -145,11 +147,11 @@ type ``AWS Runtime Tests`` (config : Configuration, localWorkers : int) =
             let t = cluster.Run (wf ())
             while not f.Value do Thread.Sleep 1000
             session.Chaos()
-            Choice.protect(fun () -> t.Result) |> Choice.shouldFailwith<_, FaultException>)
+            raises<FaultException> <@ t.Result @>)
 
     [<Test>]
     member __.``2. Fault Tolerance : fault data`` () =
-        session.Cluster.Run(Cloud.TryGetFaultData()) |> shouldBe Option.isNone
+        test <@ session.Cluster.Run(Cloud.TryGetFaultData()) |> Option.isNone @>
 
         repeat repeats (fun () ->
             let cluster = session.Cluster
@@ -164,7 +166,7 @@ type ``AWS Runtime Tests`` (config : Configuration, localWorkers : int) =
 
             while not f.Value do Thread.Sleep 1000
             session.Chaos()
-            t.Result |> shouldBe (function Some { NumberOfFaults = 1 } -> true | _ -> false))
+            raises<FaultException> <@ match t.Result with Some { NumberOfFaults = 1 } -> true | _ -> false @>)
 
     [<Test>]
     member __.``2. Fault Tolerance : protected parallel workflows`` () =
@@ -185,9 +187,12 @@ type ``AWS Runtime Tests`` (config : Configuration, localWorkers : int) =
 
             while f.Value < localWorkers do Thread.Sleep 1000
             session.Chaos()
-            cloudProcess.Result 
-            |> Array.forall (function FaultException _ -> true | _ -> false)
-            |> shouldEqual true)
+
+            test
+                <@
+                    cloudProcess.Result 
+                    |> Array.forall (function FaultException _ -> true | _ -> false)
+                @>)
 
     [<Test>]
     member __.``2. Fault Tolerance : map/reduce`` () =
@@ -201,7 +206,7 @@ type ``AWS Runtime Tests`` (config : Configuration, localWorkers : int) =
             while not f.Value do Thread.Sleep 1000
             do Thread.Sleep 1000
             session.Chaos()
-            t.Result |> shouldEqual 100)
+            test <@ t.Result = 100 @>)
 
 
     [<Test>]
@@ -221,8 +226,8 @@ type ``AWS Runtime Tests`` (config : Configuration, localWorkers : int) =
             let t = runtime.CreateProcess (wf (), faultPolicy = FaultPolicy.NoRetry)
             while not f.Value do Thread.Sleep 1000
             session.Chaos()
-            Choice.protect(fun () -> t.Result) |> Choice.shouldFailwith<_, FaultException>
-            t.Status |> shouldEqual CloudProcessStatus.Faulted)
+            raises<FaultException> <@ t.Result @>
+            test <@ t.Status = CloudProcessStatus.Faulted @>)
 
 
 [<Category("Standalone Cluster")>]

@@ -1,6 +1,8 @@
 namespace MBrace.AWS.Tests.Store
 
 open System.IO
+
+open Swensen.Unquote.Assertions
 open NUnit.Framework
 
 open Amazon
@@ -51,7 +53,7 @@ type ``Local S3 FileStore Tests`` () =
             let stream = store.BeginWrite file |> run
             for i in 1 .. 17 do stream.Write(largeBuf, 0, 1024 * 1024)
             stream.Close()
-            store.GetFileSize file |> run |> shouldEqual (17L * 1024L * 1024L)
+            test <@ store.GetFileSize file |> run = 17L * 1024L * 1024L @>
         finally
             store.DeleteFile file |> run
 
@@ -65,20 +67,20 @@ type ``Local S3 FileStore Tests`` () =
 
         try
             use stream = store.BeginRead file |> run
-            stream.Length |> shouldEqual 100L
-            stream.Position |> shouldEqual 0L
-            stream.ReadByte() |> shouldEqual 0
-            stream.Position |> shouldEqual 1L
+            test <@ stream.Length = 100L @>
+            test <@ stream.Position = 0L @>
+            test <@ stream.ReadByte() = 0 @>
+            test <@ stream.Position = 1L @>
 
-            stream.Seek(50L, SeekOrigin.Begin) |> shouldEqual 50L
-            stream.Position |> shouldEqual 50L
-            stream.ReadByte() |> shouldEqual 50
-            stream.Position |> shouldEqual 51L
+            test <@ stream.Seek(50L, SeekOrigin.Begin) = 50L @>
+            test <@ stream.Position = 50L @>
+            test <@ stream.ReadByte() = 50 @>
+            test <@ stream.Position = 51L @>
 
-            stream.Seek(9L, SeekOrigin.Current) |> shouldEqual 60L
-            stream.Position |> shouldEqual 60L
-            stream.ReadByte() |> shouldEqual 60
-            stream.Position |> shouldEqual 61L
+            test <@ stream.Seek(9L, SeekOrigin.Current) = 60L @>
+            test <@ stream.Position = 60L @>
+            test <@ stream.ReadByte() = 60 @>
+            test <@ stream.Position = 61L @>
 
         finally
             store.DeleteFile file |> run

@@ -125,7 +125,7 @@ type WorkerManager private (clusterId : ClusterId, logger : ISystemLogger) =
         
         member this.GetAvailableWorkers() = this.GetAvailableWorkers()
         
-        member __.SubmitPerformanceMetrics(workerId : IWorkerId, perf : Utils.PerformanceMonitor.PerformanceInfo) = async {
+        member __.SubmitPerformanceMetrics(workerId : IWorkerId, perf : PerformanceInfo) = async {
             let! _ = getTable().UpdateItemAsync(getKey workerId, updatePerfMetrics perf)
             return ()
         }
@@ -151,7 +151,7 @@ type WorkerManager private (clusterId : ClusterId, logger : ISystemLogger) =
                     ProcessorCount = info.ProcessorCount
                     HeartbeatInterval = info.HeartbeatInterval
                     HeartbeatThreshold = info.HeartbeatThreshold
-                    PerformanceInfo = Utils.PerformanceMonitor.PerformanceInfo.Empty
+                    PerformanceInfo = PerformanceInfo.Empty
                 }
 
             let! key = getTable().PutItemAsync(record)
