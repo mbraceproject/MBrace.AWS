@@ -1,3 +1,6 @@
+#### 0.1.7-alpha - Jul 18 2016
+* Update to latest MBrace.Core
+
 #### 0.1.6-alpha - Jun 1 2016
 * AWS Credential fetching bugfix
 * Update to latest MBrace.Core
