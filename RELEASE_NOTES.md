@@ -1,3 +1,6 @@
+#### 0.1.8-alpha - Jul 20 2016
+* Update to latest MBrace.Core
+
 #### 0.1.7-alpha - Jul 18 2016
 * Update to latest MBrace.Core
 
