@@ -1,4 +1,7 @@
-## NuGet [![NuGet Badge](https://buildstats.info/nuget/MBrace.AWS?includePreReleases=true)](https://www.nuget.org/packages/MBrace.AWS)
+[![Join the chat at https://gitter.im/mbraceproject/MBrace.AWS](https://badges.gitter.im/mbraceproject/MBrace.AWS.svg)](https://gitter.im/mbraceproject/MBrace.AWS?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![NuGet Badge](https://buildstats.info/nuget/MBrace.AWS?includePreReleases=true)](https://www.nuget.org/packages/MBrace.AWS)
+
+## Install with NuGet
 `Install-Package MBrace.AWS`
 
 # MBrace on AWS
