@@ -6,7 +6,7 @@ open System.Net
 
 open Amazon.Runtime.Internal.Transform
 
-open Nessos.FsPickler
+open MBrace.FsPickler
 
 /// Used in enabling serialization of AWSSDK exceptions
 let mkWebResponsePickler (r:IPicklerResolver) = 

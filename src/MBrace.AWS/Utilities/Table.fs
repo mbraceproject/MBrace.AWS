@@ -3,7 +3,7 @@
 open System
 open System.Collections.Generic
 
-open Nessos.FsPickler
+open MBrace.FsPickler
 
 open Amazon.DynamoDBv2
 open Amazon.DynamoDBv2.DocumentModel

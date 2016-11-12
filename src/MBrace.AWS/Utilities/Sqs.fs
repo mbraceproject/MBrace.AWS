@@ -8,7 +8,7 @@ open System.Collections.Generic
 open Amazon.SQS
 open Amazon.SQS.Model
 
-open Nessos.FsPickler
+open MBrace.FsPickler
 
 open MBrace.Core.Internals
 open MBrace.AWS.Runtime

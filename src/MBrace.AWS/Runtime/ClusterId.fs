@@ -2,7 +2,7 @@
 
 open System
 
-open Nessos.FsPickler
+open MBrace.FsPickler
 
 open Amazon.DynamoDBv2
 open Amazon.S3
