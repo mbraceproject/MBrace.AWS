@@ -1,10 +1,14 @@
-version: 0.0.1.{build}
+version: '{build}'
+
 init:
   - git config --global core.autocrlf input
 
-test:
-  assemblies:
-    - MBrace.AWS.Tests.dll
+configuration: Release
 
-  categories:
-    - Vagabond
+build_script:
+  - cmd: build.cmd NuGet
+
+test: off
+
+artifacts:
+  - path: bin\*.nupkg

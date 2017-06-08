@@ -15,6 +15,7 @@ NUGET
     FSharp.AWS.DynamoDB (0.7.0-beta)
       AWSSDK.DynamoDBv2 (>= 3.3.1)
       Unquote (>= 3.1.2)
+    FSharp.Compiler.Service (5.0)
     FSharp.Core (4.0.0.1)
     FsPickler (3.3)
     FsPickler.Json (3.3)
