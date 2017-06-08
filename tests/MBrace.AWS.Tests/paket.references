@@ -7,4 +7,4 @@ AWSSDK.DynamoDBv2
 AWSSDK.SQS
 Unquote
 FSharp.AWS.DynamoDB
-FSharp.Compiler.Service
+FSharp.Core
