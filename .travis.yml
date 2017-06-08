@@ -1,6 +1,14 @@
 language: csharp
 
-sudo: false  # use the new container-based Travis infrastructure 
+os:
+  - linux
+  - osx
+
+mono:
+  - latest
+  - 4.8.0
+
+sudo: false
 
 script: 
   - ./build.sh Default -ef RunVagabondTestsOnly
