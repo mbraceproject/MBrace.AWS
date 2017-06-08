@@ -111,8 +111,8 @@ type ``Vagabond AWS Tests (FSI)``(localWorkerCount : int) =
                 "MBrace.AWS.dll"
                 "MBrace.AWS.Tests.dll"
 
-                "../packages/MathNet.Numerics/lib/net40/MathNet.Numerics.dll"
-                "../packages/MathNet.Numerics.FSharp/lib/net40/MathNet.Numerics.FSharp.dll"
+                "../packages/test/MathNet.Numerics/lib/net40/MathNet.Numerics.dll"
+                "../packages/test/MathNet.Numerics.FSharp/lib/net40/MathNet.Numerics.FSharp.dll"
             ]
 
         fsi.EvalInteraction "open MBrace.Core"
@@ -302,7 +302,7 @@ type ``Vagabond AWS Tests (FSI)``(localWorkerCount : int) =
 
             // register native dll's
 
-            let nativeDir = Path.Combine(__SOURCE_DIRECTORY__, "../../packages/MathNet.Numerics.MKL.Win-x64/content/") |> Path.GetFullPath
+            let nativeDir = Path.Combine(__SOURCE_DIRECTORY__, "../../packages/test/MathNet.Numerics.MKL.Win-x64/content/") |> Path.GetFullPath
             let libiomp5md = nativeDir + "libiomp5md.dll"
             let mkl = nativeDir + "MathNet.Numerics.MKL.dll"
 

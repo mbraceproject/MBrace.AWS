@@ -4,16 +4,16 @@ using System.Reflection;
 [assembly: AssemblyTitleAttribute("MBrace.AWS.WebWorker")]
 [assembly: AssemblyProductAttribute("MBrace.AWS")]
 [assembly: AssemblyDescriptionAttribute("AWS PaaS bindings for MBrace")]
-[assembly: AssemblyMetadataAttribute("Release Signature","Version 0.1.8-alpha, Git Hash bc7362, Build Date 08062017 14:17 +01:00")]
-[assembly: AssemblyVersionAttribute("0.1.8")]
-[assembly: AssemblyFileVersionAttribute("0.1.8")]
+[assembly: AssemblyMetadataAttribute("Release Signature","Version 0.1.9-alpha, Git Hash 1ff01a, Build Date 08062017 16:29 +01:00")]
+[assembly: AssemblyVersionAttribute("0.1.9")]
+[assembly: AssemblyFileVersionAttribute("0.1.9")]
 namespace System {
     internal static class AssemblyVersionInformation {
         internal const System.String AssemblyTitle = "MBrace.AWS.WebWorker";
         internal const System.String AssemblyProduct = "MBrace.AWS";
         internal const System.String AssemblyDescription = "AWS PaaS bindings for MBrace";
-        internal const System.String AssemblyMetadata_Release_Signature = "Version 0.1.8-alpha, Git Hash bc7362, Build Date 08062017 14:17 +01:00";
-        internal const System.String AssemblyVersion = "0.1.8";
-        internal const System.String AssemblyFileVersion = "0.1.8";
+        internal const System.String AssemblyMetadata_Release_Signature = "Version 0.1.9-alpha, Git Hash 1ff01a, Build Date 08062017 16:29 +01:00";
+        internal const System.String AssemblyVersion = "0.1.9";
+        internal const System.String AssemblyFileVersion = "0.1.9";
     }
 }

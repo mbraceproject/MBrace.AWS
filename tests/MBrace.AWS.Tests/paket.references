@@ -1,11 +1,12 @@
-NUnit
 MBrace.Core
 MBrace.Runtime
-MBrace.Tests
 AWSSDK.S3
 AWSSDK.DynamoDBv2
 AWSSDK.SQS
-Unquote
 FSharp.AWS.DynamoDB
-FSharp.Compiler.Service
 FSharp.Core
+group Test
+  NUnit
+  MBrace.Tests
+  FSharp.Compiler.Service
+  Unquote
