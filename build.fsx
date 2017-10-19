@@ -50,7 +50,6 @@ let testAssemblies = ["bin/MBrace.AWS.Tests.dll"]
 let gitHash = Information.getCurrentHash()
 let buildDate = DateTime.UtcNow
 let release = LoadReleaseNotes "RELEASE_NOTES.md"
-let nugetVersion = release.NugetVersion
 let isAppVeyorBuild = buildServer = BuildServer.AppVeyor
 let isVersionTag tag = Version.TryParse tag |> fst
 let hasRepoVersionTag = isAppVeyorBuild && AppVeyorEnvironment.RepoTag && isVersionTag AppVeyorEnvironment.RepoTagName
@@ -59,21 +58,6 @@ let buildVersion =
     if hasRepoVersionTag then assemblyVersion
     else if isAppVeyorBuild then sprintf "%s-b%s" assemblyVersion AppVeyorEnvironment.BuildNumber
     else assemblyVersion
-let nugetDebugVersion =
-    let semVer = SemVerHelper.parse nugetVersion
-    let debugPatch, debugPreRelease =
-        match semVer.PreRelease with
-        | None -> semVer.Patch + 1, { Origin = "alpha001"; Name = "alpha"; Number = Some 1; Parts = [AlphaNumeric "alpha001"] }
-        | Some pre ->
-            let num = match pre.Number with Some i -> i + 1 | None -> 1
-            let name = pre.Name
-            let newOrigin = sprintf "%s%03d" name num
-            semVer.Patch, { Origin = newOrigin; Name = name; Number = Some num; Parts = [AlphaNumeric newOrigin] }
-    let debugVer =
-        { semVer with
-            Patch = debugPatch
-            PreRelease = Some debugPreRelease }
-    debugVer.ToString()
 
 // Git configuration (used for publishing documentation in gh-pages branch)
 // The profile where the project is posted
@@ -173,7 +157,7 @@ Target "NuGet" (fun _ ->
     Paket.Pack(fun p -> 
         { p with
             OutputPath = "bin"
-            Version = nugetVersion
+            Version = release.NugetVersion
             ReleaseNotes = toLines release.Notes})
 )
 
@@ -239,9 +223,6 @@ Target "Release" DoNothing
   ==> "Build"
   =?> ("RunTests", not isAppVeyorBuild) // testing not yet enabled on appveyor because Azure resource access is needed
   ==> "Default"
-
-"NuGet" ==> "RunTestsAndBuildNuget"
-"RunTests" ==> "RunTestsAndBuildNuget"
 
 "Build" 
   ==> "NuGet"
