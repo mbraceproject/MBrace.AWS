@@ -1,9 +1,8 @@
-framework: >= net45
+framework: net45
 redirects: on
 source https://nuget.org/api/v2
 
-nuget FSharp.Core ~> 4.1.17
-nuget MBrace.Core
+nuget MBrace.Core ~> 1.5.0
 nuget MBrace.Runtime
 
 nuget AWSSDK.Core
@@ -18,12 +17,12 @@ nuget Microsoft.Owin version_in_path: true
 nuget Microsoft.Owin.Host.SystemWeb
 
 group Test
-  framework: >= net45
+  framework: net45
   redirects: on
   source https://nuget.org/api/v2
 
-  nuget FSharp.Core ~> 4.1.17
-  nuget FSharp.Compiler.Service ~> 5.0
+  nuget FSharp.Core ~> 4.1
+  nuget FSharp.Compiler.Service ~> 16.0
   nuget MBrace.Tests
   nuget NUnit ~> 2.0
   nuget NUnit.Runners ~> 2.0
@@ -33,7 +32,7 @@ group Test
   nuget Unquote
 
 group Build
-  framework: >= net45
+  framework: net45
   redirects: on
   source https://nuget.org/api/v2
 

@@ -46,5 +46,6 @@ let mkWebResponsePickler (r:IPicklerResolver) =
     Pickler.FromPrimitives(reader, writer, cloner, visitor, cacheByRef = true, useWithSubtypes = true)
 
 
-let registerCustomPicklers() =
-    FsPickler.RegisterPicklerFactory<IWebResponseData> mkWebResponsePickler
+let registerCustomPicklers() : unit =
+    raise <| NotSupportedException("need updates in Vagabond")
+    //FsPickler.RegisterPicklerFactory<IWebResponseData> mkWebResponsePickler
