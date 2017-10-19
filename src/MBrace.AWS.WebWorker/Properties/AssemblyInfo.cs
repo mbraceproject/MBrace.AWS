@@ -4,7 +4,7 @@ using System.Reflection;
 [assembly: AssemblyTitleAttribute("MBrace.AWS.WebWorker")]
 [assembly: AssemblyProductAttribute("MBrace.AWS")]
 [assembly: AssemblyDescriptionAttribute("AWS PaaS bindings for MBrace")]
-[assembly: AssemblyMetadataAttribute("Release Signature","Version 0.1.10-alpha, Git Hash 847d63, Build Date 19102017 00:14 +01:00")]
+[assembly: AssemblyMetadataAttribute("Release Signature","Version 0.1.10-alpha, Git Hash 703331, Build Date 19102017 00:15 +01:00")]
 [assembly: AssemblyVersionAttribute("0.1.10")]
 [assembly: AssemblyFileVersionAttribute("0.1.10")]
 namespace System {
@@ -12,7 +12,7 @@ namespace System {
         internal const System.String AssemblyTitle = "MBrace.AWS.WebWorker";
         internal const System.String AssemblyProduct = "MBrace.AWS";
         internal const System.String AssemblyDescription = "AWS PaaS bindings for MBrace";
-        internal const System.String AssemblyMetadata_Release_Signature = "Version 0.1.10-alpha, Git Hash 847d63, Build Date 19102017 00:14 +01:00";
+        internal const System.String AssemblyMetadata_Release_Signature = "Version 0.1.10-alpha, Git Hash 703331, Build Date 19102017 00:15 +01:00";
         internal const System.String AssemblyVersion = "0.1.10";
         internal const System.String AssemblyFileVersion = "0.1.10";
     }
