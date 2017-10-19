@@ -1,3 +1,6 @@
+#### 0.1.10-alpha - October 19 2017
+* Update to latest MBrace.Core
+
 #### 0.1.9-alpha - June 08 2017
 * Update to latest FAKE
 
